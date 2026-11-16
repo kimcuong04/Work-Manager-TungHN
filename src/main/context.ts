@@ -1,4 +1,5 @@
 import path from 'node:path';
+import { todayISO } from '../shared/dates';
 import type { Db } from './db/database';
 
 export class AppError extends Error {
@@ -27,7 +28,11 @@ export interface Ctx {
   paths: Paths;
   platform: Platform;
   appVersion: string;
+  /** Ngày hiện tại (ISO); test cố định được, mặc định theo đồng hồ máy. */
+  today?: () => string;
 }
+
+export const todayOf = (ctx: Ctx): string => ctx.today?.() ?? todayISO();
 
 export function makePaths(dataDir: string): Paths {
   return {

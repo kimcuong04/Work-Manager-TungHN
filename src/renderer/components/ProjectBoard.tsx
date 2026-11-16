@@ -8,13 +8,16 @@ import {
   FileSpreadsheet,
   FileText,
   FolderInput,
+  List,
   Lock,
   Pencil,
   Plus,
   RotateCcw,
   Save,
+  SquareKanban,
   Trash2,
   Unlock,
+  UserRound,
   X,
 } from 'lucide-react';
 import { formatDate } from '../../shared/dates';
@@ -38,8 +41,11 @@ import {
 import { useAppData } from '../state/AppData';
 import { useProjectActions } from '../state/projectActions';
 import { useUi } from '../state/ui';
-import { EmptyState, MenuButton, MultiSelect, PriorityBadge, SearchInput, type MenuItem } from './common';
+import { ColumnToggle, EmptyState, MenuButton, MultiSelect, PriorityBadge, SearchInput, type MenuItem } from './common';
 import { useOpenFile } from './FileLink';
+import { DEFAULT_HIDDEN_PROJECT_COLS, PROJECT_COLUMNS, ProjectTable } from './ProjectTable';
+
+export type ProjectViewMode = 'list' | 'board';
 
 const PAGE = 50;
 
@@ -99,6 +105,12 @@ function ProjectCard({
       <div className="pcard-foot">
         <PriorityBadge value={p.priorityPoint} />
         {p.stageName && <span className="badge">{p.stageName}</span>}
+        {p.salespersonName && (
+          <span className="icon-chip" title="Salesperson">
+            <UserRound size={12} />
+            {p.salespersonName}
+          </span>
+        )}
         {p.filePath && (
           <span className="icon-chip" title={p.fileName ?? ''}>
             <FileText size={12} />
@@ -206,11 +218,16 @@ export interface ProjectsViewProps {
   initialFilter?: Partial<ProjectFilter>;
   onAdd: () => void;
   addLabel?: string;
+  /** Khóa lưu chế độ xem đã chọn (localStorage) và chế độ mặc định khi chưa chọn. */
+  viewKey: string;
+  defaultView: ProjectViewMode;
 }
 
-/** Toolbar (Thêm mới, Chỉnh sửa Board, Search, Filter, Sort) + board 4 cột. */
-export function ProjectsView({ scopeKey, baseList, showLocationFilters, initialFilter, onAdd, addLabel = 'Thêm Project' }: ProjectsViewProps) {
+/** Toolbar (Thêm mới, chế độ xem, Chỉnh sửa Board, Search, Filter, Sort) + bảng danh sách hoặc board 4 cột. */
+export function ProjectsView({ scopeKey, baseList, showLocationFilters, initialFilter, onAdd, addLabel = 'Thêm Project', viewKey, defaultView }: ProjectsViewProps) {
   const { masters, years, today, thresholds, refresh } = useAppData();
+  const [mode, setMode] = useLocalState<ProjectViewMode>(viewKey, defaultView);
+  const [hiddenCols, setHiddenCols] = useLocalState<string[]>('project-list-hidden-cols', DEFAULT_HIDDEN_PROJECT_COLS);
   const { confirm, toast, toastError } = useUi();
   const [filter, setFilter] = useSessionState<ProjectFilter>(`filter:${scopeKey}`, { ...EMPTY_FILTER, ...initialFilter });
   const [sort, setSort] = useLocalState<SortState>('board-sort', DEFAULT_SORT);
@@ -244,6 +261,7 @@ export function ProjectsView({ scopeKey, baseList, showLocationFilters, initialF
   const setF = <K extends keyof ProjectFilter>(k: K, v: ProjectFilter[K]) => setFilter((f) => ({ ...f, [k]: v }));
   const clientOpts = masters.clients.map((m) => ({ id: m.id, name: m.name }));
   const unitOpts = masters.designUnits.map((m) => ({ id: m.id, name: m.name }));
+  const salesOpts = masters.salespersons.map((m) => ({ id: m.id, name: m.name }));
   const yearOpts = [...new Set(years.filter((y) => !filter.jobs.length || filter.jobs.includes(y.jobType)).map((y) => y.yearLabel))]
     .sort()
     .reverse()
@@ -312,6 +330,7 @@ export function ProjectsView({ scopeKey, baseList, showLocationFilters, initialF
         <SearchInput value={filter.q} onChange={(v) => setF('q', v)} placeholder="Tìm tên dự án, CĐT, đơn vị TK, giai đoạn, note…" width={320} />
         <MultiSelect label="CĐT" options={clientOpts} value={filter.clients} onChange={(v) => setF('clients', v)} />
         <MultiSelect label="Đơn vị thiết kế" options={unitOpts} value={filter.designUnits} onChange={(v) => setF('designUnits', v)} />
+        {salesOpts.length > 0 && <MultiSelect label="Salesperson" options={salesOpts} value={filter.salespersons ?? []} onChange={(v) => setF('salespersons', v)} />}
         {showLocationFilters && (
           <>
             <MultiSelect
@@ -327,14 +346,14 @@ export function ProjectsView({ scopeKey, baseList, showLocationFilters, initialF
               value={filter.categories}
               onChange={(v) => setF('categories', v as ProjectFilter['categories'])}
             />
-            <MultiSelect
-              label="Trạng thái"
-              options={STATUS_ORDER.map((s) => ({ id: s, name: STATUS_LABEL[s] }))}
-              value={filter.statuses}
-              onChange={(v) => setF('statuses', v as DeadlineStatus[])}
-            />
           </>
         )}
+        <MultiSelect
+          label="Trạng thái"
+          options={STATUS_ORDER.map((s) => ({ id: s, name: STATUS_LABEL[s] }))}
+          value={filter.statuses}
+          onChange={(v) => setF('statuses', v as DeadlineStatus[])}
+        />
         {anyFilter && (
           <button className="btn ghost sm" onClick={() => setFilter(EMPTY_FILTER)}>
             <X size={14} /> Xóa bộ lọc
@@ -360,9 +379,27 @@ export function ProjectsView({ scopeKey, baseList, showLocationFilters, initialF
             {sort.dir === 'asc' ? <ArrowUpNarrowWide size={16} /> : <ArrowDownWideNarrow size={16} />}
           </button>
         </div>
-        <button className={`btn ${editMode ? 'toggled' : ''}`} onClick={() => (editMode ? void saveBoard() : setEditMode(true))} aria-pressed={editMode}>
-          {editMode ? <Unlock size={15} /> : <Lock size={15} />} Chỉnh sửa Board
-        </button>
+        <div className="seg" role="group" aria-label="Chế độ xem">
+          <button
+            className={mode === 'list' ? 'on' : ''}
+            aria-pressed={mode === 'list'}
+            disabled={editMode}
+            title={editMode ? 'Lưu hoặc hủy chỉnh sửa Board trước' : 'Xem theo danh sách'}
+            onClick={() => setMode('list')}
+          >
+            <List size={14} /> Danh sách
+          </button>
+          <button className={mode === 'board' ? 'on' : ''} aria-pressed={mode === 'board'} title="Xem theo tiến độ (board 4 cột)" onClick={() => setMode('board')}>
+            <SquareKanban size={14} /> Tiến độ
+          </button>
+        </div>
+        {mode === 'list' ? (
+          <ColumnToggle columns={PROJECT_COLUMNS} hidden={hiddenCols} onChange={setHiddenCols} />
+        ) : (
+          <button className={`btn ${editMode ? 'toggled' : ''}`} onClick={() => (editMode ? void saveBoard() : setEditMode(true))} aria-pressed={editMode}>
+            {editMode ? <Unlock size={15} /> : <Lock size={15} />} Chỉnh sửa Board
+          </button>
+        )}
         <button className="btn primary" onClick={onAdd}>
           <Plus size={16} /> {addLabel}
         </button>
@@ -397,6 +434,8 @@ export function ProjectsView({ scopeKey, baseList, showLocationFilters, initialF
             }
           />
         </div>
+      ) : mode === 'list' ? (
+        <ProjectTable list={filtered} showLocation={!!showLocationFilters} sort={sort} onSort={setSort} hidden={hiddenCols} />
       ) : (
         <div className="board" style={{ '--cols': columns.length } as React.CSSProperties}>
           {columns.map((s) => (

@@ -76,19 +76,31 @@ Backup/Restore trong **Settings › Dữ liệu & Backup** xuất một file `.z
 ## Chức năng chính
 
 - **Dashboard**: KPI theo trạng thái, ring chart 3 trạng thái hoạt động, danh sách khẩn cấp (mở chi tiết/mở file),
-  lọc theo Job/Năm/Nhóm; bấm KPI/biểu đồ để mở *Tất cả mục* với bộ lọc tương ứng.
+  **Dự án trong tháng** (chuyển tháng, lọc theo ngày tiếp nhận/tới hạn), lọc theo Job/Năm/Nhóm; bấm KPI/biểu đồ để mở
+  *Tất cả mục* với bộ lọc tương ứng.
+- **Calendar** (kiểu Google Calendar): xem Ngày / Tuần / Tháng / Lịch trình. Dự án mới tự có mục *Bắt đầu dự án* ở ngày
+  tiếp nhận; khi sửa dự án, nút xanh **Lưu và thêm vào Calendar** ghi mục *Cập nhật dự án* kèm tóm tắt thay đổi.
+  Lớp *Hạn chót dự án* lấy từ ngày tới hạn. Tạo sự kiện riêng (có giờ, màu, liên kết dự án), kéo thả để đổi ngày.
 - **Sidebar**: My Workspace › Dashboard, Tất cả mục, Job Chính / Job Freelance › Năm › Pre-sales / Post-sales / Warranty,
   Experience › Hãng, AI Assistant (Coming Soon), Settings. Thêm/đổi tên/xóa năm, “+” thêm Project theo ngữ cảnh.
+- **Pre-sales / Post-sales** mặc định xem dạng **Danh sách** (bảng sắp xếp theo cột, ẩn/hiện cột); chuyển sang **Tiến độ**
+  để xem board. Trường **Salesperson** chọn từ danh mục trong Settings.
 - **Board 4 cột** Khẩn cấp / Cần chú ý / Mới tiếp nhận / Đã hoàn thành — trạng thái luôn tính tự động từ ngày tới hạn
   và ngưỡng. Kéo thả chỉ bật khi bấm *Chỉnh sửa Board* và chỉ dùng để hoàn thành / bỏ hoàn thành (có xác nhận).
 - **Tìm kiếm không dấu** (`thiet ke` ↔ `Thiết kế`), lọc nhiều CĐT/Đơn vị thiết kế, sắp xếp; bộ lọc giữ trong phiên.
 - **Project Detail**: thông tin, thời hạn & ưu tiên, file DWG/TXT liên kết (mở bằng ứng dụng mặc định của Windows,
-  cảnh báo khi mất liên kết, chọn lại/gỡ), ghi chú, **Import .xlsx** (tự nhận diện + mapping thủ công, preview,
+  cảnh báo khi mất liên kết, chọn lại/gỡ), **Ghi chú theo ngày** (mỗi ngày một mục, định dạng tự do: đậm/nghiêng/màu/
+  danh sách/bảng, dán ảnh Ctrl+V; sửa được ghi chú ngày cũ), **Import .xlsx** (tự nhận diện + mapping thủ công, preview,
   lưu mapping tái sử dụng, không ghi đè âm thầm).
-- **Warranty**: bảng riêng theo Job/Năm, form đầy đủ trường, Pass che mặc định + mã hóa (Windows DPAPI),
+- **Warranty**: bảng riêng theo Job/Năm, bấm một dòng mở panel chi tiết bên cạnh (vẫn cuộn/chọn dòng khác được), nút
+  **View info** xem đầy đủ trên màn hình lớn (có Edit, chuyển bản trước/sau), form đầy đủ trường, Pass che mặc định + mã hóa (Windows DPAPI),
   lọc khoảng ngày / theo tháng / quick filter, chọn Ngày nhận hoặc Ngày test, lọc Hãng, search, sort, ẩn/hiện cột, ảnh.
 - **Experience**: theo Hãng (danh mục dùng chung), liên kết Project nội bộ hoặc nhập text, link web (chặn `javascript:`), ảnh.
-- **Settings**: Light/Dark, ngưỡng trạng thái có preview, danh mục CĐT / Đơn vị thiết kế / Giai đoạn / Hãng
+- **Kiến thức**: tổng hợp kiến thức theo Hãng hoặc *Kiến thức chung* — tiêu đề, nội dung, Mode Device, link, ảnh; tìm
+  không dấu trong toàn bộ nội dung.
+- **Ảnh**: ngoài nút *Thêm ảnh*, chụp màn hình (Win+Shift+S) hoặc copy ảnh/file ảnh rồi **Ctrl+V** để dán thẳng vào form;
+  trong trình xem ảnh có *Sao chép ảnh* (Ctrl+C).
+- **Settings**: Light/Dark, ngưỡng trạng thái có preview, danh mục CĐT / Đơn vị thiết kế / Salesperson / Giai đoạn / Hãng
   (chống trùng, chặn xóa khi đang dùng — gán lại hoặc gỡ liên kết; Hãng chỉ Deactivate), quản lý năm, backup/restore,
   dung lượng ảnh, giới hạn XLSX.
 
@@ -120,7 +132,7 @@ Hợp đồng IPC nằm ở `src/shared/api.ts`; main process chỉ chấp nhậ
 |----|---------|
 | Q-01, Q-02 | Đơn vị thiết kế, Giai đoạn: **không bắt buộc** |
 | Q-03 | Priority mặc định **3** |
-| Q-04 | Ngày tới hạn phải ≥ Ngày tiếp nhận; nhập việc đã quá hạn (hạn < hôm nay) được phép, form hiện cảnh báo |
+| Q-04 | Ngày tới hạn phải ≥ Ngày tiếp nhận; **dự án mới** có hạn < hôm nay (nhập bù) được lưu ở trạng thái Đã hoàn thành — chỉ dự án có hạn trong tương lai mới chuyển Khẩn cấp/quá hạn khi tới hạn |
 | Q-05 | Tính theo **ngày lịch** |
 | Q-06, Q-07 | Một file liên kết/dự án, chỉ lưu đường dẫn (không copy/upload) |
 | Q-08 | Kéo thả chỉ hoàn thành / bỏ hoàn thành |

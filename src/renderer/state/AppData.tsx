@@ -1,7 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { todayISO } from '../../shared/dates';
 import type { Thresholds } from '../../shared/status';
-import type { AppSettings, JobYear, MasterItem, MasterKind, Project, SettingsPatch } from '../../shared/types';
+import { MASTER_KINDS, type AppSettings, type JobYear, type MasterItem, type MasterKind, type Project, type SettingsPatch } from '../../shared/types';
 import { api, errorMessage } from '../api';
 import { buildViews, type ProjectView } from '../lib/projects';
 
@@ -61,7 +61,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
   const [ready, setReady] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [settings, setSettings] = useState<AppSettings>(DEFAULT_SETTINGS);
-  const [masters, setMasters] = useState<Record<MasterKind, MasterItem[]>>({ clients: [], designUnits: [], stages: [], brands: [] });
+  const [masters, setMasters] = useState<Record<MasterKind, MasterItem[]>>({ clients: [], designUnits: [], stages: [], brands: [], salespersons: [] });
   const [years, setYears] = useState<JobYear[]>([]);
   const [rawProjects, setRawProjects] = useState<Project[]>([]);
   const today = useToday();
@@ -72,8 +72,8 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     if (want.has('settings')) jobs.push(api.getSettings().then(setSettings));
     if (want.has('masters'))
       jobs.push(
-        Promise.all([api.listMaster('clients'), api.listMaster('designUnits'), api.listMaster('stages'), api.listMaster('brands')]).then(
-          ([clients, designUnits, stages, brands]) => setMasters({ clients, designUnits, stages, brands }),
+        Promise.all(MASTER_KINDS.map((k) => api.listMaster(k))).then((lists) =>
+          setMasters(Object.fromEntries(MASTER_KINDS.map((k, i) => [k, lists[i]])) as Record<MasterKind, MasterItem[]>),
         ),
       );
     if (want.has('years')) jobs.push(api.listYears().then(setYears));

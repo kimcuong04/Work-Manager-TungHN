@@ -6,20 +6,25 @@ import type {
   ProjectCategory,
   ProjectImport,
   ProjectInput,
+  ProjectSaveOptions,
 } from '../../shared/types';
-import { fileExtension, hasErrors, validateProjectInput } from '../../shared/validation';
-import { AppError, now, str, strOrNull, type Ctx } from '../context';
+import { textToNoteHtml } from '../../shared/noteHtml';
+import { LIMITS, fileExtension, hasErrors, validateProjectInput } from '../../shared/validation';
+import { AppError, now, str, strOrNull, todayOf, type Ctx } from '../context';
+import { addProjectStartEvent, addProjectUpdateEvent, describeProjectChanges, hasProjectStartEvent, removeProjectStartEvents, syncProjectStartEvent } from './calendar';
 import { getYear } from './master';
+import { deleteUnreferencedImages, noteCalendarLine, projectNoteImageKeys, writeNote, type NoteWrite } from './notes';
 
 const SELECT_PROJECT = `
 SELECT p.*, y.job_type, y.year_label,
-  c.name AS client_name, d.name AS design_unit_name, s.name AS stage_name,
+  c.name AS client_name, d.name AS design_unit_name, s.name AS stage_name, sp.name AS salesperson_name,
   EXISTS (SELECT 1 FROM project_imports i WHERE i.project_id = p.id) AS has_import
 FROM projects p
 JOIN job_years y ON y.id = p.job_year_id
 JOIN clients c ON c.id = p.client_id
 LEFT JOIN design_units d ON d.id = p.design_unit_id
-LEFT JOIN project_stages s ON s.id = p.stage_id`;
+LEFT JOIN project_stages s ON s.id = p.stage_id
+LEFT JOIN salespersons sp ON sp.id = p.salesperson_id`;
 
 function mapProject(r: Record<string, any>): Project {
   return {
@@ -37,6 +42,8 @@ function mapProject(r: Record<string, any>): Project {
     designUnitName: strOrNull(r.design_unit_name),
     stageId: strOrNull(r.stage_id),
     stageName: strOrNull(r.stage_name),
+    salespersonId: strOrNull(r.salesperson_id),
+    salespersonName: strOrNull(r.salesperson_name),
     note: str(r.note),
     filePath: strOrNull(r.file_path),
     fileName: strOrNull(r.file_name),
@@ -71,6 +78,8 @@ function normalizeInput(ctx: Ctx, input: ProjectInput): ProjectInput {
   if (!exists(ctx, 'clients', input.clientId)) throw new AppError('CĐT không tồn tại.');
   if (!exists(ctx, 'design_units', input.designUnitId)) throw new AppError('Đơn vị thiết kế không tồn tại.');
   if (!exists(ctx, 'project_stages', input.stageId)) throw new AppError('Giai đoạn không tồn tại.');
+  const salespersonId = strOrNull(input.salespersonId);
+  if (!exists(ctx, 'salespersons', salespersonId)) throw new AppError('Salesperson không tồn tại.');
   let filePath = strOrNull(input.filePath);
   let fileName = strOrNull(input.fileName);
   let ext = strOrNull(input.fileExtension);
@@ -84,6 +93,7 @@ function normalizeInput(ctx: Ctx, input: ProjectInput): ProjectInput {
   }
   return {
     ...input,
+    salespersonId,
     projectName: cleanName(input.projectName),
     note: (input.note ?? '').replace(/\r\n/g, '\n'),
     filePath,
@@ -92,47 +102,82 @@ function normalizeInput(ctx: Ctx, input: ProjectInput): ProjectInput {
   };
 }
 
-export function createProject(ctx: Ctx, raw: ProjectInput): Project {
+/**
+ * Dự án mới nhập với ngày tới hạn đã qua là việc đã xong (nhập bù) nên lưu luôn ở trạng thái Đã hoàn thành;
+ * chỉ dự án có hạn trong tương lai mới chuyển sang Khẩn cấp / quá hạn khi tới hạn.
+ * Ghi chú ban đầu (`opts.noteHtml`, hoặc `note` dạng chữ của client cũ) thành mục ghi chú của hôm nay.
+ */
+export function createProject(ctx: Ctx, raw: ProjectInput, opts: ProjectSaveOptions = {}): Project {
   const p = normalizeInput(ctx, raw);
+  if (p.note.length > LIMITS.note) throw new AppError(`Ghi chú tối đa ${LIMITS.note} ký tự.`);
   const id = randomUUID();
   const stamp = now();
-  ctx.db.tx(() =>
+  const today = todayOf(ctx);
+  const completed = p.dueDate < today;
+  const noteHtml = opts.noteHtml ?? (p.note.trim() ? textToNoteHtml(p.note) : undefined);
+  ctx.db.tx(() => {
     ctx.db.run(
       `INSERT INTO projects (id, job_year_id, work_category, received_date, due_date, project_name, client_id,
-        design_unit_id, note, stage_id, file_path, file_name, file_extension, priority_point, is_completed,
-        completed_at, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,0,NULL,?,?)`,
-      [id, p.jobYearId, p.workCategory, p.receivedDate, p.dueDate, p.projectName, p.clientId, p.designUnitId, p.note,
-        p.stageId, p.filePath, p.fileName, p.fileExtension, p.priorityPoint, stamp, stamp],
-    ),
-  );
+        design_unit_id, note, stage_id, salesperson_id, file_path, file_name, file_extension, priority_point, is_completed,
+        completed_at, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,'',?,?,?,?,?,?,?,?,?,?)`,
+      [id, p.jobYearId, p.workCategory, p.receivedDate, p.dueDate, p.projectName, p.clientId, p.designUnitId,
+        p.stageId, p.salespersonId, p.filePath, p.fileName, p.fileExtension, p.priorityPoint, completed, completed ? stamp : null, stamp, stamp],
+    );
+    addProjectStartEvent(ctx, id, p.projectName, p.receivedDate);
+    if (noteHtml !== undefined) writeNote(ctx, id, today, noteHtml);
+  });
   return getProject(ctx, id);
 }
 
-export function updateProject(ctx: Ctx, id: string, raw: ProjectInput): Project {
-  getProject(ctx, id);
+function masterName(ctx: Ctx, table: string, id: string | null): string {
+  if (!id) return '';
+  return ctx.db.scalar<string>(`SELECT name FROM ${table} WHERE id = ?`, [id]) ?? '';
+}
+
+/**
+ * `addToCalendar`: ghi thêm sự kiện "Cập nhật dự án" (tóm tắt thay đổi) vào ngày hôm nay; dự án cũ chưa có
+ * sự kiện bắt đầu thì bổ sung luôn. `note` trong input bị bỏ qua: ghi chú chỉ đổi qua `opts.noteHtml` (ngày hôm nay)
+ * hoặc saveProjectNote, vì cột `projects.note` là bản tổng hợp từ các ngày.
+ */
+export function updateProject(ctx: Ctx, id: string, raw: ProjectInput, opts: ProjectSaveOptions = {}): Project {
+  const before = getProject(ctx, id);
   const p = normalizeInput(ctx, raw);
-  ctx.db.tx(() =>
+  const today = todayOf(ctx);
+  let note: NoteWrite = { changed: false, removedKeys: [], html: '' };
+  ctx.db.tx(() => {
     ctx.db.run(
       `UPDATE projects SET job_year_id=?, work_category=?, received_date=?, due_date=?, project_name=?, client_id=?,
-        design_unit_id=?, note=?, stage_id=?, file_path=?, file_name=?, file_extension=?, priority_point=?, updated_at=?
+        design_unit_id=?, stage_id=?, salesperson_id=?, file_path=?, file_name=?, file_extension=?, priority_point=?, updated_at=?
        WHERE id=?`,
-      [p.jobYearId, p.workCategory, p.receivedDate, p.dueDate, p.projectName, p.clientId, p.designUnitId, p.note,
-        p.stageId, p.filePath, p.fileName, p.fileExtension, p.priorityPoint, now(), id],
-    ),
-  );
+      [p.jobYearId, p.workCategory, p.receivedDate, p.dueDate, p.projectName, p.clientId, p.designUnitId,
+        p.stageId, p.salespersonId, p.filePath, p.fileName, p.fileExtension, p.priorityPoint, now(), id],
+    );
+    syncProjectStartEvent(ctx, before, p);
+    if (opts.noteHtml !== undefined) note = writeNote(ctx, id, today, opts.noteHtml);
+    if (opts.addToCalendar) {
+      if (!hasProjectStartEvent(ctx, id)) addProjectStartEvent(ctx, id, p.projectName, p.receivedDate);
+      const changes = describeProjectChanges(before, p, (t, v) => masterName(ctx, t, v));
+      if (note.changed) changes.push(noteCalendarLine(today, note.html, today));
+      addProjectUpdateEvent(ctx, id, p.projectName, changes);
+    }
+  });
+  deleteUnreferencedImages(ctx, note.removedKeys);
   return getProject(ctx, id);
 }
 
-/** Không xóa file gốc trên ổ đĩa; Experience giữ project_text snapshot. */
+/** Không xóa file gốc trên ổ đĩa; Experience giữ project_text snapshot, sự kiện "Cập nhật" trên Calendar được giữ lại. */
 export function deleteProject(ctx: Ctx, id: string): void {
   const p = getProject(ctx, id);
+  const noteImages = projectNoteImageKeys(ctx, id);
   ctx.db.tx(() => {
+    removeProjectStartEvents(ctx, id);
     ctx.db.run(
       `UPDATE experience_records SET project_text = COALESCE(NULLIF(project_text,''), ?), updated_at = ? WHERE project_id = ?`,
       [p.projectName, now(), id],
     );
     ctx.db.run('DELETE FROM projects WHERE id = ?', [id]);
   });
+  deleteUnreferencedImages(ctx, noteImages);
 }
 
 function setCompletedRow(ctx: Ctx, id: string, completed: boolean, stamp: string) {

@@ -1,5 +1,5 @@
-import { useMemo, useState } from 'react';
-import { CalendarClock, Info } from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
+import { CalendarCheck, CalendarClock, Info } from 'lucide-react';
 import { formatDate } from '../../shared/dates';
 import { computeStatus, describeRemaining, remainingDays } from '../../shared/status';
 import {
@@ -14,6 +14,7 @@ import {
   type ProjectCategory,
   type ProjectInput,
 } from '../../shared/types';
+import { isNoteEmpty, sanitizeNoteHtml } from '../../shared/noteHtml';
 import { LIMITS, hasErrors, validateProjectInput } from '../../shared/validation';
 import { api } from '../api';
 import { useAppData } from '../state/AppData';
@@ -21,6 +22,7 @@ import { useUi } from '../state/ui';
 import { DateInput, Field, PriorityPicker, SearchableSelect, StatusBadge } from './common';
 import { FileLinkField } from './FileLink';
 import { Modal } from './Modal';
+import { RichNoteEditor } from './RichNoteEditor';
 
 export interface ProjectDefaults {
   jobType?: JobType;
@@ -39,6 +41,7 @@ function initialInput(project: Project | undefined, defaults: ProjectDefaults | 
       clientId: project.clientId,
       designUnitId: project.designUnitId,
       stageId: project.stageId,
+      salespersonId: project.salespersonId,
       note: project.note,
       filePath: project.filePath,
       fileName: project.fileName,
@@ -54,6 +57,7 @@ function initialInput(project: Project | undefined, defaults: ProjectDefaults | 
     clientId: '',
     designUnitId: null,
     stageId: null,
+    salespersonId: null,
     note: '',
     filePath: null,
     fileName: null,
@@ -88,13 +92,29 @@ export function ProjectForm({
   const [jobType, setJobType] = useState<JobType>(project?.jobType ?? defaults?.jobType ?? yearById.get(initial.jobYearId)?.jobType ?? 'MAIN');
   const [touched, setTouched] = useState<Record<string, boolean>>({});
   const [submitted, setSubmitted] = useState(false);
-  const [saving, setSaving] = useState(false);
+  const [saving, setSaving] = useState<false | 'save' | 'calendar'>(false);
 
   const errors = validateProjectInput(form);
   const show = (k: string) => (submitted || touched[k] ? errors[k] : undefined);
   const touch = (k: string) => setTouched((t) => ({ ...t, [k]: true }));
   const set = <K extends keyof ProjectInput>(k: K, v: ProjectInput[K]) => setForm((f) => ({ ...f, [k]: v }));
-  const dirty = JSON.stringify(form) !== JSON.stringify(initial);
+  // Ghi chú lưu theo ngày: form chỉ soạn mục của hôm nay; các ngày trước xem/sửa ở trang chi tiết.
+  const [noteInit, setNoteInit] = useState<string | null>(isEdit ? null : '');
+  const [noteDraft, setNoteDraft] = useState('');
+  useEffect(() => {
+    if (!project) return;
+    api
+      .listProjectNotes(project.id)
+      .then((list) => {
+        const html = list.find((n) => n.noteDate === today)?.html ?? '';
+        setNoteInit(html);
+        setNoteDraft(html);
+      })
+      .catch(() => setNoteInit(''));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  const noteChanged = noteInit !== null && sanitizeNoteHtml(noteDraft) !== sanitizeNoteHtml(noteInit);
+  const dirty = JSON.stringify(form) !== JSON.stringify(initial) || noteChanged;
 
   const close = async () => {
     if (dirty && !(await confirm({ title: 'Bỏ thay đổi?', message: 'Form có thay đổi chưa lưu. Bạn có chắc muốn đóng và bỏ các thay đổi này?', confirmText: 'Bỏ thay đổi', danger: true })))
@@ -114,17 +134,28 @@ export function ProjectForm({
     }
   };
 
-  const save = async () => {
+  const save = async (addToCalendar = false) => {
     setSubmitted(true);
     if (hasErrors(errors)) {
       toast('error', 'Vui lòng kiểm tra các trường được đánh dấu.');
       return;
     }
-    setSaving(true);
+    setSaving(addToCalendar ? 'calendar' : 'save');
     try {
-      const saved = isEdit ? await api.updateProject(project!.id, form) : await api.createProject(form);
+      const saved = isEdit
+        ? await api.updateProject(project!.id, form, { addToCalendar, noteHtml: noteChanged ? noteDraft : undefined })
+        : await api.createProject(form, { noteHtml: isNoteEmpty(noteDraft) ? undefined : noteDraft });
       await refresh('projects', 'years');
-      toast('success', isEdit ? `Đã cập nhật "${saved.projectName}".` : `Đã tạo dự án "${saved.projectName}".`);
+      toast(
+        'success',
+        isEdit
+          ? addToCalendar
+            ? `Đã lưu "${saved.projectName}" và thêm vào Calendar hôm nay.`
+            : `Đã cập nhật "${saved.projectName}".`
+          : saved.isCompleted
+            ? `Đã tạo dự án "${saved.projectName}" ở trạng thái Đã hoàn thành (ngày tới hạn đã qua).`
+            : `Đã tạo dự án "${saved.projectName}" — ngày tiếp nhận đã có trên Calendar.`,
+      );
       onSaved?.(saved);
       onClose();
     } catch (e) {
@@ -138,8 +169,9 @@ export function ProjectForm({
   const jobYears = years.filter((y) => y.jobType === jobType);
   const linked: LinkedFile | null = form.filePath ? { path: form.filePath, name: form.fileName ?? '', extension: form.fileExtension ?? '' } : null;
   const dueValid = !!form.dueDate && !errors.dueDate;
-  const previewStatus = dueValid ? computeStatus({ isCompleted: project?.isCompleted ?? false, dueDate: form.dueDate }, today, thresholds) : null;
   const overdue = dueValid && remainingDays(form.dueDate, today) < 0;
+  // Nhập mới với hạn đã qua = việc đã xong (nhập bù) → lưu ở trạng thái Đã hoàn thành.
+  const previewStatus = dueValid ? computeStatus({ isCompleted: project ? project.isCompleted : overdue, dueDate: form.dueDate }, today, thresholds) : null;
   const year = yearById.get(form.jobYearId);
 
   return (
@@ -151,13 +183,30 @@ export function ProjectForm({
         <>
           <span className="left faint small">
             <span className="req" style={{ color: 'var(--danger)' }}>*</span> là trường bắt buộc
+            {!isEdit && ' · Ngày tiếp nhận được tự thêm vào Calendar'}
           </span>
           <button className="btn" onClick={close}>
             Hủy
           </button>
-          <button className="btn primary" onClick={save} disabled={saving}>
-            {saving ? 'Đang lưu…' : isEdit ? 'Lưu thay đổi' : 'Tạo dự án'}
-          </button>
+          {isEdit ? (
+            <>
+              <button className="btn primary" onClick={() => void save(false)} disabled={!!saving}>
+                {saving === 'save' ? 'Đang lưu…' : 'Lưu'}
+              </button>
+              <button
+                className="btn success"
+                onClick={() => void save(true)}
+                disabled={!!saving}
+                title="Lưu và ghi một mục “Cập nhật dự án” (kèm tóm tắt thay đổi) vào Calendar ngày hôm nay"
+              >
+                <CalendarCheck size={15} /> {saving === 'calendar' ? 'Đang lưu…' : 'Lưu và thêm vào Calendar'}
+              </button>
+            </>
+          ) : (
+            <button className="btn primary" onClick={() => void save(false)} disabled={!!saving}>
+              {saving ? 'Đang lưu…' : 'Tạo dự án'}
+            </button>
+          )}
         </>
       )}
     >
@@ -233,7 +282,7 @@ export function ProjectForm({
                 placeholder="Ví dụ: Nhà máy ABC – hệ thống camera"
               />
             </Field>
-            <div className="grid-3">
+            <div className="grid-2">
               <Field label="CĐT" required error={show('clientId')}>
                 <SearchableSelect
                   options={opts('clients')}
@@ -247,6 +296,16 @@ export function ProjectForm({
                   invalid={!!show('clientId')}
                   placeholder="Chọn hoặc thêm CĐT"
                   clearable={false}
+                />
+              </Field>
+              <Field label="Salesperson">
+                <SearchableSelect
+                  options={opts('salespersons')}
+                  value={form.salespersonId}
+                  onChange={(id) => set('salespersonId', id)}
+                  onCreate={createMaster('salespersons')}
+                  createLabel="Thêm Salesperson"
+                  placeholder="Không bắt buộc"
                 />
               </Field>
               <Field label="Đơn vị thiết kế">
@@ -275,7 +334,15 @@ export function ProjectForm({
               label="Ngày tới hạn"
               required
               error={show('dueDate')}
-              warn={overdue ? 'Ngày tới hạn đã qua — dự án sẽ được xếp Khẩn cấp.' : undefined}
+              warn={
+                overdue
+                  ? isEdit
+                    ? project?.isCompleted
+                      ? undefined
+                      : 'Ngày tới hạn đã qua — dự án sẽ ở trạng thái Khẩn cấp (quá hạn).'
+                    : 'Ngày tới hạn đã qua — dự án mới sẽ được lưu ở trạng thái Đã hoàn thành.'
+                  : undefined
+              }
             >
               <DateInput value={form.dueDate || null} onChange={(v) => set('dueDate', v ?? '')} onBlur={() => touch('dueDate')} invalid={!!show('dueDate')} />
             </Field>
@@ -290,7 +357,8 @@ export function ProjectForm({
                 <div className="row">
                   <StatusBadge status={previewStatus} />
                   <span className="small muted">
-                    <CalendarClock size={13} style={{ verticalAlign: -2 }} /> Hạn {formatDate(form.dueDate)} · {describeRemaining(remainingDays(form.dueDate, today))}
+                    <CalendarClock size={13} style={{ verticalAlign: -2 }} /> Hạn {formatDate(form.dueDate)}
+                    {previewStatus !== 'COMPLETED' && ` · ${describeRemaining(remainingDays(form.dueDate, today))}`}
                   </span>
                 </div>
               </div>
@@ -308,16 +376,18 @@ export function ProjectForm({
         </section>
 
         <section className="form-section">
-          <h3>Ghi chú</h3>
-          <Field label="Note" error={show('note')} hint={`${form.note.length}/${LIMITS.note}`}>
-            <textarea
-              className={`textarea ${show('note') ? 'invalid' : ''}`}
-              rows={4}
-              value={form.note}
-              onChange={(e) => set('note', e.target.value)}
-              onBlur={() => touch('note')}
-            />
-          </Field>
+          <h3>Ghi chú hôm nay · {formatDate(today)}</h3>
+          <div className="field-hint" style={{ marginBottom: 8 }}>
+            {isEdit
+              ? 'Lưu vào mục ghi chú của hôm nay. Ghi chú các ngày trước xem và sửa ở trang chi tiết dự án.'
+              : 'Ghi chú đầu tiên của dự án, lưu theo ngày hôm nay.'}{' '}
+            Định dạng tự do, dán ảnh bằng Ctrl+V.
+          </div>
+          {noteInit === null ? (
+            <div className="faint small">Đang tải ghi chú…</div>
+          ) : (
+            <RichNoteEditor initialHtml={noteInit} onChange={setNoteDraft} minHeight={120} />
+          )}
         </section>
         <button type="submit" hidden />
       </form>

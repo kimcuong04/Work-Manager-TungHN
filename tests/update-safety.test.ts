@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { makePaths } from '../src/main/context';
 import { Db } from '../src/main/db/database';
-import { MIGRATIONS, type Migration } from '../src/main/db/migrations';
+import { MIGRATIONS, SCHEMA_VERSION, type Migration } from '../src/main/db/migrations';
 import { rotateStartupBackups } from '../src/main/services/backup';
 import * as master from '../src/main/services/master';
 import * as projects from '../src/main/services/projects';
@@ -17,20 +17,22 @@ async function seededDbFile() {
   const client = master.createMaster(ctx, 'clients', 'CĐT A');
   projects.createProject(ctx, {
     jobYearId: year, workCategory: 'PRE_SALES', receivedDate: '2026-11-16', dueDate: '2026-11-20', projectName: 'Dự án thật',
-    clientId: client.id, designUnitId: null, stageId: null, note: '', filePath: null, fileName: null, fileExtension: null, priorityPoint: 3,
+    clientId: client.id, designUnitId: null, stageId: null, salespersonId: null, note: '', filePath: null, fileName: null, fileExtension: null, priorityPoint: 3,
   });
   ctx.db.close();
   return ctx.paths;
 }
 
+const NEXT = SCHEMA_VERSION + 1;
+
 describe('Nâng cấp schema khi app tự cập nhật', () => {
   it('sao lưu database trước khi chạy migration mới và giữ nguyên dữ liệu', async () => {
     const paths = await seededDbFile();
-    const v2: Migration[] = [...MIGRATIONS, { version: 2, up: (db) => db.exec('ALTER TABLE projects ADD COLUMN budget INTEGER') }];
-    const db = await Db.open(paths.dbFile, v2);
-    expect(db.scalar<number>('PRAGMA user_version')).toBe(2);
+    const next: Migration[] = [...MIGRATIONS, { version: NEXT, up: (db) => db.exec('ALTER TABLE projects ADD COLUMN budget INTEGER') }];
+    const db = await Db.open(paths.dbFile, next);
+    expect(db.scalar<number>('PRAGMA user_version')).toBe(NEXT);
     expect(db.scalar<string>('SELECT project_name FROM projects')).toBe('Dự án thật');
-    const backups = fs.readdirSync(paths.backupsDir).filter((f) => f.startsWith('pre-migrate-v1-to-v2-'));
+    const backups = fs.readdirSync(paths.backupsDir).filter((f) => f.startsWith(`pre-migrate-v${SCHEMA_VERSION}-to-v${NEXT}-`));
     expect(backups).toHaveLength(1);
     db.close();
   });
@@ -41,7 +43,7 @@ describe('Nâng cấp schema khi app tự cập nhật', () => {
     const broken: Migration[] = [
       ...MIGRATIONS,
       {
-        version: 2,
+        version: NEXT,
         up: (db) => {
           db.exec('DELETE FROM projects');
           throw new Error('migration hỏng');
@@ -57,8 +59,8 @@ describe('Nâng cấp schema khi app tự cập nhật', () => {
 
   it('bản cũ mở dữ liệu của bản mới thì từ chối, không ghi hỏng', async () => {
     const paths = await seededDbFile();
-    const v2: Migration[] = [...MIGRATIONS, { version: 2, up: () => {} }];
-    (await Db.open(paths.dbFile, v2)).close();
+    const next: Migration[] = [...MIGRATIONS, { version: NEXT, up: () => {} }];
+    (await Db.open(paths.dbFile, next)).close();
     await expect(Db.open(paths.dbFile)).rejects.toThrow(/phiên bản mới hơn/);
   });
 });

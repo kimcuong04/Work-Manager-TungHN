@@ -14,11 +14,13 @@ const SPECS: Record<MasterKind, MasterSpec> = {
   clients: { table: 'clients', usage: [{ table: 'projects', column: 'client_id', nullable: false }] },
   designUnits: { table: 'design_units', usage: [{ table: 'projects', column: 'design_unit_id', nullable: true }] },
   stages: { table: 'project_stages', usage: [{ table: 'projects', column: 'stage_id', nullable: true }] },
+  salespersons: { table: 'salespersons', usage: [{ table: 'projects', column: 'salesperson_id', nullable: true }] },
   brands: {
     table: 'brands',
     usage: [
       { table: 'warranty_records', column: 'brand_id', nullable: true },
       { table: 'experience_records', column: 'brand_id', nullable: false },
+      { table: 'knowledge_records', column: 'brand_id', nullable: true },
     ],
   },
 };

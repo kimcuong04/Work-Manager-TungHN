@@ -6,6 +6,7 @@ import { ACTIVE_STATUSES, STATUS_LABEL, describeRemaining } from '../../shared/s
 import { CATEGORY_LABEL, JOB_LABEL, JOB_TYPES, PROJECT_CATEGORIES, type ActiveStatus, type DeadlineStatus, type JobType, type ProjectCategory } from '../../shared/types';
 import { EmptyState, PriorityBadge } from '../components/common';
 import { useFileCheck, useOpenFile } from '../components/FileLink';
+import { MonthProjects } from '../components/MonthProjects';
 import { setSessionValue, useSessionState } from '../lib/persist';
 import { EMPTY_FILTER, type ProjectView } from '../lib/projects';
 import { useAppData } from '../state/AppData';
@@ -286,6 +287,9 @@ export function DashboardPage() {
                 </div>
               )}
             </section>
+            <div className="dash-full">
+              <MonthProjects scoped={scoped} />
+            </div>
           </div>
         </>
       )}

@@ -1,13 +1,13 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ArrowDown, ArrowUp, Columns3, Copy, Eye, EyeOff, Image as ImageIcon, KeyRound, Pencil, Plus, ShieldCheck, Trash2, X } from 'lucide-react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { ArrowDown, ArrowUp, ChevronLeft, ChevronRight, Copy, Eye, EyeOff, Image as ImageIcon, KeyRound, Maximize2, Pencil, Plus, ShieldCheck, Trash2, X } from 'lucide-react';
 import { QUICK_RANGE_LABEL, formatDate, formatDateTime, inRange, monthRange, quickRange, todayISO, type QuickRangeKey } from '../../shared/dates';
 import { buildHaystack, compareVi, matchesQuery, normalizeText } from '../../shared/text';
 import type { ImageRef, JobYear, WarrantyInput, WarrantyRecord } from '../../shared/types';
 import { hasErrors, validateWarrantyInput } from '../../shared/validation';
 import { api } from '../api';
-import { Breadcrumbs, DateInput, EmptyState, Field, MultiSelect, SearchInput, SearchableSelect, useClickOutside, type Crumb } from '../components/common';
+import { Breadcrumbs, ColumnToggle, DateInput, EmptyState, Field, MultiSelect, SearchInput, SearchableSelect, type Crumb } from '../components/common';
 import { ImageGallery } from '../components/ImageGallery';
-import { Drawer, Modal } from '../components/Modal';
+import { Modal, SidePanel } from '../components/Modal';
 import { useLocalState, useSessionState } from '../lib/persist';
 import { useAppData } from '../state/AppData';
 import { usePageTitle, useUi } from '../state/ui';
@@ -376,45 +376,87 @@ function PasswordReveal({ id }: { id: string }) {
   );
 }
 
-function WarrantyDetail({ r, onClose, onEdit, onDelete }: { r: WarrantyRecord; onClose: () => void; onEdit: () => void; onDelete: () => void }) {
-  const row = (k: string, v: React.ReactNode) => (
+function InfoRow({ k, v, id, hasPassword }: { k: string; v: React.ReactNode; id: string; hasPassword: boolean }) {
+  if (k === 'Pass')
+    return (
+      <>
+        <span className="k">Pass</span>
+        <span>{hasPassword ? <PasswordReveal id={id} /> : <span className="faint">—</span>}</span>
+      </>
+    );
+  return (
     <>
       <span className="k">{k}</span>
       <span className="pre">{v || <span className="faint">—</span>}</span>
     </>
   );
+}
+
+function InfoRows({ r, rows }: { r: WarrantyRecord; rows: [string, React.ReactNode][] }) {
   return (
-    <Drawer
-      title={`${r.model || 'Warranty'}${r.caseNumber ? ` · ${r.caseNumber}` : ''}`}
+    <div className="info-grid" style={{ gridTemplateColumns: '120px 1fr' }}>
+      {rows.map(([k, v]) => (
+        <InfoRow key={k} k={k} v={v} id={r.id} hasPassword={r.hasPassword} />
+      ))}
+    </div>
+  );
+}
+
+const recordTitle = (r: WarrantyRecord) => `${r.model || 'Warranty'}${r.caseNumber ? ` · ${r.caseNumber}` : ''}`;
+
+/** Panel tóm tắt bên phải bảng: chọn dòng khác trong bảng thì panel đổi theo. */
+function WarrantyDetail({
+  r,
+  onClose,
+  onEdit,
+  onView,
+  onDelete,
+}: {
+  r: WarrantyRecord;
+  onClose: () => void;
+  onEdit: () => void;
+  onView: () => void;
+  onDelete: () => void;
+}) {
+  return (
+    <SidePanel
+      title={recordTitle(r)}
+      subtitle={[r.brandName, r.receivedDate && `Nhận ${formatDate(r.receivedDate)}`].filter(Boolean).join(' · ')}
+      label="Thông tin Warranty"
       onClose={onClose}
       footer={
         <>
           <button className="btn danger left" onClick={onDelete}>
             <Trash2 size={15} /> Xóa
           </button>
+          <button className="btn" onClick={onView} title="Xem đầy đủ thông tin trên màn hình lớn">
+            <Maximize2 size={15} /> View info
+          </button>
           <button className="btn primary" onClick={onEdit}>
-            <Pencil size={15} /> Sửa
+            <Pencil size={15} /> Edit
           </button>
         </>
       }
     >
-      <div className="info-grid" style={{ gridTemplateColumns: '130px 1fr' }}>
-        {row('Model', r.model)}
-        {row('Hãng', r.brandName)}
-        {row('Serial number', r.serialNumber)}
-        {row('MAC', r.macAddress)}
-        {row('IP', r.ipAddress)}
-        {row('User', r.username)}
-        <span className="k">Pass</span>
-        <span>{r.hasPassword ? <PasswordReveal id={r.id} /> : <span className="faint">—</span>}</span>
-        {row('Ngày nhận', formatDate(r.receivedDate))}
-        {row('Ngày test', formatDate(r.testedDate))}
-        {row('Case no', r.caseNumber)}
-        {row('Khách hàng báo', r.customerReport)}
-        {row('Kiểm tra', r.inspection)}
-        {row('Kết quả', r.result)}
-        {row('Xử lý', r.resolution)}
-      </div>
+      <InfoRows
+        r={r}
+        rows={[
+          ['Model', r.model],
+          ['Hãng', r.brandName],
+          ['Serial number', r.serialNumber],
+          ['MAC', r.macAddress],
+          ['IP', r.ipAddress],
+          ['User', r.username],
+          ['Pass', null],
+          ['Ngày nhận', formatDate(r.receivedDate)],
+          ['Ngày test', formatDate(r.testedDate)],
+          ['Case no', r.caseNumber],
+          ['Khách hàng báo', r.customerReport],
+          ['Kiểm tra', r.inspection],
+          ['Kết quả', r.result],
+          ['Xử lý', r.resolution],
+        ]}
+      />
       <h3 className="card-title" style={{ marginTop: 18, fontSize: 14 }}>
         Ảnh ({r.images.length})
       </h3>
@@ -422,35 +464,101 @@ function WarrantyDetail({ r, onClose, onEdit, onDelete }: { r: WarrantyRecord; o
       <div className="small faint" style={{ marginTop: 16 }}>
         Tạo {formatDateTime(r.createdAt)} · Cập nhật {formatDateTime(r.updatedAt)}
       </div>
-    </Drawer>
+    </SidePanel>
   );
 }
 
-function ColumnToggle({ hidden, onChange }: { hidden: string[]; onChange: (v: string[]) => void }) {
-  const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
-  useClickOutside(ref, () => setOpen(false), open);
-  return (
-    <div className="pop-anchor" ref={ref}>
-      <button className="btn" onClick={() => setOpen((o) => !o)} aria-expanded={open}>
-        <Columns3 size={15} /> Cột {hidden.length > 0 && `(${COLUMNS.length - hidden.length}/${COLUMNS.length})`}
-      </button>
-      {open && (
-        <div className="popover right" style={{ minWidth: 200 }}>
-          {COLUMNS.map((c) => (
-            <label key={c.key} className="opt" style={{ cursor: 'pointer' }}>
-              <input type="checkbox" checked={!hidden.includes(c.key)} onChange={() => onChange(hidden.includes(c.key) ? hidden.filter((h) => h !== c.key) : [...hidden, c.key])} />
-              {c.label}
-            </label>
-          ))}
-          {hidden.length > 0 && (
-            <button className="opt" onClick={() => onChange([])}>
-              Hiện tất cả cột
-            </button>
-          )}
-        </div>
-      )}
+/** "View info": toàn bộ thông tin một bản ghi trên màn hình lớn, vẫn Edit được và chuyển bản trước/sau. */
+function WarrantyInfoModal({
+  r,
+  index,
+  total,
+  onClose,
+  onEdit,
+  onStep,
+}: {
+  r: WarrantyRecord;
+  index: number;
+  total: number;
+  onClose: () => void;
+  onEdit: () => void;
+  onStep: (d: -1 | 1) => void;
+}) {
+  const block = (label: string, text: string) => (
+    <div className="info-block">
+      <div className="info-block-label">{label}</div>
+      <div className="pre">{text || <span className="faint">—</span>}</div>
     </div>
+  );
+  return (
+    <Modal
+      size="xl"
+      title={
+        <span className="row" style={{ gap: 8 }}>
+          <ShieldCheck size={18} style={{ color: 'var(--accent)' }} /> {recordTitle(r)}
+        </span>
+      }
+      onClose={onClose}
+      bodyStyle={{ background: 'var(--surface-2)' }}
+      footer={(close) => (
+        <>
+          <div className="left row" style={{ gap: 6 }}>
+            <button className="btn sm" disabled={index <= 0} onClick={() => onStep(-1)} aria-label="Bản ghi trước">
+              <ChevronLeft size={15} /> Trước
+            </button>
+            <span className="small muted">{index >= 0 ? `${index + 1}/${total}` : ''}</span>
+            <button className="btn sm" disabled={index < 0 || index >= total - 1} onClick={() => onStep(1)} aria-label="Bản ghi sau">
+              Sau <ChevronRight size={15} />
+            </button>
+          </div>
+          <button className="btn" onClick={close}>
+            Đóng
+          </button>
+          <button className="btn primary" onClick={onEdit}>
+            <Pencil size={15} /> Edit
+          </button>
+        </>
+      )}
+    >
+      <div className="view-info">
+        <section className="card card-pad">
+          <h3 className="card-title">Thiết bị</h3>
+          <InfoRows r={r} rows={[['Model', r.model], ['Hãng', r.brandName], ['Serial number', r.serialNumber], ['MAC', r.macAddress]]} />
+        </section>
+        <section className="card card-pad">
+          <h3 className="card-title">Truy cập thiết bị</h3>
+          <InfoRows r={r} rows={[['IP', r.ipAddress], ['User', r.username], ['Pass', null]]} />
+        </section>
+        <section className="card card-pad">
+          <h3 className="card-title">Thời gian &amp; case</h3>
+          <InfoRows
+            r={r}
+            rows={[
+              ['Ngày nhận', formatDate(r.receivedDate)],
+              ['Ngày test', formatDate(r.testedDate)],
+              ['Case no', r.caseNumber],
+              ['Năm', r.yearLabel],
+            ]}
+          />
+        </section>
+        <section className="card card-pad span-all">
+          <h3 className="card-title">Nội dung xử lý</h3>
+          <div className="info-blocks">
+            {block('Khách hàng báo', r.customerReport)}
+            {block('Kiểm tra', r.inspection)}
+            {block('Kết quả', r.result)}
+            {block('Xử lý', r.resolution)}
+          </div>
+        </section>
+        <section className="card card-pad span-all">
+          <h3 className="card-title">Ảnh ({r.images.length})</h3>
+          <ImageGallery images={r.images} large />
+          <div className="small faint" style={{ marginTop: 14 }}>
+            Tạo {formatDateTime(r.createdAt)} · Cập nhật {formatDateTime(r.updatedAt)}
+          </div>
+        </section>
+      </div>
+    </Modal>
   );
 }
 
@@ -475,6 +583,7 @@ export function WarrantyPage({ year, crumbs }: { year: JobYear; crumbs: Crumb[] 
   const [hidden, setHidden] = useLocalState<string[]>('warranty-hidden-cols', []);
   const [form, setForm] = useState<{ record?: WarrantyRecord } | null>(null);
   const [detailId, setDetailId] = useState<string | null>(null);
+  const [viewId, setViewId] = useState<string | null>(null);
 
   const load = useCallback(() => {
     api.listWarranty(year.id).then(setRecords).catch(toastError);
@@ -514,6 +623,15 @@ export function WarrantyPage({ year, crumbs }: { year: JobYear; crumbs: Crumb[] 
   }, [indexed, f, range.from, range.to, sort]);
 
   const detail = records?.find((r) => r.id === detailId) ?? null;
+  const viewing = records?.find((r) => r.id === viewId) ?? null;
+  const viewIndex = viewing ? shown.findIndex((r) => r.id === viewing.id) : -1;
+  const stepView = (d: -1 | 1) => {
+    const next = shown[viewIndex + d];
+    if (next) {
+      setViewId(next.id);
+      setDetailId(next.id);
+    }
+  };
   const remove = async (r: WarrantyRecord) => {
     const ok = await confirm({
       title: 'Xóa Warranty Record',
@@ -529,6 +647,7 @@ export function WarrantyPage({ year, crumbs }: { year: JobYear; crumbs: Crumb[] 
     try {
       await api.deleteWarranty(r.id);
       setDetailId(null);
+      setViewId(null);
       toast('success', 'Đã xóa Warranty Record.');
       afterChange();
     } catch (e) {
@@ -550,7 +669,7 @@ export function WarrantyPage({ year, crumbs }: { year: JobYear; crumbs: Crumb[] 
           </h1>
         </div>
         <div className="actions">
-          <ColumnToggle hidden={hidden} onChange={setHidden} />
+          <ColumnToggle columns={COLUMNS} hidden={hidden} onChange={setHidden} />
           <button className="btn primary" onClick={() => setForm({})}>
             <Plus size={16} /> Add Record
           </button>
@@ -591,7 +710,8 @@ export function WarrantyPage({ year, crumbs }: { year: JobYear; crumbs: Crumb[] 
           />
         </div>
       ) : (
-        <div className="table-wrap" style={{ flex: 1 }}>
+        <div className="split">
+        <div className="table-wrap">
           <table className="tbl">
             <thead>
               <tr>
@@ -619,7 +739,15 @@ export function WarrantyPage({ year, crumbs }: { year: JobYear; crumbs: Crumb[] 
                 </tr>
               )}
               {shown.map((r) => (
-                <tr key={r.id} className="clickable" tabIndex={0} onClick={() => setDetailId(r.id)} onKeyDown={(e) => e.key === 'Enter' && setDetailId(r.id)}>
+                <tr
+                  key={r.id}
+                  className={`clickable ${r.id === detailId ? 'selected' : ''}`}
+                  tabIndex={0}
+                  aria-selected={r.id === detailId}
+                  onClick={() => setDetailId(r.id)}
+                  onDoubleClick={() => setViewId(r.id)}
+                  onKeyDown={(e) => e.key === 'Enter' && setDetailId(r.id)}
+                >
                   {cols.map((c) => (
                     <td key={c.key} className={c.cls}>
                       {c.render(r)}
@@ -630,14 +758,28 @@ export function WarrantyPage({ year, crumbs }: { year: JobYear; crumbs: Crumb[] 
             </tbody>
           </table>
         </div>
+        {detail && (
+          <WarrantyDetail
+            key={detail.id}
+            r={detail}
+            onClose={() => setDetailId(null)}
+            onEdit={() => setForm({ record: detail })}
+            onView={() => setViewId(detail.id)}
+            onDelete={() => void remove(detail)}
+          />
+        )}
+        </div>
       )}
 
-      {detail && (
-        <WarrantyDetail
-          r={detail}
-          onClose={() => setDetailId(null)}
-          onEdit={() => setForm({ record: detail })}
-          onDelete={() => void remove(detail)}
+      {viewing && (
+        <WarrantyInfoModal
+          key={viewing.id}
+          r={viewing}
+          index={viewIndex}
+          total={shown.length}
+          onClose={() => setViewId(null)}
+          onEdit={() => setForm({ record: viewing })}
+          onStep={stepView}
         />
       )}
       {form && <WarrantyForm year={year} record={form.record} onClose={() => setForm(null)} onSaved={afterChange} />}

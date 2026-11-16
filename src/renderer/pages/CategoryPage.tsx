@@ -47,6 +47,8 @@ export function CategoryPage() {
         baseList={list}
         onAdd={() => openCreate({ jobType: year.jobType, jobYearId: year.id, workCategory: cat })}
         addLabel={`Thêm Project vào ${CATEGORY_LABEL[cat]}`}
+        viewKey="view-mode:category"
+        defaultView="list"
       />
     </>
   );

@@ -8,7 +8,7 @@ import { hasErrors, validateExperienceInput, validateMasterName } from '../../sh
 import { api } from '../api';
 import { Breadcrumbs, DateInput, EmptyState, Field, SearchInput, SearchableSelect } from '../components/common';
 import { ImageGallery } from '../components/ImageGallery';
-import { Drawer, Modal } from '../components/Modal';
+import { Modal, SidePanel } from '../components/Modal';
 import { useLocalState, useSessionState } from '../lib/persist';
 import { useAppData } from '../state/AppData';
 import { usePageTitle, useUi } from '../state/ui';
@@ -16,7 +16,7 @@ import { DateFilterControls, resolveDateRange } from './WarrantyPage';
 
 type DateMode = Parameters<typeof resolveDateRange>[0];
 
-function useOpenUrl() {
+export function useOpenUrl() {
   const { toastError } = useUi();
   return (url: string) => api.openExternalUrl(url).catch(toastError);
 }
@@ -272,8 +272,10 @@ function ProjectCell({ r }: { r: ExperienceRecord }) {
 function ExperienceDetail({ r, onClose, onEdit, onDelete }: { r: ExperienceRecord; onClose: () => void; onEdit: () => void; onDelete: () => void }) {
   const openUrl = useOpenUrl();
   return (
-    <Drawer
+    <SidePanel
       title={`${r.brandName} · ${formatDate(r.experienceDate)}`}
+      subtitle={r.deviceModel || undefined}
+      label="Thông tin Experience"
       onClose={onClose}
       footer={
         <>
@@ -321,7 +323,7 @@ function ExperienceDetail({ r, onClose, onEdit, onDelete }: { r: ExperienceRecor
       <div className="small faint" style={{ marginTop: 16 }}>
         Tạo {formatDateTime(r.createdAt)} · Cập nhật {formatDateTime(r.updatedAt)}
       </div>
-    </Drawer>
+    </SidePanel>
   );
 }
 
@@ -441,7 +443,8 @@ function ExperienceBrandView({ brandId }: { brandId: string }) {
           />
         </div>
       ) : (
-        <div className="table-wrap" style={{ flex: 1 }}>
+        <div className="split">
+        <div className="table-wrap">
           <table className="tbl">
             <thead>
               <tr>
@@ -461,7 +464,14 @@ function ExperienceBrandView({ brandId }: { brandId: string }) {
                 </tr>
               )}
               {shown.map((r) => (
-                <tr key={r.id} className="clickable" tabIndex={0} onClick={() => setDetailId(r.id)} onKeyDown={(e) => e.key === 'Enter' && setDetailId(r.id)}>
+                <tr
+                  key={r.id}
+                  className={`clickable ${r.id === detailId ? 'selected' : ''}`}
+                  tabIndex={0}
+                  aria-selected={r.id === detailId}
+                  onClick={() => setDetailId(r.id)}
+                  onKeyDown={(e) => e.key === 'Enter' && setDetailId(r.id)}
+                >
                   <td className="nowrap">{formatDate(r.experienceDate)}</td>
                   <td>
                     <ProjectCell r={r} />
@@ -489,8 +499,9 @@ function ExperienceBrandView({ brandId }: { brandId: string }) {
             </tbody>
           </table>
         </div>
+        {detail && <ExperienceDetail key={detail.id} r={detail} onClose={() => setDetailId(null)} onEdit={() => setForm({ record: detail })} onDelete={() => void remove(detail)} />}
+        </div>
       )}
-      {detail && <ExperienceDetail r={detail} onClose={() => setDetailId(null)} onEdit={() => setForm({ record: detail })} onDelete={() => void remove(detail)} />}
       {form && <ExperienceForm brand={brand} record={form.record} onClose={() => setForm(null)} onSaved={afterChange} />}
     </>
   );

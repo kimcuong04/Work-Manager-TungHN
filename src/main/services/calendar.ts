@@ -1,0 +1,196 @@
+import { randomUUID } from 'node:crypto';
+import { formatDate } from '../../shared/dates';
+import type { CalendarColor, CalendarEvent, CalendarEventInput, CalendarEventKind, CalendarQuery, Project, ProjectInput } from '../../shared/types';
+import { hasErrors, validateCalendarEventInput } from '../../shared/validation';
+import { AppError, now, str, strOrNull, todayOf, type Ctx } from '../context';
+
+const SELECT_EVENT = `
+SELECT e.*, p.project_name AS live_project_name
+FROM calendar_events e
+LEFT JOIN projects p ON p.id = e.project_id`;
+
+function mapEvent(r: Record<string, any>): CalendarEvent {
+  const projectExists = !!r.live_project_name;
+  return {
+    id: r.id,
+    eventDate: r.event_date,
+    startTime: strOrNull(r.start_time),
+    endTime: strOrNull(r.end_time),
+    title: r.title,
+    note: str(r.note),
+    color: (strOrNull(r.color) as CalendarColor | null) ?? null,
+    kind: r.kind,
+    projectId: strOrNull(r.project_id),
+    projectName: projectExists ? r.live_project_name : strOrNull(r.project_name),
+    projectExists,
+    createdAt: r.created_at,
+    updatedAt: r.updated_at,
+  };
+}
+
+export function listCalendarEvents(ctx: Ctx, q: CalendarQuery = {}): CalendarEvent[] {
+  const where: string[] = [];
+  const params: string[] = [];
+  if (q.from) {
+    where.push('e.event_date >= ?');
+    params.push(q.from);
+  }
+  if (q.to) {
+    where.push('e.event_date <= ?');
+    params.push(q.to);
+  }
+  if (q.projectId) {
+    where.push('e.project_id = ?');
+    params.push(q.projectId);
+  }
+  const sql = `${SELECT_EVENT}${where.length ? ` WHERE ${where.join(' AND ')}` : ''}
+    ORDER BY e.event_date, e.start_time IS NOT NULL, e.start_time, e.created_at`;
+  return ctx.db.all<Record<string, any>>(sql, params).map(mapEvent);
+}
+
+function getEvent(ctx: Ctx, id: string): CalendarEvent {
+  const r = ctx.db.get<Record<string, any>>(`${SELECT_EVENT} WHERE e.id = ?`, [id]);
+  if (!r) throw new AppError('Không tìm thấy sự kiện (có thể đã bị xóa).');
+  return mapEvent(r);
+}
+
+function normalize(ctx: Ctx, input: CalendarEventInput) {
+  const e = validateCalendarEventInput(input);
+  if (hasErrors(e)) throw new AppError(Object.values(e).filter(Boolean).join(' '));
+  let projectName: string | null = null;
+  if (input.projectId) {
+    const p = ctx.db.get<{ project_name: string }>('SELECT project_name FROM projects WHERE id = ?', [input.projectId]);
+    if (!p) throw new AppError('Dự án được liên kết không tồn tại.');
+    projectName = p.project_name;
+  }
+  return {
+    eventDate: input.eventDate,
+    startTime: input.startTime || null,
+    endTime: input.startTime ? input.endTime || null : null,
+    title: input.title.replace(/\s+/g, ' ').trim(),
+    note: (input.note ?? '').replace(/\r\n/g, '\n').trim(),
+    color: input.color || null,
+    projectId: input.projectId || null,
+    projectName,
+  };
+}
+
+function insertRow(
+  ctx: Ctx,
+  kind: CalendarEventKind,
+  v: { eventDate: string; startTime: string | null; endTime: string | null; title: string; note: string; color: string | null; projectId: string | null; projectName: string | null },
+): string {
+  const id = randomUUID();
+  const stamp = now();
+  ctx.db.run(
+    `INSERT INTO calendar_events (id, event_date, start_time, end_time, title, note, color, kind, project_id, project_name, created_at, updated_at)
+     VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`,
+    [id, v.eventDate, v.startTime, v.endTime, v.title, v.note, v.color, kind, v.projectId, v.projectName, stamp, stamp],
+  );
+  return id;
+}
+
+export function createCalendarEvent(ctx: Ctx, input: CalendarEventInput): CalendarEvent {
+  const v = normalize(ctx, input);
+  let id = '';
+  ctx.db.tx(() => {
+    id = insertRow(ctx, 'CUSTOM', v);
+  });
+  return getEvent(ctx, id);
+}
+
+/** Sự kiện sinh từ dự án vẫn sửa được (đổi ngày, giờ, ghi chú…), loại sự kiện thì giữ nguyên. */
+export function updateCalendarEvent(ctx: Ctx, id: string, input: CalendarEventInput): CalendarEvent {
+  getEvent(ctx, id);
+  const v = normalize(ctx, input);
+  ctx.db.tx(() =>
+    ctx.db.run(
+      `UPDATE calendar_events SET event_date=?, start_time=?, end_time=?, title=?, note=?, color=?, project_id=?,
+        project_name=COALESCE(?, project_name), updated_at=? WHERE id=?`,
+      [v.eventDate, v.startTime, v.endTime, v.title, v.note, v.color, v.projectId, v.projectName, now(), id],
+    ),
+  );
+  return getEvent(ctx, id);
+}
+
+export function moveCalendarEvent(ctx: Ctx, id: string, eventDate: string): CalendarEvent {
+  const ev = getEvent(ctx, id);
+  return updateCalendarEvent(ctx, id, { ...ev, eventDate });
+}
+
+export function deleteCalendarEvent(ctx: Ctx, id: string): void {
+  getEvent(ctx, id);
+  ctx.db.tx(() => ctx.db.run('DELETE FROM calendar_events WHERE id = ?', [id]));
+}
+
+/* ---------- Đồng bộ với dự án (gọi bên trong transaction của service dự án) ---------- */
+
+export function addProjectStartEvent(ctx: Ctx, projectId: string, name: string, receivedDate: string): void {
+  insertRow(ctx, 'PROJECT_START', {
+    eventDate: receivedDate,
+    startTime: null,
+    endTime: null,
+    title: name,
+    note: '',
+    color: null,
+    projectId,
+    projectName: name,
+  });
+}
+
+/** Ngày tiếp nhận/tên dự án đổi thì sự kiện "Bắt đầu dự án" đi theo; tiêu đề người dùng đã tự sửa thì giữ. */
+export function syncProjectStartEvent(ctx: Ctx, before: Project, after: { projectName: string; receivedDate: string }): void {
+  const rows = ctx.db.all<{ id: string; title: string; event_date: string }>(
+    `SELECT id, title, event_date FROM calendar_events WHERE project_id = ? AND kind = 'PROJECT_START'`,
+    [before.id],
+  );
+  const stamp = now();
+  for (const r of rows) {
+    const title = r.title === before.projectName ? after.projectName : r.title;
+    const date = r.event_date === before.receivedDate ? after.receivedDate : r.event_date;
+    if (title !== r.title || date !== r.event_date)
+      ctx.db.run('UPDATE calendar_events SET title = ?, event_date = ?, updated_at = ? WHERE id = ?', [title, date, stamp, r.id]);
+  }
+  ctx.db.run(`UPDATE calendar_events SET project_name = ? WHERE project_id = ?`, [after.projectName, before.id]);
+}
+
+export function hasProjectStartEvent(ctx: Ctx, projectId: string): boolean {
+  return ctx.db.scalar<number>(`SELECT COUNT(*) FROM calendar_events WHERE project_id = ? AND kind = 'PROJECT_START'`, [projectId]) > 0;
+}
+
+type NameLookup = (table: string, id: string | null) => string;
+
+/** Tóm tắt những gì đổi giữa bản cũ và bản mới của dự án, mỗi dòng một trường. */
+export function describeProjectChanges(before: Project, after: ProjectInput, lookup: NameLookup): string[] {
+  const lines: string[] = [];
+  const cmp = (label: string, a: string, b: string) => {
+    if (a !== b) lines.push(`${label}: ${a || '—'} → ${b || '—'}`);
+  };
+  cmp('Tên dự án', before.projectName, after.projectName);
+  cmp('CĐT', before.clientName, lookup('clients', after.clientId));
+  cmp('Đơn vị thiết kế', before.designUnitName ?? '', lookup('design_units', after.designUnitId));
+  cmp('Salesperson', before.salespersonName ?? '', lookup('salespersons', after.salespersonId));
+  cmp('Giai đoạn', before.stageName ?? '', lookup('project_stages', after.stageId));
+  cmp('Ngày tiếp nhận', formatDate(before.receivedDate), formatDate(after.receivedDate));
+  cmp('Ngày tới hạn', formatDate(before.dueDate), formatDate(after.dueDate));
+  if (before.priorityPoint !== after.priorityPoint) lines.push(`Priority: ${before.priorityPoint} → ${after.priorityPoint}`);
+  cmp('File liên kết', before.fileName ?? '', after.fileName ?? '');
+  return lines;
+}
+
+export function addProjectUpdateEvent(ctx: Ctx, projectId: string, name: string, changes: string[]): void {
+  insertRow(ctx, 'PROJECT_UPDATE', {
+    eventDate: todayOf(ctx),
+    startTime: null,
+    endTime: null,
+    title: name,
+    note: changes.length ? changes.join('\n') : 'Ghi nhận tiến độ dự án (không đổi thông tin).',
+    color: null,
+    projectId,
+    projectName: name,
+  });
+}
+
+export function removeProjectStartEvents(ctx: Ctx, projectId: string): void {
+  ctx.db.run(`DELETE FROM calendar_events WHERE project_id = ? AND kind = 'PROJECT_START'`, [projectId]);
+}

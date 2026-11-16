@@ -46,7 +46,10 @@ function counts(ctx: Ctx): Record<string, number> {
     projects: c('SELECT COUNT(*) FROM projects'),
     warranty: c('SELECT COUNT(*) FROM warranty_records'),
     experience: c('SELECT COUNT(*) FROM experience_records'),
-    images: c('SELECT (SELECT COUNT(*) FROM warranty_images) + (SELECT COUNT(*) FROM experience_images)'),
+    knowledge: c('SELECT COUNT(*) FROM knowledge_records'),
+    calendar: c('SELECT COUNT(*) FROM calendar_events'),
+    notes: c('SELECT COUNT(*) FROM project_notes'),
+    images: c('SELECT (SELECT COUNT(*) FROM warranty_images) + (SELECT COUNT(*) FROM experience_images) + (SELECT COUNT(*) FROM knowledge_images) + (SELECT COUNT(*) FROM project_note_images)'),
   };
 }
 

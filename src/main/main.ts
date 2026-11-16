@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { pathToFileURL } from 'node:url';
-import { app, BrowserWindow, dialog, ipcMain, Menu, net, protocol, shell } from 'electron';
+import { fileURLToPath, pathToFileURL } from 'node:url';
+import { app, BrowserWindow, clipboard, ClipboardItem, dialog, ipcMain, Menu, nativeImage, net, protocol, shell } from 'electron';
 import type { ApiResult } from '../shared/api';
 import type { AppEvent, UpdateStatus } from '../shared/types';
 import { AppError, makePaths, type Ctx } from './context';
@@ -125,6 +125,37 @@ async function start() {
     openPath: (p) => shell.openPath(p),
     showItemInFolder: (p) => shell.showItemInFolder(p),
     openExternal: (url) => shell.openExternal(url),
+    async readClipboardImage() {
+      const items = await clipboard.read();
+      for (const item of items) {
+        const type = item.types.find((t) => t.startsWith('image/'));
+        if (!type) continue;
+        const bytes = Buffer.from(await ((await item.getType(type)) as Blob).arrayBuffer());
+        const png = type === 'image/png' ? bytes : nativeImage.createFromBuffer(bytes).toPNG();
+        if (png.length) return { png: new Uint8Array(png) };
+      }
+      // Copy file trong Explorer: clipboard chỉ có danh sách file (text/uri-list), không có dữ liệu ảnh.
+      const files: string[] = [];
+      for (const item of items) {
+        if (!item.types.includes('text/uri-list')) continue;
+        const list = await ((await item.getType('text/uri-list')) as Blob).text();
+        for (const line of list.split(/\r?\n/)) {
+          if (!line.trim().startsWith('file:')) continue;
+          try {
+            files.push(fileURLToPath(line.trim()));
+          } catch {
+            /* bỏ qua đường dẫn không hợp lệ */
+          }
+        }
+      }
+      return files.length ? { files } : null;
+    },
+    async writeClipboardImage(file) {
+      const img = nativeImage.createFromPath(file);
+      if (img.isEmpty()) return false;
+      await clipboard.write([new ClipboardItem({ 'image/png': new Blob([new Uint8Array(img.toPNG())], { type: 'image/png' }) })]);
+      return true;
+    },
     updater,
   };
   const handlers: Handlers = createHandlers(ctx!, desktop);

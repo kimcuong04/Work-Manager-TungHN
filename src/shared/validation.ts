@@ -1,5 +1,5 @@
 import { isValidISODate } from './dates';
-import type { ExperienceInput, ProjectInput, WarrantyInput } from './types';
+import { CALENDAR_COLORS, type CalendarEventInput, type ExperienceInput, type KnowledgeInput, type ProjectInput, type WarrantyInput } from './types';
 import { cleanName } from './text';
 
 export type FieldErrors = Partial<Record<string, string>>;
@@ -32,7 +32,6 @@ export function validateProjectInput(input: ProjectInput): FieldErrors {
   if (!name) e.projectName = 'Bắt buộc nhập Tên dự án.';
   else if (name.length > LIMITS.projectName) e.projectName = `Tối đa ${LIMITS.projectName} ký tự.`;
   if (!input.clientId) e.clientId = 'Bắt buộc chọn CĐT.';
-  if ((input.note ?? '').length > LIMITS.note) e.note = `Tối đa ${LIMITS.note} ký tự.`;
   if (!Number.isInteger(input.priorityPoint) || input.priorityPoint < 1 || input.priorityPoint > 5)
     e.priorityPoint = 'Priority Point phải từ 1 đến 5.';
   if (input.fileExtension && !['dwg', 'txt'].includes(input.fileExtension.toLowerCase()))
@@ -98,6 +97,41 @@ export function validateExperienceInput(input: ExperienceInput): FieldErrors {
   checkLen(e, 'projectText', input.projectText ?? '', LIMITS.projectName);
   const urlErr = validateWebUrl(input.webUrl);
   if (urlErr) e.webUrl = urlErr;
+  return e;
+}
+
+export function validateKnowledgeInput(input: KnowledgeInput): FieldErrors {
+  const e: FieldErrors = {};
+  if (!input.knowledgeDate) e.knowledgeDate = 'Bắt buộc nhập Ngày.';
+  else if (!isValidISODate(input.knowledgeDate)) e.knowledgeDate = 'Ngày không hợp lệ.';
+  if (!input.title.trim()) e.title = 'Bắt buộc nhập Tiêu đề.';
+  checkLen(e, 'title', input.title, LIMITS.projectName);
+  checkLen(e, 'deviceModel', input.deviceModel, LIMITS.shortText);
+  checkLen(e, 'content', input.content, LIMITS.longText);
+  const urlErr = validateWebUrl(input.webUrl);
+  if (urlErr) e.webUrl = urlErr;
+  return e;
+}
+
+const TIME_RE = /^([01]\d|2[0-3]):[0-5]\d$/;
+
+export function isValidTime(t: string | null | undefined): t is string {
+  return !!t && TIME_RE.test(t);
+}
+
+export function validateCalendarEventInput(input: CalendarEventInput): FieldErrors {
+  const e: FieldErrors = {};
+  if (!input.eventDate) e.eventDate = 'Bắt buộc chọn ngày.';
+  else if (!isValidISODate(input.eventDate)) e.eventDate = 'Ngày không hợp lệ.';
+  if (!input.title.trim()) e.title = 'Bắt buộc nhập tiêu đề.';
+  checkLen(e, 'title', input.title, LIMITS.projectName);
+  checkLen(e, 'note', input.note, LIMITS.note);
+  if (input.startTime && !isValidTime(input.startTime)) e.startTime = 'Giờ không hợp lệ.';
+  if (input.endTime && !isValidTime(input.endTime)) e.endTime = 'Giờ không hợp lệ.';
+  if (input.endTime && !input.startTime) e.startTime = 'Nhập giờ bắt đầu.';
+  if (isValidTime(input.startTime) && isValidTime(input.endTime) && input.endTime <= input.startTime)
+    e.endTime = 'Giờ kết thúc phải sau giờ bắt đầu.';
+  if (input.color && !(CALENDAR_COLORS as readonly string[]).includes(input.color)) e.color = 'Màu không hợp lệ.';
   return e;
 }
 

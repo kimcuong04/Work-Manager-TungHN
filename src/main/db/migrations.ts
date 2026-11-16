@@ -166,6 +166,87 @@ function seedV1(db: Db) {
     db.run('INSERT INTO job_years VALUES (?,?,?,?,?,?)', [randomUUID(), job, year, Number(year), now, now]);
 }
 
+/** v1.3: Salesperson cho Project, module Kiến thức, Calendar. */
+const V2 = `
+${MASTER_TABLE('salespersons')}
+ALTER TABLE projects ADD COLUMN salesperson_id TEXT REFERENCES salespersons(id);
+
+CREATE TABLE knowledge_records (
+  id TEXT PRIMARY KEY,
+  brand_id TEXT REFERENCES brands(id),
+  knowledge_date TEXT NOT NULL,
+  title TEXT NOT NULL,
+  device_model TEXT,
+  content TEXT,
+  web_url TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+CREATE INDEX idx_knowledge_brand ON knowledge_records(brand_id);
+${IMAGE_TABLE('knowledge_images', 'knowledge_id', 'knowledge_records')}
+
+CREATE TABLE calendar_events (
+  id TEXT PRIMARY KEY,
+  event_date TEXT NOT NULL,
+  start_time TEXT,
+  end_time TEXT,
+  title TEXT NOT NULL,
+  note TEXT,
+  color TEXT,
+  kind TEXT NOT NULL CHECK (kind IN ('PROJECT_START','PROJECT_UPDATE','CUSTOM')),
+  project_id TEXT REFERENCES projects(id) ON DELETE SET NULL,
+  project_name TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+CREATE INDEX idx_calendar_date ON calendar_events(event_date);
+CREATE INDEX idx_calendar_project ON calendar_events(project_id);
+`;
+
+/** Dự án có từ trước khi có Calendar: đưa ngày tiếp nhận lên Calendar để lịch không trống. */
+function backfillCalendarV2(db: Db) {
+  const now = new Date().toISOString();
+  const rows = db.all<{ id: string; project_name: string; received_date: string }>('SELECT id, project_name, received_date FROM projects');
+  for (const r of rows)
+    db.run(
+      `INSERT INTO calendar_events (id, event_date, start_time, end_time, title, note, color, kind, project_id, project_name, created_at, updated_at)
+       VALUES (?,?,NULL,NULL,?,'',NULL,'PROJECT_START',?,?,?,?)`,
+      [randomUUID(), r.received_date, r.project_name, r.id, r.project_name, now, now],
+    );
+}
+
+/** v1.3: ghi chú dự án lưu theo ngày (HTML có định dạng + ảnh dán vào). */
+const V3 = `
+CREATE TABLE project_notes (
+  id TEXT PRIMARY KEY,
+  project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+  note_date TEXT NOT NULL,
+  content_html TEXT NOT NULL,
+  content_text TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+CREATE UNIQUE INDEX ux_project_notes_day ON project_notes(project_id, note_date);
+${IMAGE_TABLE('project_note_images', 'note_id', 'project_notes')}
+`;
+
+/** Ghi chú dạng text của bản cũ thành mục ghi chú của ngày dự án được cập nhật lần cuối. */
+function backfillNotesV3(db: Db) {
+  const pad = (n: number) => String(n).padStart(2, '0');
+  const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  const rows = db.all<{ id: string; note: string | null; updated_at: string }>("SELECT id, note, updated_at FROM projects WHERE TRIM(COALESCE(note, '')) <> ''");
+  for (const r of rows) {
+    const d = new Date(r.updated_at);
+    const day = Number.isNaN(d.getTime()) ? r.updated_at.slice(0, 10) : `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+    const text = r.note!.replace(/\r\n/g, '\n');
+    const html = text
+      .split('\n')
+      .map((line) => (line.trim() ? `<div>${esc(line)}</div>` : '<div><br></div>'))
+      .join('');
+    db.run('INSERT INTO project_notes VALUES (?,?,?,?,?,?,?)', [randomUUID(), r.id, day, html, text.trim(), r.updated_at, r.updated_at]);
+  }
+}
+
 export interface Migration {
   version: number;
   up: (db: Db) => void;
@@ -181,6 +262,20 @@ export const MIGRATIONS: Migration[] = [
     up: (db) => {
       db.exec(V1);
       seedV1(db);
+    },
+  },
+  {
+    version: 2,
+    up: (db) => {
+      db.exec(V2);
+      backfillCalendarV2(db);
+    },
+  },
+  {
+    version: 3,
+    up: (db) => {
+      db.exec(V3);
+      backfillNotesV3(db);
     },
   },
 ];

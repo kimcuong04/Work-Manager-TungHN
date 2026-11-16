@@ -50,6 +50,24 @@ export function importImages(ctx: Ctx, sources: string[]): ImageRef[] {
   return out;
 }
 
+/** Ảnh dán từ clipboard (ảnh chụp màn hình, ảnh copy từ trình duyệt…) đã được chuyển sang PNG. */
+export function importImageBuffer(ctx: Ctx, data: Uint8Array, fileName: string): ImageRef {
+  if (!data.length) throw new AppError('Clipboard không có dữ liệu ảnh.');
+  if (data.length > MAX_IMAGE_BYTES) throw new AppError('Ảnh dán vượt quá 30 MB.');
+  const isPng = data[0] === 0x89 && data[1] === 0x50 && data[2] === 0x4e && data[3] === 0x47;
+  if (!isPng) throw new AppError('Dữ liệu dán không phải ảnh PNG.');
+  fs.mkdirSync(ctx.paths.imagesDir, { recursive: true });
+  fs.mkdirSync(ctx.paths.thumbsDir, { recursive: true });
+  const key = `${randomUUID()}.png`;
+  fs.writeFileSync(imagePath(ctx, key), data);
+  try {
+    ctx.platform.makeThumbnail(imagePath(ctx, key), thumbPath(ctx, key), 320);
+  } catch (e) {
+    log('warn', 'Không tạo được thumbnail', e);
+  }
+  return { storageKey: key, fileName, mimeType: MIME.png, sizeBytes: data.length };
+}
+
 export function deleteImageFiles(ctx: Ctx, keys: string[]): void {
   for (const key of keys) {
     for (const p of [imagePath(ctx, key), thumbPath(ctx, key)]) {

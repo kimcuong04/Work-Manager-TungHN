@@ -151,6 +151,9 @@ try {
     );
   const fl = await call(win, 'createProject', { ...base, jobYearId: free.id, projectName: 'Freelance – bản vẽ shopdrawing', clientId: cl2.id, designUnitId: null, stageId: null, dueDate: day(12), priorityPoint: 2 });
   await call(win, 'setProjectCompleted', created[5].id, true);
+  check('Dự án mới nhập với ngày tới hạn đã qua → Đã hoàn thành', created[0].isCompleted === true && created.slice(1).every((x) => !x.isCompleted));
+  // Đưa lại về hoạt động để có một dự án quá hạn (Khẩn cấp) cho các bước sau.
+  await call(win, 'setProjectCompleted', created[0].id, false);
   await win.reload();
   await win.waitForSelector('.sidebar');
 
@@ -195,6 +198,99 @@ try {
   await win.waitForTimeout(500);
   const doneTitles = await win.locator('.board-col.st-COMPLETED .pcard-title').allInnerTexts();
   check('Kéo sang Đã hoàn thành + xác nhận + lưu', doneTitles.includes(cardName), cardName);
+
+  // --- v1.3: Pre-sales mặc định dạng Danh sách, chuyển được sang Tiến độ ---
+  await go(win, `#/job/MAIN/${main.id}/pre-sales`);
+  await win.waitForTimeout(400);
+  const listRows = await win.locator('.project-table tbody tr').count();
+  check('Pre-sales mặc định hiển thị Danh sách', listRows === 4 && (await win.locator('.board-col').count()) === 0, `${listRows} dòng`);
+  await shot(win, '04b-presales-list');
+  await win.getByRole('button', { name: 'Tiến độ', exact: true }).click();
+  await win.waitForTimeout(200);
+  check('Chuyển sang chế độ Tiến độ (board 4 cột)', (await win.locator('.board-col').count()) === 4);
+  await win.getByRole('button', { name: 'Danh sách', exact: true }).click();
+  await win.waitForTimeout(200);
+  await win.locator('.project-table th', { hasText: 'Ngày tới hạn' }).click();
+  const firstDue = await win.locator('.project-table tbody tr').first().locator('td').nth(7).innerText();
+  check('Bấm tiêu đề cột để sắp xếp', firstDue.includes('/'), firstDue.split('\n')[0]);
+  await win.getByRole('button', { name: /Thêm Project vào Pre-sales/ }).click();
+  await win.waitForSelector('.modal');
+  const newReceived = win.locator('.form-section').nth(2).locator('input.input').nth(0);
+  await newReceived.fill(day(-20).split('-').reverse().join('/'));
+  await newReceived.press('Tab');
+  const newDue = win.locator('.form-section').nth(2).locator('input.input').nth(1);
+  await newDue.fill(day(-1).split('-').reverse().join('/'));
+  await newDue.press('Tab');
+  await win.waitForTimeout(200);
+  const preview = await win.locator('.modal .badge.status').first().innerText();
+  check('Form thêm mới: hạn đã qua → xem trước "Đã hoàn thành"', preview.includes('Đã hoàn thành') && (await win.getByText(/sẽ được lưu ở trạng thái Đã hoàn thành/).isVisible()), preview);
+  await shot(win, '04c-new-past-due');
+  await win.locator('.modal-foot').getByRole('button', { name: 'Hủy' }).click();
+  await win.getByRole('button', { name: 'Bỏ thay đổi' }).click();
+  await win.waitForTimeout(200);
+
+  // --- v1.3: sửa dự án → Salesperson + 3 lựa chọn lưu ---
+  await go(win, `#/project/${created[0].id}`);
+  await win.waitForTimeout(400);
+  await win.getByRole('button', { name: 'Chỉnh sửa', exact: true }).click();
+  await win.waitForSelector('.modal');
+  const salesCombo = win.locator('.form-section').nth(1).locator('input[role="combobox"]').nth(1);
+  await salesCombo.click();
+  await salesCombo.fill('Anh Tuấn Sale');
+  await win.getByRole('button', { name: /Thêm Salesperson “Anh Tuấn Sale”/ }).click();
+  await win.waitForTimeout(400);
+  const footBtns = (await win.locator('.modal-foot button').allInnerTexts()).map((t) => t.trim());
+  check('Form sửa dự án có Hủy / Lưu / Lưu và thêm vào Calendar', JSON.stringify(footBtns) === JSON.stringify(['Hủy', 'Lưu', 'Lưu và thêm vào Calendar']), footBtns.join(' | '));
+  const greenBg = await win.locator('.modal-foot .btn.success').evaluate((el) => getComputedStyle(el).backgroundColor);
+  check('Nút "Lưu và thêm vào Calendar" màu xanh', /rgb\(47, 143, 70\)/.test(greenBg), greenBg);
+  await shot(win, '07c-edit-three-buttons');
+  await win.getByRole('button', { name: /Lưu và thêm vào Calendar/ }).click();
+  await win.waitForTimeout(600);
+  check('Lưu và thêm vào Calendar thành công', (await toastText(win)).includes('thêm vào Calendar'), await toastText(win));
+  const timelineUpd = await win.locator('.timeline-item', { hasText: 'Cập nhật dự án' }).count();
+  const timelineNote = await win.locator('.timeline-item', { hasText: 'Cập nhật dự án' }).first().innerText().catch(() => '');
+  check('Chi tiết dự án: Salesperson + lịch sử Calendar có mục Cập nhật', (await win.getByText('Anh Tuấn Sale').first().isVisible()) && timelineUpd === 1 && timelineNote.includes('Salesperson'), timelineNote.replace(/\n/g, ' / '));
+  await shot(win, '07d-detail-calendar-card');
+
+  // --- Ghi chú theo ngày: định dạng tự do + dán ảnh Ctrl+V ---
+  await win.getByRole('button', { name: 'Ghi chú hôm nay', exact: true }).click();
+  await win.locator('.note-editing .note-editor').click();
+  await win.keyboard.type('Khảo sát hiện trường: ');
+  await win.keyboard.press('Control+B');
+  await win.keyboard.type('cần thêm 2 camera');
+  await win.keyboard.press('Control+B');
+  await win.keyboard.press('Enter');
+  await app.evaluate(async ({ clipboard, nativeImage, ClipboardItem }, file) => {
+    const data = nativeImage.createFromPath(file).toPNG();
+    await clipboard.write([new ClipboardItem({ 'image/png': new Blob([new Uint8Array(data)], { type: 'image/png' }) })]);
+  }, png);
+  await win.keyboard.press('Control+V');
+  await win.waitForSelector('.note-editing .note-editor img', { timeout: 5000 }).catch(() => {});
+  await shot(win, '07e-note-editing');
+  await win.locator('.note-editing').getByRole('button', { name: 'Lưu', exact: true }).click();
+  await win.waitForTimeout(600);
+  const boldCount = await win.locator('.note-entry .note-content b').count();
+  const noteImgs = await win.locator('.note-entry .note-content img').count();
+  check('Ghi chú hôm nay: chữ đậm + ảnh dán Ctrl+V được lưu', boldCount >= 1 && noteImgs === 1, `${boldCount} đoạn đậm, ${noteImgs} ảnh`);
+  await call(win, 'saveProjectNote', created[0].id, { noteDate: day(-3), html: '<div>Gửi báo giá lần 1</div>' });
+  await win.reload();
+  await win.waitForSelector('.sidebar');
+  await go(win, `#/project/${created[0].id}`);
+  await win.waitForSelector('.note-entry');
+  const entries = await win.locator('.note-entry').count();
+  const oldLabel = day(-3).split('-').reverse().join('/');
+  await win.getByRole('button', { name: `Sửa ghi chú ngày ${oldLabel}` }).click();
+  await win.locator('.note-editing .note-editor').click();
+  await win.keyboard.press('Control+End');
+  await win.keyboard.type(' (đã gọi lại)');
+  await win.locator('.note-editing').getByRole('button', { name: 'Lưu', exact: true }).click();
+  await win.waitForTimeout(500);
+  const oldText = await win.locator('.note-entry', { hasText: oldLabel }).innerText();
+  check('Ghi chú lưu theo ngày, sửa được ghi chú ngày cũ', entries === 2 && oldText.includes('Gửi báo giá lần 1 (đã gọi lại)'), `${entries} ngày`);
+  const [attW, noteW] = await win.evaluate(() => [...document.querySelector('.notes-row').children].map((c) => c.getBoundingClientRect().width));
+  check('Panel Ghi chú rộng hơn hẳn panel Attachments', noteW > attW * 1.8, `${Math.round(attW)} px / ${Math.round(noteW)} px`);
+  await win.locator('.notes-card').scrollIntoViewIfNeeded();
+  await shot(win, '07f-notes-panel');
 
   // --- Chi tiết + Import XLSX (FR-XLSX) ---
   await go(win, `#/project/${created[2].id}`);
@@ -247,20 +343,52 @@ try {
   await win.locator('select[aria-label="Khoảng thời gian"]').selectOption('all');
   await win.getByText('RMA-2026-001').click();
   await win.waitForTimeout(300);
-  const masked = await win.locator('.drawer code').innerText();
+  check('Warranty: panel chi tiết cố định, không phủ mờ', (await win.locator('.side-panel').isVisible()) && (await win.locator('.drawer-wrap, .overlay').count()) === 0);
+  await win.getByText('RMA-2026-002').click();
+  await win.waitForTimeout(200);
+  const panelTitle2 = await win.locator('.side-panel-head h2').innerText();
+  check('Panel đang mở vẫn chọn được dòng khác', panelTitle2.includes('RMA-2026-002'), panelTitle2);
+  await win.getByText('RMA-2026-001').click();
+  await win.waitForTimeout(200);
+  const masked = await win.locator('.side-panel code').innerText();
   check('Pass bị che mặc định (TC-WAR-006)', masked.includes('•'), masked);
   await win.getByRole('button', { name: 'Hiện mật khẩu' }).click();
   await win.waitForTimeout(200);
-  check('Reveal pass hiển thị đúng', (await win.locator('.drawer code').innerText()) === 'Axis@123');
-  await win.waitForFunction(() => document.querySelector('.drawer .thumb img')?.complete);
-  const thumbW = await win.locator('.drawer .thumb img').evaluate((el) => el.naturalWidth);
+  check('Reveal pass hiển thị đúng', (await win.locator('.side-panel code').innerText()) === 'Axis@123');
+  await win.waitForFunction(() => document.querySelector('.side-panel .thumb img')?.complete);
+  const thumbW = await win.locator('.side-panel .thumb img').evaluate((el) => el.naturalWidth);
   check('Thumbnail ảnh hiển thị qua ppm-img:// (thumbnail 320px)', thumbW === 320, `naturalWidth=${thumbW}`);
-  await win.locator('.drawer .thumb').click();
+  await win.locator('.side-panel .thumb').click();
   await win.waitForTimeout(300);
   const fullW = await win.locator('.lightbox img').evaluate((el) => el.naturalWidth);
   check('Preview ảnh gốc', fullW > 320, `naturalWidth=${fullW}`);
   await win.keyboard.press('Escape');
   await shot(win, '10-warranty-detail');
+  await win.getByRole('button', { name: 'View info' }).click();
+  await win.waitForSelector('.modal .view-info');
+  check('View info: hiển thị đầy đủ, có nút Edit', (await win.locator('.modal .info-block').count()) === 4 && (await win.locator('.modal-foot').getByRole('button', { name: 'Edit' }).isVisible()));
+  await shot(win, '10b-warranty-view-info');
+  await win.locator('.modal-foot').getByRole('button', { name: 'Edit' }).click();
+  await win.waitForTimeout(300);
+  check('Edit từ View info mở form sửa', await win.getByText('Sửa Warranty Record').isVisible());
+
+  // --- v1.3: dán ảnh (Ctrl+V) thẳng vào mục ảnh của form ---
+  const thumbsBefore = await win.locator('.modal').last().locator('.thumbs .thumb').count();
+  await app.evaluate(async ({ clipboard, nativeImage, ClipboardItem }, file) => {
+    const png = nativeImage.createFromPath(file).toPNG();
+    await clipboard.write([new ClipboardItem({ 'image/png': new Blob([new Uint8Array(png)], { type: 'image/png' }) })]);
+  }, png);
+  await win.locator('.modal').last().locator('.form-section h3', { hasText: 'Ảnh' }).click();
+  await win.keyboard.press('Control+V');
+  await win.waitForTimeout(800);
+  const thumbsAfter = await win.locator('.modal').last().locator('.thumbs .thumb').count();
+  check('Ctrl+V dán ảnh chụp màn hình vào form', thumbsAfter === thumbsBefore + 1, `${thumbsBefore} → ${thumbsAfter} ảnh`);
+  await shot(win, '10c-warranty-paste');
+  await win.getByRole('button', { name: 'Lưu', exact: true }).click();
+  await win.waitForTimeout(500);
+  await win.keyboard.press('Escape');
+  await win.waitForTimeout(200);
+  check('Ảnh dán được lưu cùng bản ghi', (await win.locator('.side-panel .thumb').count()) === thumbsAfter, `${await win.locator('.side-panel .thumb').count()} ảnh trong panel`);
   await win.keyboard.press('Escape');
 
   // --- Experience ---
@@ -279,6 +407,64 @@ try {
   await win.waitForTimeout(400);
   await shot(win, '12-experience-brand');
 
+  // --- v1.3: Kiến thức ---
+  await call(win, 'createKnowledge', {
+    brandId: null, knowledgeDate: day(-2), title: 'Tính công suất PoE cho switch', deviceModel: '',
+    content: 'PoE 802.3af: 15.4W/cổng\nPoE+ 802.3at: 30W/cổng\nCộng dồn và chừa 20% dự phòng.', webUrl: 'https://en.wikipedia.org/wiki/Power_over_Ethernet', images: [img],
+  });
+  await call(win, 'createKnowledge', {
+    brandId: brand.id, knowledgeDate: day(-1), title: 'Reset camera Axis về mặc định', deviceModel: 'P3265-LVE',
+    content: 'Giữ nút Control 15–30 giây khi cấp nguồn.', webUrl: '', images: [],
+  });
+  await go(win, '#/knowledge');
+  await win.waitForTimeout(400);
+  check('Trang Kiến thức có mục Kiến thức chung', await win.locator('.brand-card', { hasText: 'Kiến thức chung' }).isVisible());
+  await win.getByPlaceholder(/Tìm Hãng hoặc nội dung/).fill('cong suat poe');
+  await win.waitForTimeout(300);
+  check('Tìm không dấu trong nội dung Kiến thức', (await win.locator('.card .tbl tbody tr').count()) === 1);
+  await shot(win, '12b-knowledge-home');
+  await win.locator('.card .tbl tbody tr').first().click();
+  await win.waitForTimeout(400);
+  check('Mở kết quả → trang Kiến thức chung, panel chi tiết mở sẵn', (await win.locator('.side-panel-head h2').innerText()).includes('PoE'));
+  await shot(win, '12c-knowledge-list');
+
+  // --- v1.3: Dashboard › Dự án trong tháng ---
+  await go(win, '#/');
+  await win.waitForTimeout(400);
+  const monthRows = await win.locator('.card', { hasText: 'Dự án trong tháng' }).locator('tbody tr').count();
+  check('Dashboard có panel "Dự án trong tháng" dưới Dự án khẩn cấp', monthRows > 0, `${monthRows} dự án`);
+  await shot(win, '03b-dashboard-month');
+
+  // --- v1.3: Calendar ---
+  await go(win, '#/calendar');
+  await win.waitForSelector('.cal-month');
+  await win.waitForTimeout(300);
+  const startChips = await win.locator('.ev-chip', { hasText: 'Nhà máy Đông Á' }).count();
+  check('Calendar: dự án mới tự có ở ngày tiếp nhận', startChips >= 1, `${startChips} chip`);
+  check('Calendar: hiển thị mục "Cập nhật dự án" hôm nay', (await win.locator('.cal-cell.today .ev-chip', { hasText: 'Trường THCS' }).count()) === 1);
+  await shot(win, '19-calendar-month');
+  await win.locator('.ev-chip', { hasText: 'Nhà máy Đông Á' }).first().click();
+  await win.waitForSelector('.cal-pop');
+  check('Bấm sự kiện mở thẻ chi tiết', await win.locator('.cal-pop').getByRole('button', { name: 'Mở dự án' }).isVisible());
+  await shot(win, '19b-calendar-popover');
+  await win.keyboard.press('Escape');
+  await win.getByRole('button', { name: /Tạo sự kiện/ }).click();
+  await win.waitForSelector('.modal');
+  await win.locator('.modal input.input').first().fill('Họp khảo sát hiện trường');
+  await win.locator('.modal label', { hasText: 'Cả ngày' }).click();
+  await win.getByRole('button', { name: 'Lưu', exact: true }).click();
+  await win.waitForTimeout(500);
+  check('Tạo sự kiện từ Calendar', (await toastText(win)).includes('Đã thêm sự kiện'), await toastText(win));
+  await win.getByRole('button', { name: 'Tuần', exact: true }).click();
+  await win.waitForTimeout(300);
+  check('Calendar: chế độ Tuần có sự kiện theo giờ', (await win.locator('.ev-block', { hasText: 'Họp khảo sát' }).count()) === 1);
+  await shot(win, '19c-calendar-week');
+  await win.getByRole('button', { name: 'Lịch trình', exact: true }).click();
+  await win.waitForTimeout(300);
+  check('Calendar: chế độ Lịch trình', (await win.locator('.cal-agenda-item').count()) >= 1);
+  await shot(win, '19d-calendar-agenda');
+  await win.getByRole('button', { name: 'Tháng', exact: true }).click();
+
   // --- Settings: ngưỡng + dark mode ---
   await go(win, '#/settings');
   await win.getByRole('button', { name: 'Quy tắc trạng thái' }).click();
@@ -296,6 +482,18 @@ try {
   await go(win, `#/project/${created[2].id}`);
   await win.waitForTimeout(400);
   await shot(win, '16-detail-dark');
+  await go(win, '#/calendar');
+  await win.waitForSelector('.cal-month');
+  await win.waitForTimeout(300);
+  await shot(win, '16b-calendar-dark');
+  await go(win, `#/job/MAIN/${main.id}/warranty`);
+  await win.waitForTimeout(400);
+  await win.getByText('RMA-2026-001').click();
+  await win.waitForTimeout(300);
+  await shot(win, '16c-warranty-panel-dark');
+  await go(win, `#/job/MAIN/${main.id}/post-sales`);
+  await win.waitForTimeout(400);
+  await shot(win, '16d-postsales-list-dark');
 
   // --- Giao diện cập nhật: chạy từ source nên updater "disabled"; giả lập sự kiện đã tải xong bản mới ---
   await go(win, '#/settings');

@@ -12,6 +12,9 @@ export const fakePlatform: Platform = {
   makeThumbnail: () => false,
 };
 
+/** Ngày cố định cho test để trạng thái/ghi chú theo ngày không đổi theo ngày chạy test. */
+export const TEST_TODAY = '2026-11-16';
+
 export function tmpDir(prefix = 'ppm-test-'): string {
   return fs.mkdtempSync(path.join(os.tmpdir(), prefix));
 }
@@ -19,7 +22,7 @@ export function tmpDir(prefix = 'ppm-test-'): string {
 export async function makeCtx(dir = tmpDir()): Promise<Ctx> {
   const paths = makePaths(dir);
   const db = await Db.open(paths.dbFile);
-  return { db, paths, platform: fakePlatform, appVersion: 'test' };
+  return { db, paths, platform: fakePlatform, appVersion: 'test', today: () => TEST_TODAY };
 }
 
 export function writeWorkbook(file: string, sheets: Record<string, unknown[][]>): string {

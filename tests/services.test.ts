@@ -26,6 +26,7 @@ function input(over: Partial<ProjectInput> = {}): ProjectInput {
     clientId,
     designUnitId: null,
     stageId: null,
+    salespersonId: null,
     note: '',
     filePath: null,
     fileName: null,

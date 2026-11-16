@@ -2,6 +2,9 @@ import type {
   AppInfo,
   AppSettings,
   BackupInfo,
+  CalendarEvent,
+  CalendarEventInput,
+  CalendarQuery,
   ExperienceInput,
   ExperienceRecord,
   FileCheck,
@@ -9,6 +12,8 @@ import type {
   ImportPayload,
   JobType,
   JobYear,
+  KnowledgeInput,
+  KnowledgeRecord,
   LinkedFile,
   MasterDeleteStrategy,
   MasterItem,
@@ -17,6 +22,9 @@ import type {
   ProjectCategory,
   ProjectImport,
   ProjectInput,
+  ProjectNote,
+  ProjectNoteInput,
+  ProjectSaveOptions,
   SettingsPatch,
   StorageUsage,
   UpdateStatus,
@@ -44,12 +52,17 @@ export interface Api {
   deleteYear(id: string): Promise<void>;
 
   listProjects(): Promise<Project[]>;
-  createProject(input: ProjectInput): Promise<Project>;
-  updateProject(id: string, input: ProjectInput): Promise<Project>;
+  createProject(input: ProjectInput, opts?: ProjectSaveOptions): Promise<Project>;
+  updateProject(id: string, input: ProjectInput, opts?: ProjectSaveOptions): Promise<Project>;
   deleteProject(id: string): Promise<void>;
   setProjectCompleted(id: string, completed: boolean): Promise<Project>;
   applyBoardChanges(changes: { id: string; completed: boolean }[]): Promise<void>;
   moveProject(id: string, jobYearId: string, category: ProjectCategory): Promise<Project>;
+
+  listProjectNotes(projectId: string): Promise<ProjectNote[]>;
+  /** Lưu (tạo/sửa) ghi chú của một ngày; nội dung rỗng thì xóa mục của ngày đó và trả về null. */
+  saveProjectNote(projectId: string, input: ProjectNoteInput, opts?: { addToCalendar?: boolean }): Promise<ProjectNote | null>;
+  deleteProjectNote(id: string): Promise<void>;
 
   pickLinkFile(): Promise<LinkedFile | null>;
   checkFile(path: string): Promise<FileCheck>;
@@ -69,12 +82,27 @@ export interface Api {
   revealWarrantyPassword(id: string): Promise<string>;
 
   pickImages(): Promise<ImageRef[]>;
+  /** Lấy ảnh đang có trong clipboard hệ điều hành (ảnh chụp màn hình, ảnh copy, hoặc file ảnh copy từ Explorer). */
+  pasteImages(): Promise<ImageRef[]>;
+  copyImageToClipboard(storageKey: string): Promise<void>;
 
   listExperience(brandId: string | null): Promise<ExperienceRecord[]>;
   createExperience(input: ExperienceInput): Promise<ExperienceRecord>;
   updateExperience(id: string, input: ExperienceInput): Promise<ExperienceRecord>;
   deleteExperience(id: string): Promise<void>;
   openExternalUrl(url: string): Promise<void>;
+
+  /** `{}` = tất cả, `{ brandId: null }` = Kiến thức chung. */
+  listKnowledge(scope: { brandId?: string | null }): Promise<KnowledgeRecord[]>;
+  createKnowledge(input: KnowledgeInput): Promise<KnowledgeRecord>;
+  updateKnowledge(id: string, input: KnowledgeInput): Promise<KnowledgeRecord>;
+  deleteKnowledge(id: string): Promise<void>;
+
+  listCalendarEvents(query: CalendarQuery): Promise<CalendarEvent[]>;
+  createCalendarEvent(input: CalendarEventInput): Promise<CalendarEvent>;
+  updateCalendarEvent(id: string, input: CalendarEventInput): Promise<CalendarEvent>;
+  moveCalendarEvent(id: string, eventDate: string): Promise<CalendarEvent>;
+  deleteCalendarEvent(id: string): Promise<void>;
 
   getStorageUsage(): Promise<StorageUsage>;
   exportBackup(): Promise<string | null>;

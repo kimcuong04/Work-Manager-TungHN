@@ -19,6 +19,8 @@ import { api } from '../api';
 import { Breadcrumbs, EmptyState, MenuButton, PriorityBadge, StatusBadge, shortenPath } from '../components/common';
 import { FileStatusRow } from '../components/FileLink';
 import { ImportedContent } from '../components/ImportedContent';
+import { ProjectCalendarCard } from '../components/ProjectCalendarCard';
+import { ProjectNotes } from '../components/ProjectNotes';
 import { ImportWizard } from '../components/ImportWizard';
 import { nodePath } from '../lib/projects';
 import { useAppData } from '../state/AppData';
@@ -35,6 +37,7 @@ function toInput(p: Project): ProjectInput {
     clientId: p.clientId,
     designUnitId: p.designUnitId,
     stageId: p.stageId,
+    salespersonId: p.salespersonId,
     note: p.note,
     filePath: p.filePath,
     fileName: p.fileName,
@@ -180,10 +183,15 @@ export function ProjectDetailPage() {
             <span>{p.clientName}</span>
             <span className="k">Đơn vị thiết kế</span>
             <span>{p.designUnitName ?? <span className="faint">—</span>}</span>
+            <span className="k">Salesperson</span>
+            <span>{p.salespersonName ?? <span className="faint">—</span>}</span>
             <span className="k">Giai đoạn</span>
             <span>{p.stageName ?? <span className="faint">—</span>}</span>
             <span className="k">Vị trí</span>
             <span>{p.location}</span>
+          </div>
+          <div className="small faint" style={{ marginTop: 14 }}>
+            Tạo lúc {formatDateTime(p.createdAt)} · Cập nhật lúc {formatDateTime(p.updatedAt)}
           </div>
         </section>
         <section className="card card-pad">
@@ -211,6 +219,9 @@ export function ProjectDetailPage() {
             )}
           </div>
         </section>
+      </div>
+
+      <div className="detail-grid notes-row">
         <section className="card card-pad">
           <h2 className="card-title">File &amp; Attachments</h2>
           <div className="stack" style={{ gap: 10 }}>
@@ -251,16 +262,12 @@ export function ProjectDetailPage() {
             )}
           </div>
         </section>
-        <section className="card card-pad">
-          <h2 className="card-title">Ghi chú</h2>
-          {p.note ? <div className="pre">{p.note}</div> : <span className="faint">Không có ghi chú.</span>}
-          <div className="small faint" style={{ marginTop: 14 }}>
-            Tạo lúc {formatDateTime(p.createdAt)} · Cập nhật lúc {formatDateTime(p.updatedAt)}
-          </div>
-        </section>
+        <ProjectNotes projectId={p.id} version={p.updatedAt} />
       </div>
 
-      <section className="card card-pad">
+      <ProjectCalendarCard projectId={p.id} dueDate={p.dueDate} version={p.updatedAt} />
+
+      <section className="card card-pad" style={{ marginTop: 16 }}>
         <div className="row" style={{ marginBottom: 12 }}>
           <h2 className="card-title grow" style={{ margin: 0 }}>
             <FileSpreadsheet size={18} /> Imported Excel Content

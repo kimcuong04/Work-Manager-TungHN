@@ -1,4 +1,4 @@
-import { computeStatus, remainingDays, type Thresholds } from '../../shared/status';
+import { STATUS_ORDER, computeStatus, remainingDays, type Thresholds } from '../../shared/status';
 import { buildHaystack, compareVi, matchesQuery, normalizeText } from '../../shared/text';
 import { CATEGORY_LABEL, JOB_LABEL, type DeadlineStatus, type JobType, type Project, type ProjectCategory } from '../../shared/types';
 
@@ -14,7 +14,7 @@ export function buildViews(projects: Project[], today: string, th: Thresholds): 
     ...p,
     status: computeStatus(p, today, th),
     remaining: remainingDays(p.dueDate, today),
-    haystack: buildHaystack([p.projectName, p.clientName, p.designUnitName, p.stageName, p.note]),
+    haystack: buildHaystack([p.projectName, p.clientName, p.designUnitName, p.stageName, p.salespersonName, p.note]),
     location: `${JOB_LABEL[p.jobType]} › ${p.yearLabel} › ${CATEGORY_LABEL[p.workCategory]}`,
   }));
 }
@@ -23,16 +23,20 @@ export interface ProjectFilter {
   q: string;
   clients: string[];
   designUnits: string[];
+  salespersons: string[];
   jobs: JobType[];
   years: string[];
   categories: ProjectCategory[];
   statuses: DeadlineStatus[];
 }
 
-export const EMPTY_FILTER: ProjectFilter = { q: '', clients: [], designUnits: [], jobs: [], years: [], categories: [], statuses: [] };
+export const EMPTY_FILTER: ProjectFilter = { q: '', clients: [], designUnits: [], salespersons: [], jobs: [], years: [], categories: [], statuses: [] };
 
 export function isFilterActive(f: ProjectFilter): boolean {
-  return !!f.q.trim() || f.clients.length + f.designUnits.length + f.jobs.length + f.years.length + f.categories.length + f.statuses.length > 0;
+  return (
+    !!f.q.trim() ||
+    f.clients.length + f.designUnits.length + (f.salespersons?.length ?? 0) + f.jobs.length + f.years.length + f.categories.length + f.statuses.length > 0
+  );
 }
 
 /** Search + các bộ lọc kết hợp đồng thời (AND giữa các nhóm, OR trong cùng nhóm). */
@@ -43,6 +47,7 @@ export function applyFilter(list: ProjectView[], f: ProjectFilter): ProjectView[
     (p) =>
       (!f.clients.length || f.clients.includes(p.clientId)) &&
       (!f.designUnits.length || (p.designUnitId !== null && f.designUnits.includes(p.designUnitId))) &&
+      (!f.salespersons?.length || (p.salespersonId !== null && f.salespersons.includes(p.salespersonId))) &&
       (!f.jobs.length || f.jobs.includes(p.jobType)) &&
       (!yearKeys.size || yearKeys.has(p.yearLabel.toLowerCase())) &&
       (!f.categories.length || f.categories.includes(p.workCategory)) &&
@@ -51,7 +56,7 @@ export function applyFilter(list: ProjectView[], f: ProjectFilter): ProjectView[
   );
 }
 
-export type SortKey = 'priority' | 'due' | 'received' | 'name';
+export type SortKey = 'priority' | 'due' | 'received' | 'name' | 'client' | 'status';
 export interface SortState {
   key: SortKey;
   dir: 'asc' | 'desc';
@@ -62,6 +67,8 @@ export const SORT_LABEL: Record<SortKey, string> = {
   due: 'Ngày tới hạn',
   received: 'Ngày tiếp nhận',
   name: 'Tên dự án',
+  client: 'CĐT',
+  status: 'Trạng thái',
 };
 
 export const DEFAULT_SORT: SortState = { key: 'priority', dir: 'asc' };
@@ -75,6 +82,8 @@ export function sortProjects(list: ProjectView[], s: SortState): ProjectView[] {
     due: (a, b) => sign * byDue(a, b) || a.priorityPoint - b.priorityPoint,
     received: (a, b) => sign * a.receivedDate.localeCompare(b.receivedDate) || a.priorityPoint - b.priorityPoint,
     name: (a, b) => sign * compareVi(a.projectName, b.projectName),
+    client: (a, b) => sign * compareVi(a.clientName, b.clientName) || a.priorityPoint - b.priorityPoint,
+    status: (a, b) => sign * (STATUS_ORDER.indexOf(a.status) - STATUS_ORDER.indexOf(b.status)) || a.priorityPoint - b.priorityPoint || byDue(a, b),
   };
   return [...list].sort(cmp[s.key]);
 }

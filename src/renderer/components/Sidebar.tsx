@@ -1,11 +1,14 @@
 import { useMemo } from 'react';
 import { NavLink, useLocation, useNavigate } from 'react-router';
 import {
+  BookMarked,
   BookOpen,
   Briefcase,
+  CalendarClock,
   CalendarDays,
   ChevronRight,
   FolderOpen,
+  GraduationCap,
   LayoutDashboard,
   LayoutGrid,
   Laptop,
@@ -317,6 +320,47 @@ function ExperienceNode({ openMap, toggle }: { openMap: OpenMap; toggle: (k: str
   );
 }
 
+function KnowledgeNode({ openMap, toggle }: { openMap: OpenMap; toggle: (k: string, def?: boolean) => void }) {
+  const { masters } = useAppData();
+  const open = openMap.knowledge ?? false;
+  const brands = masters.brands.filter((b) => b.isActive || b.usageCount > 0);
+  return (
+    <>
+      <NavLink to="/knowledge" end className={({ isActive }) => `nav-row lvl-strong ${isActive ? 'active' : ''}`}>
+        <GraduationCap size={16} />
+        <span className="nav-label">Kiến thức</span>
+        <span
+          role="button"
+          tabIndex={-1}
+          aria-label={open ? 'Thu gọn' : 'Mở rộng'}
+          onClick={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            toggle('knowledge', false);
+          }}
+          style={{ display: 'inline-flex' }}
+        >
+          <Chevron open={open} />
+        </span>
+      </NavLink>
+      {open && (
+        <div className="nav-children">
+          <NavLink to="/knowledge/general" className={({ isActive }) => `nav-row small ${isActive ? 'active' : ''}`}>
+            <BookMarked size={13} />
+            <span className="nav-label">Kiến thức chung</span>
+          </NavLink>
+          {brands.map((b) => (
+            <NavLink key={b.id} to={`/knowledge/${b.id}`} className={({ isActive }) => `nav-row small ${isActive ? 'active' : ''} ${b.isActive ? '' : 'muted'}`}>
+              <Tag size={13} />
+              <span className="nav-label">{b.name}</span>
+            </NavLink>
+          ))}
+        </div>
+      )}
+    </>
+  );
+}
+
 export function Sidebar({ collapsed, onExpand }: { collapsed: boolean; onExpand: () => void }) {
   const [openMap, setOpenMap] = useLocalState<OpenMap>('nav-open', {});
   const toggle = (k: string, def = false) => setOpenMap((m) => ({ ...m, [k]: !(m[k] ?? def) }));
@@ -334,6 +378,9 @@ export function Sidebar({ collapsed, onExpand }: { collapsed: boolean; onExpand:
           <NavLink to="/all" className={({ isActive }) => `nav-row ${isActive ? 'active' : ''}`} title="Tất cả mục">
             <BookOpen size={18} />
           </NavLink>
+          <NavLink to="/calendar" className={({ isActive }) => `nav-row ${isActive ? 'active' : ''}`} title="Calendar">
+            <CalendarClock size={18} />
+          </NavLink>
           {JOB_TYPES.map((j) => {
             const Icon = JOB_ICON[j];
             return (
@@ -344,6 +391,9 @@ export function Sidebar({ collapsed, onExpand }: { collapsed: boolean; onExpand:
           })}
           <NavLink to="/experience" className={({ isActive }) => `nav-row ${isActive ? 'active' : ''}`} title="Experience">
             <Lightbulb size={18} />
+          </NavLink>
+          <NavLink to="/knowledge" className={({ isActive }) => `nav-row ${isActive ? 'active' : ''}`} title="Kiến thức">
+            <GraduationCap size={18} />
           </NavLink>
           <NavLink to="/ai" className={({ isActive }) => `nav-row ${isActive ? 'active' : ''}`} title="AI Assistant (Coming Soon)">
             <Sparkles size={18} />
@@ -372,14 +422,19 @@ export function Sidebar({ collapsed, onExpand }: { collapsed: boolean; onExpand:
           <BookOpen size={17} />
           <span className="nav-label">Tất cả mục</span>
         </NavLink>
+        <NavLink to="/calendar" className={({ isActive }) => `nav-row ${isActive ? 'active' : ''}`}>
+          <CalendarClock size={17} />
+          <span className="nav-label">Calendar</span>
+        </NavLink>
 
         <div className="sidebar-section">KHÔNG GIAN</div>
         {JOB_TYPES.map((j) => (
           <JobNode key={j} jobType={j} openMap={openMap} toggle={toggle} />
         ))}
 
-        <div className="sidebar-section">KINH NGHIỆM</div>
+        <div className="sidebar-section">KINH NGHIỆM &amp; KIẾN THỨC</div>
         <ExperienceNode openMap={openMap} toggle={toggle} />
+        <KnowledgeNode openMap={openMap} toggle={toggle} />
 
         <div className="sidebar-section">TRỢ LÝ AI</div>
         <NavLink to="/ai" className={({ isActive }) => `nav-row ${isActive ? 'active' : ''}`}>

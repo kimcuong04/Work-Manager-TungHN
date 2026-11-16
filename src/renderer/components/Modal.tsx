@@ -56,6 +56,43 @@ export function Modal({ title, size = 'md', onClose, footer, children, headExtra
   );
 }
 
+/**
+ * Panel chi tiết nằm cạnh danh sách (không phủ mờ): vẫn cuộn và chọn mục khác trong danh sách được.
+ * Đặt trong `.split` cùng `.table-wrap`.
+ */
+export function SidePanel({
+  title,
+  subtitle,
+  onClose,
+  children,
+  footer,
+  label,
+}: {
+  title: ReactNode;
+  subtitle?: ReactNode;
+  onClose: () => void;
+  children: ReactNode;
+  footer?: ReactNode;
+  label?: string;
+}) {
+  useEscape(onClose);
+  return (
+    <aside className="side-panel" aria-label={label ?? (typeof title === 'string' ? title : 'Chi tiết')}>
+      <div className="side-panel-head">
+        <div className="grow" style={{ minWidth: 0 }}>
+          <h2>{title}</h2>
+          {subtitle && <div className="small muted">{subtitle}</div>}
+        </div>
+        <button className="btn ghost icon sm" aria-label="Đóng panel" title="Đóng (Esc)" onClick={onClose}>
+          <X size={18} />
+        </button>
+      </div>
+      <div className="side-panel-body">{children}</div>
+      {footer && <div className="side-panel-foot">{footer}</div>}
+    </aside>
+  );
+}
+
 export function Drawer({ title, onClose, children, footer }: { title: ReactNode; onClose: () => void; children: ReactNode; footer?: ReactNode }) {
   useEscape(onClose);
   return (

@@ -3,17 +3,23 @@ import type {
   ExperienceInput,
   ExperienceRecord,
   ImageRef,
+  KnowledgeInput,
+  KnowledgeRecord,
   WarrantyInput,
   WarrantyRecord,
 } from '../../shared/types';
-import { hasErrors, validateExperienceInput, validateWarrantyInput } from '../../shared/validation';
+import { hasErrors, validateExperienceInput, validateKnowledgeInput, validateWarrantyInput } from '../../shared/validation';
 import { AppError, now, str, strOrNull, type Ctx } from '../context';
 import { assertStorageKey, deleteImageFiles, imageExists } from '../integration/images';
 import { getYear } from './master';
 
-type ImageTable = { table: 'warranty_images'; owner: 'warranty_record_id' } | { table: 'experience_images'; owner: 'experience_id' };
+type ImageTable =
+  | { table: 'warranty_images'; owner: 'warranty_record_id' }
+  | { table: 'experience_images'; owner: 'experience_id' }
+  | { table: 'knowledge_images'; owner: 'knowledge_id' };
 const WARRANTY_IMG: ImageTable = { table: 'warranty_images', owner: 'warranty_record_id' };
 const EXPERIENCE_IMG: ImageTable = { table: 'experience_images', owner: 'experience_id' };
+const KNOWLEDGE_IMG: ImageTable = { table: 'knowledge_images', owner: 'knowledge_id' };
 
 function loadImages(ctx: Ctx, t: ImageTable, ownerIds: string[]): Map<string, ImageRef[]> {
   const map = new Map<string, ImageRef[]>();
@@ -248,6 +254,90 @@ export function updateExperience(ctx: Ctx, id: string, input: ExperienceInput): 
 export function deleteExperience(ctx: Ctx, id: string): void {
   const rec = getExperience(ctx, id);
   ctx.db.tx(() => ctx.db.run('DELETE FROM experience_records WHERE id = ?', [id]));
+  deleteImageFiles(ctx, rec.images.map((i) => i.storageKey));
+}
+
+/* ---------------- Kiến thức ---------------- */
+
+const SELECT_KNOWLEDGE = `
+SELECT k.*, b.name AS brand_name
+FROM knowledge_records k
+LEFT JOIN brands b ON b.id = k.brand_id`;
+
+function mapKnowledge(r: Record<string, any>, images: ImageRef[]): KnowledgeRecord {
+  return {
+    id: r.id,
+    brandId: strOrNull(r.brand_id),
+    brandName: strOrNull(r.brand_name),
+    knowledgeDate: r.knowledge_date,
+    title: str(r.title),
+    deviceModel: str(r.device_model),
+    content: str(r.content),
+    webUrl: str(r.web_url),
+    images,
+    createdAt: r.created_at,
+    updatedAt: r.updated_at,
+  };
+}
+
+/** `brandId`: undefined = tất cả, null = Kiến thức chung (không gắn Hãng). */
+export function listKnowledge(ctx: Ctx, brandId?: string | null): KnowledgeRecord[] {
+  const order = 'ORDER BY k.knowledge_date DESC, k.created_at DESC';
+  const rows =
+    brandId === undefined
+      ? ctx.db.all<Record<string, any>>(`${SELECT_KNOWLEDGE} ${order}`)
+      : brandId === null
+        ? ctx.db.all<Record<string, any>>(`${SELECT_KNOWLEDGE} WHERE k.brand_id IS NULL ${order}`)
+        : ctx.db.all<Record<string, any>>(`${SELECT_KNOWLEDGE} WHERE k.brand_id = ? ${order}`, [brandId]);
+  const imgs = loadImages(ctx, KNOWLEDGE_IMG, rows.map((r) => r.id));
+  return rows.map((r) => mapKnowledge(r, imgs.get(r.id) ?? []));
+}
+
+function getKnowledge(ctx: Ctx, id: string): KnowledgeRecord {
+  const r = ctx.db.get<Record<string, any>>(`${SELECT_KNOWLEDGE} WHERE k.id = ?`, [id]);
+  if (!r) throw new AppError('Không tìm thấy mục Kiến thức.');
+  return mapKnowledge(r, loadImages(ctx, KNOWLEDGE_IMG, [id]).get(id) ?? []);
+}
+
+function checkKnowledge(ctx: Ctx, input: KnowledgeInput) {
+  const e = validateKnowledgeInput(input);
+  if (hasErrors(e)) throw new AppError(Object.values(e).filter(Boolean).join(' '));
+  if (input.brandId && !ctx.db.scalar<number>('SELECT COUNT(*) FROM brands WHERE id = ?', [input.brandId])) throw new AppError('Hãng không tồn tại.');
+}
+
+export function createKnowledge(ctx: Ctx, input: KnowledgeInput): KnowledgeRecord {
+  checkKnowledge(ctx, input);
+  const id = randomUUID();
+  const stamp = now();
+  ctx.db.tx(() => {
+    ctx.db.run(
+      `INSERT INTO knowledge_records (id, brand_id, knowledge_date, title, device_model, content, web_url, created_at, updated_at)
+       VALUES (?,?,?,?,?,?,?,?,?)`,
+      [id, input.brandId || null, input.knowledgeDate, t(input.title), t(input.deviceModel), t(input.content), input.webUrl.trim(), stamp, stamp],
+    );
+    syncImages(ctx, KNOWLEDGE_IMG, id, input.images);
+  });
+  return getKnowledge(ctx, id);
+}
+
+export function updateKnowledge(ctx: Ctx, id: string, input: KnowledgeInput): KnowledgeRecord {
+  getKnowledge(ctx, id);
+  checkKnowledge(ctx, input);
+  let removed: string[] = [];
+  ctx.db.tx(() => {
+    ctx.db.run(
+      `UPDATE knowledge_records SET brand_id=?, knowledge_date=?, title=?, device_model=?, content=?, web_url=?, updated_at=? WHERE id=?`,
+      [input.brandId || null, input.knowledgeDate, t(input.title), t(input.deviceModel), t(input.content), input.webUrl.trim(), now(), id],
+    );
+    removed = syncImages(ctx, KNOWLEDGE_IMG, id, input.images);
+  });
+  deleteImageFiles(ctx, removed);
+  return getKnowledge(ctx, id);
+}
+
+export function deleteKnowledge(ctx: Ctx, id: string): void {
+  const rec = getKnowledge(ctx, id);
+  ctx.db.tx(() => ctx.db.run('DELETE FROM knowledge_records WHERE id = ?', [id]));
   deleteImageFiles(ctx, rec.images.map((i) => i.storageKey));
 }
 

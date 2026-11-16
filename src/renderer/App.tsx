@@ -10,9 +10,11 @@ import { readLocal, setSessionValue, useLocalState } from './lib/persist';
 import { EMPTY_FILTER } from './lib/projects';
 import { AiAssistantPage } from './pages/AiAssistantPage';
 import { AllProjectsPage } from './pages/AllProjectsPage';
+import { CalendarPage } from './pages/CalendarPage';
 import { CategoryPage } from './pages/CategoryPage';
 import { DashboardPage } from './pages/DashboardPage';
 import { ExperienceBrandPage, ExperienceHomePage } from './pages/ExperiencePages';
+import { KnowledgeBrandPage, KnowledgeHomePage } from './pages/KnowledgePages';
 import { ProjectDetailPage } from './pages/ProjectDetailPage';
 import { SettingsPage } from './pages/SettingsPage';
 import { AppDataProvider, useAppData } from './state/AppData';
@@ -116,7 +118,7 @@ function Shell() {
     );
   if (!ready) return <div className="empty">Đang tải dữ liệu…</div>;
 
-  const fillPage = /^\/(all|job\/)/.test(location.pathname) || /\/experience\/.+/.test(location.pathname);
+  const fillPage = /^\/(all|job\/|calendar)/.test(location.pathname) || /\/(experience|knowledge)\/.+/.test(location.pathname);
 
   return (
     <div className="app">
@@ -150,6 +152,9 @@ function Shell() {
             <Route path="/project/:id" element={<ProjectDetailPage />} />
             <Route path="/experience" element={<ExperienceHomePage />} />
             <Route path="/experience/:brandId" element={<ExperienceBrandPage />} />
+            <Route path="/knowledge" element={<KnowledgeHomePage />} />
+            <Route path="/knowledge/:brandId" element={<KnowledgeBrandPage />} />
+            <Route path="/calendar" element={<CalendarPage />} />
             <Route path="/ai" element={<AiAssistantPage />} />
             <Route path="/settings" element={<SettingsPage />} />
             <Route path="*" element={<div className="empty">Không tìm thấy trang.</div>} />

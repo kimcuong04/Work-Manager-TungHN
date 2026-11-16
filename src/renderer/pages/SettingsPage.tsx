@@ -22,7 +22,7 @@ import {
 import { addDays, formatDate, formatDateTime } from '../../shared/dates';
 import { ACTIVE_STATUSES, DEFAULT_THRESHOLDS, computeStatus, describeRules, validateThresholds } from '../../shared/status';
 import { nameKey } from '../../shared/text';
-import { JOB_LABEL, JOB_TYPES, MASTER_LABEL, type AppInfo, type JobType, type MasterItem, type MasterKind, type StorageUsage, type Theme } from '../../shared/types';
+import { JOB_LABEL, JOB_TYPES, MASTER_KINDS, MASTER_LABEL, type AppInfo, type JobType, type MasterItem, type MasterKind, type StorageUsage, type Theme } from '../../shared/types';
 import { validateMasterName, validateYearLabel } from '../../shared/validation';
 import { api } from '../api';
 import { Field, StatusBadge, formatBytes } from '../components/common';
@@ -181,7 +181,7 @@ function StatusRules() {
 
 function DeleteMasterDialog({ kind, item, items, onClose, onDone }: { kind: MasterKind; item: MasterItem; items: MasterItem[]; onClose: () => void; onDone: () => void }) {
   const { toastError } = useUi();
-  const nullable = kind === 'designUnits' || kind === 'stages';
+  const nullable = kind === 'designUnits' || kind === 'stages' || kind === 'salespersons';
   const others = items.filter((i) => i.id !== item.id);
   const [mode, setMode] = useState<'replace' | 'unlink'>(others.length ? 'replace' : 'unlink');
   const [target, setTarget] = useState(others[0]?.id ?? '');
@@ -278,7 +278,7 @@ function MasterList({ kind }: { kind: MasterKind }) {
       if (kind === 'brands') {
         const ok = await confirm({
           title: 'Hãng đang được sử dụng',
-          message: `Hãng "${item.name}" đang được ${item.usageCount} bản ghi Warranty/Experience tham chiếu nên không thể xóa cứng. Chuyển sang Ngừng dùng (Deactivate) để giữ dữ liệu lịch sử?`,
+          message: `Hãng "${item.name}" đang được ${item.usageCount} bản ghi Warranty/Experience/Kiến thức tham chiếu nên không thể xóa cứng. Chuyển sang Ngừng dùng (Deactivate) để giữ dữ liệu lịch sử?`,
           confirmText: 'Deactivate',
         });
         if (ok) await toggleActive(item);
@@ -413,10 +413,10 @@ function MasterData() {
     <section className="card card-pad">
       <h2 className="card-title">Master Data</h2>
       <p className="muted small" style={{ marginTop: 0 }}>
-        Danh mục dùng chung cho form dự án, Warranty và Experience. Đổi tên tự cập nhật mọi nơi (liên kết theo ID). Hãng đang được dùng chỉ có thể Deactivate.
+        Danh mục dùng chung cho form dự án (CĐT, Đơn vị thiết kế, Salesperson, Giai đoạn), Warranty, Experience và Kiến thức. Đổi tên tự cập nhật mọi nơi (liên kết theo ID). Hãng đang được dùng chỉ có thể Deactivate.
       </p>
       <div className="tabs small">
-        {(['clients', 'designUnits', 'stages', 'brands'] as MasterKind[]).map((k) => (
+        {MASTER_KINDS.map((k) => (
           <button key={k} className={kind === k ? 'on' : ''} onClick={() => setKind(k)}>
             {MASTER_LABEL[k]}
           </button>
@@ -628,7 +628,9 @@ function DataManagement() {
               <br />
               Tạo lúc: {formatDateTime(b.createdAt)} (phiên bản {b.appVersion})
               <br />
-              Gồm: {b.counts.projects ?? 0} Project · {b.counts.warranty ?? 0} Warranty · {b.counts.experience ?? 0} Experience · {b.counts.images ?? 0} ảnh
+              Gồm: {b.counts.projects ?? 0} Project · {b.counts.warranty ?? 0} Warranty · {b.counts.experience ?? 0} Experience
+              {b.counts.knowledge !== undefined && ` · ${b.counts.knowledge} Kiến thức`}
+              {b.counts.calendar !== undefined && ` · ${b.counts.calendar} sự kiện Calendar`} · {b.counts.images ?? 0} ảnh
             </div>
             <div className="alert warn">
               <AlertTriangle size={16} />

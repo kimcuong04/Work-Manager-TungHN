@@ -15,7 +15,7 @@ export function AllProjectsPage() {
           <div className="muted small">Mọi Project của Job Chính và Job Freelance — nguồn hiển thị dạng Job › Năm › Nhóm trên từng thẻ.</div>
         </div>
       </div>
-      <ProjectsView scopeKey="all" baseList={projects} showLocationFilters onAdd={() => openCreate()} />
+      <ProjectsView scopeKey="all" baseList={projects} showLocationFilters onAdd={() => openCreate()} viewKey="view-mode:all" defaultView="board" />
     </>
   );
 }

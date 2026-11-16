@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Link } from 'react-router';
-import { CalendarDays, Check, ChevronDown, ChevronRight, MoreHorizontal, Plus, Search, X } from 'lucide-react';
+import { CalendarDays, Check, ChevronDown, ChevronRight, Columns3, MoreHorizontal, Plus, Search, X } from 'lucide-react';
 import { formatDate, parseDisplayDate } from '../../shared/dates';
 import { STATUS_LABEL } from '../../shared/status';
 import { compareVi, nameKey, normalizeText } from '../../shared/text';
@@ -497,4 +497,55 @@ export function shortenPath(p: string, max = 60): string {
   const file = parts.pop() ?? '';
   const head = parts.slice(0, 2).join('\\');
   return `${head}\\…\\${file}`.length < p.length ? `${head}\\…\\${file}` : p;
+}
+
+/** Ẩn/hiện cột của bảng; danh sách cột ẩn do nơi dùng lưu (localStorage). */
+export function ColumnToggle({ columns, hidden, onChange }: { columns: { key: string; label: string }[]; hidden: string[]; onChange: (v: string[]) => void }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  useClickOutside(ref, () => setOpen(false), open);
+  const hiddenCount = columns.filter((c) => hidden.includes(c.key)).length;
+  return (
+    <div className="pop-anchor" ref={ref}>
+      <button className="btn" onClick={() => setOpen((o) => !o)} aria-expanded={open}>
+        <Columns3 size={15} /> Cột {hiddenCount > 0 && `(${columns.length - hiddenCount}/${columns.length})`}
+      </button>
+      {open && (
+        <div className="popover right" style={{ minWidth: 200 }}>
+          {columns.map((c) => (
+            <label key={c.key} className="opt" style={{ cursor: 'pointer' }}>
+              <input type="checkbox" checked={!hidden.includes(c.key)} onChange={() => onChange(hidden.includes(c.key) ? hidden.filter((h) => h !== c.key) : [...hidden, c.key])} />
+              {c.label}
+            </label>
+          ))}
+          {hiddenCount > 0 && (
+            <button className="opt" onClick={() => onChange([])}>
+              Hiện tất cả cột
+            </button>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+export function SortHeader({
+  label,
+  active,
+  dir,
+  onClick,
+}: {
+  label: string;
+  active: boolean;
+  dir: 'asc' | 'desc';
+  onClick?: () => void;
+}) {
+  return (
+    <th className={onClick ? 'sortable' : ''} onClick={onClick} aria-sort={active ? (dir === 'asc' ? 'ascending' : 'descending') : undefined}>
+      <span className="row" style={{ gap: 4 }}>
+        {label}
+        {active && <span className="sort-arrow">{dir === 'asc' ? '▲' : '▼'}</span>}
+      </span>
+    </th>
+  );
 }

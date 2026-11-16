@@ -4,7 +4,8 @@ export type WorkCategory = ProjectCategory | 'WARRANTY';
 export type DeadlineStatus = 'URGENT' | 'ATTENTION' | 'NEW' | 'COMPLETED';
 export type ActiveStatus = Exclude<DeadlineStatus, 'COMPLETED'>;
 export type Theme = 'light' | 'dark';
-export type MasterKind = 'clients' | 'designUnits' | 'stages' | 'brands';
+export type MasterKind = 'clients' | 'designUnits' | 'stages' | 'brands' | 'salespersons';
+export const MASTER_KINDS: MasterKind[] = ['clients', 'designUnits', 'salespersons', 'stages', 'brands'];
 
 export const JOB_TYPES: JobType[] = ['MAIN', 'FREELANCE'];
 export const JOB_LABEL: Record<JobType, string> = { MAIN: 'Job Chính', FREELANCE: 'Job Freelance' };
@@ -20,6 +21,7 @@ export const MASTER_LABEL: Record<MasterKind, string> = {
   designUnits: 'Đơn vị thiết kế',
   stages: 'Giai đoạn',
   brands: 'Hãng',
+  salespersons: 'Salesperson',
 };
 
 export const LINK_FILE_EXTENSIONS = ['dwg', 'txt'];
@@ -91,6 +93,8 @@ export interface Project {
   designUnitName: string | null;
   stageId: string | null;
   stageName: string | null;
+  salespersonId: string | null;
+  salespersonName: string | null;
   note: string;
   filePath: string | null;
   fileName: string | null;
@@ -112,11 +116,35 @@ export interface ProjectInput {
   clientId: string;
   designUnitId: string | null;
   stageId: string | null;
+  salespersonId: string | null;
   note: string;
   filePath: string | null;
   fileName: string | null;
   fileExtension: string | null;
   priorityPoint: number;
+}
+
+export interface ProjectSaveOptions {
+  /** Ghi một sự kiện "Cập nhật dự án" (kèm tóm tắt thay đổi) vào Calendar ngày hôm nay. */
+  addToCalendar?: boolean;
+  /** Ghi chú (HTML) của ngày hôm nay; undefined = không đổi, rỗng = xóa ghi chú hôm nay. */
+  noteHtml?: string;
+}
+
+/** Ghi chú dự án theo ngày: mỗi ngày một mục, sửa được mục của ngày cũ. */
+export interface ProjectNote {
+  id: string;
+  projectId: string;
+  noteDate: string;
+  html: string;
+  text: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ProjectNoteInput {
+  noteDate: string;
+  html: string;
 }
 
 export interface LinkedFile {
@@ -276,6 +304,73 @@ export interface ExperienceInput {
   event: string;
   webUrl: string;
   images: ImageRef[];
+}
+
+export interface KnowledgeRecord {
+  id: string;
+  brandId: string | null;
+  brandName: string | null;
+  knowledgeDate: string;
+  title: string;
+  deviceModel: string;
+  content: string;
+  webUrl: string;
+  images: ImageRef[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface KnowledgeInput {
+  brandId: string | null;
+  knowledgeDate: string;
+  title: string;
+  deviceModel: string;
+  content: string;
+  webUrl: string;
+  images: ImageRef[];
+}
+
+export type CalendarEventKind = 'PROJECT_START' | 'PROJECT_UPDATE' | 'CUSTOM';
+
+export const CALENDAR_KIND_LABEL: Record<CalendarEventKind, string> = {
+  PROJECT_START: 'Bắt đầu dự án',
+  PROJECT_UPDATE: 'Cập nhật dự án',
+  CUSTOM: 'Sự kiện khác',
+};
+
+export const CALENDAR_COLORS = ['sage', 'blue', 'teal', 'amber', 'red', 'purple', 'gray'] as const;
+export type CalendarColor = (typeof CALENDAR_COLORS)[number];
+
+export interface CalendarEvent {
+  id: string;
+  eventDate: string;
+  startTime: string | null;
+  endTime: string | null;
+  title: string;
+  note: string;
+  color: CalendarColor | null;
+  kind: CalendarEventKind;
+  projectId: string | null;
+  projectName: string | null;
+  projectExists: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CalendarEventInput {
+  eventDate: string;
+  startTime: string | null;
+  endTime: string | null;
+  title: string;
+  note: string;
+  color: CalendarColor | null;
+  projectId: string | null;
+}
+
+export interface CalendarQuery {
+  from?: string;
+  to?: string;
+  projectId?: string;
 }
 
 export interface BackupInfo {

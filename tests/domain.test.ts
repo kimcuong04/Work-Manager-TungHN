@@ -95,6 +95,7 @@ describe('Ngày tháng', () => {
 
 describe('Validate form (FR-FORM-001)', () => {
   const base: ProjectInput = {
+    salespersonId: null,
     jobYearId: 'y',
     workCategory: 'PRE_SALES',
     receivedDate: '2026-11-16',
@@ -117,9 +118,9 @@ describe('Validate form (FR-FORM-001)', () => {
     expect(e.dueDate).toBeTruthy();
     expect(e.priorityPoint).toBeTruthy();
   });
-  it('tên tối đa 200 ký tự, note 5000', () => {
+  it('tên tối đa 200 ký tự; ghi chú tổng hợp nhiều ngày không bị giới hạn ở form', () => {
     expect(validateProjectInput({ ...base, projectName: 'x'.repeat(201) }).projectName).toBeTruthy();
-    expect(validateProjectInput({ ...base, note: 'x'.repeat(5001) }).note).toBeTruthy();
+    expect(validateProjectInput({ ...base, note: 'x'.repeat(5001) }).note).toBeUndefined();
   });
   it('TC-010: chỉ nhận .dwg/.txt', () => {
     expect(validateProjectInput({ ...base, filePath: 'C:\\a.pdf', fileName: 'a.pdf', fileExtension: 'pdf' }).file).toBeTruthy();

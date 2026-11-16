@@ -4,9 +4,11 @@ import { IMAGE_EXTENSIONS, LINK_FILE_EXTENSIONS } from '../shared/types';
 import { fileExtension, validateWebUrl } from '../shared/validation';
 import { AppError, type Ctx } from './context';
 import { checkFile, readWorkbook } from './integration/files';
-import { importImages, storageUsage } from './integration/images';
+import { imagePath, importImageBuffer, importImages, storageUsage } from './integration/images';
 import { inspectBackup, restoreBackup, writeBackup } from './services/backup';
+import * as calendar from './services/calendar';
 import * as master from './services/master';
+import * as notes from './services/notes';
 import * as projects from './services/projects';
 import * as records from './services/records';
 import { getSettings, updateSettings } from './services/settings';
@@ -24,6 +26,9 @@ export interface Desktop {
   openPath(p: string): Promise<string>;
   showItemInFolder(p: string): void;
   openExternal(url: string): Promise<void>;
+  /** Ảnh trong clipboard: dữ liệu PNG (ảnh chụp/ảnh copy) hoặc đường dẫn file ảnh copy từ Explorer. */
+  readClipboardImage(): Promise<{ png?: Uint8Array; files?: string[] } | null>;
+  writeClipboardImage(file: string): Promise<boolean>;
   updater: Pick<Updater, 'getStatus' | 'check' | 'install'>;
 }
 
@@ -63,12 +68,16 @@ export function createHandlers(ctx: Ctx, desktop: Desktop): Handlers {
     deleteYear: (id) => master.deleteYear(ctx, id),
 
     listProjects: () => projects.listProjects(ctx),
-    createProject: (input) => projects.createProject(ctx, input),
-    updateProject: (id, input) => projects.updateProject(ctx, id, input),
+    createProject: (input, opts) => projects.createProject(ctx, input, opts ?? {}),
+    updateProject: (id, input, opts) => projects.updateProject(ctx, id, input, opts ?? {}),
     deleteProject: (id) => projects.deleteProject(ctx, id),
     setProjectCompleted: (id, completed) => projects.setProjectCompleted(ctx, id, completed),
     applyBoardChanges: (changes) => projects.applyBoardChanges(ctx, changes),
     moveProject: (id, jobYearId, category) => projects.moveProject(ctx, id, jobYearId, category),
+
+    listProjectNotes: (id) => notes.listProjectNotes(ctx, id),
+    saveProjectNote: (id, input, opts) => notes.saveProjectNote(ctx, id, input, opts ?? {}),
+    deleteProjectNote: (id) => notes.deleteProjectNote(ctx, id),
 
     pickLinkFile: async () => {
       const [file] = await desktop.pickFiles({
@@ -128,6 +137,16 @@ export function createHandlers(ctx: Ctx, desktop: Desktop): Handlers {
       });
       return files.length ? importImages(ctx, files) : [];
     },
+    pasteImages: async () => {
+      const clip = await desktop.readClipboardImage();
+      const files = (clip?.files ?? []).filter((f) => IMAGE_EXTENSIONS.includes(fileExtension(f)));
+      if (files.length) return importImages(ctx, files);
+      if (clip?.png?.length) return [importImageBuffer(ctx, clip.png, `Ảnh dán ${stamp()}.png`)];
+      throw new AppError('Clipboard không có ảnh. Hãy chụp màn hình (Win+Shift+S) hoặc copy một ảnh rồi dán lại.');
+    },
+    copyImageToClipboard: async (key) => {
+      if (!(await desktop.writeClipboardImage(imagePath(ctx, key)))) throw new AppError('Không sao chép được ảnh này vào clipboard.');
+    },
 
     listExperience: (brandId) => records.listExperience(ctx, brandId),
     createExperience: (input) => records.createExperience(ctx, input),
@@ -138,6 +157,17 @@ export function createHandlers(ctx: Ctx, desktop: Desktop): Handlers {
       if (err || !url.trim()) throw new AppError(err ?? 'Link trống.');
       await desktop.openExternal(url.trim());
     },
+
+    listKnowledge: (scope) => records.listKnowledge(ctx, scope && 'brandId' in scope ? scope.brandId ?? null : undefined),
+    createKnowledge: (input) => records.createKnowledge(ctx, input),
+    updateKnowledge: (id, input) => records.updateKnowledge(ctx, id, input),
+    deleteKnowledge: (id) => records.deleteKnowledge(ctx, id),
+
+    listCalendarEvents: (q) => calendar.listCalendarEvents(ctx, q ?? {}),
+    createCalendarEvent: (input) => calendar.createCalendarEvent(ctx, input),
+    updateCalendarEvent: (id, input) => calendar.updateCalendarEvent(ctx, id, input),
+    moveCalendarEvent: (id, date) => calendar.moveCalendarEvent(ctx, id, date),
+    deleteCalendarEvent: (id) => calendar.deleteCalendarEvent(ctx, id),
 
     getStorageUsage: () => storageUsage(ctx, getSettings(ctx).imageQuotaMb),
     exportBackup: async () => {
