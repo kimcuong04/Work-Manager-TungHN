@@ -47,3 +47,7 @@ export function useSessionState<T>(key: string, initial: T): [T, (v: T | ((p: T)
 export function setSessionValue(key: string, value: unknown): void {
   sessionStore.set(key, value);
 }
+
+export function readSessionValue<T>(key: string, fallback: T): T {
+  return sessionStore.has(key) ? (sessionStore.get(key) as T) : fallback;
+}

@@ -68,13 +68,14 @@ describe('Danh mục (FR-FORM-003, FR-SET-004..006, TC-012)', () => {
   it('chặn trùng không phân biệt hoa/thường và khoảng trắng', () => {
     expect(() => master.createMaster(ctx, 'clients', '  cđt   một ')).toThrow(/đã tồn tại/);
   });
-  it('TC-012: không xóa CĐT đang dùng; xóa được khi gán lại', () => {
+  it('TC-012: không xóa EU đang dùng khi chưa chọn cách xử lý; gán lại hoặc gỡ liên kết (EU không bắt buộc)', () => {
     const p = projects.createProject(ctx, input());
     const other = master.createMaster(ctx, 'clients', 'CĐT Hai');
-    expect(() => master.deleteMaster(ctx, 'clients', clientId, null)).toThrow(/đang được 1 dự án/);
-    expect(() => master.deleteMaster(ctx, 'clients', clientId, { unlink: true })).toThrow();
+    expect(() => master.deleteMaster(ctx, 'clients', clientId, null)).toThrow(/đang được 1 mục/);
     master.deleteMaster(ctx, 'clients', clientId, { replaceWithId: other.id });
     expect(projects.getProject(ctx, p.id).clientName).toBe('CĐT Hai');
+    master.deleteMaster(ctx, 'clients', other.id, { unlink: true });
+    expect(projects.getProject(ctx, p.id).clientId).toBeNull();
   });
   it('gỡ liên kết đơn vị thiết kế khi xóa', () => {
     const du = master.createMaster(ctx, 'designUnits', 'TK X');

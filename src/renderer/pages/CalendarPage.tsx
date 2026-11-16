@@ -16,6 +16,7 @@ import {
   X,
 } from 'lucide-react';
 import { formatDate } from '../../shared/dates';
+import { compareVi } from '../../shared/text';
 import { STATUS_LABEL, describeRemaining } from '../../shared/status';
 import { CALENDAR_COLORS, CALENDAR_KIND_LABEL, type CalendarColor, type CalendarEvent, type CalendarEventInput } from '../../shared/types';
 import { hasErrors, validateCalendarEventInput } from '../../shared/validation';
@@ -543,7 +544,16 @@ function EventForm({ event, preset, onClose, onSaved, onDelete }: { event?: Cale
   const allDay = !form.startTime;
   const projectKind = event && event.kind !== 'CUSTOM';
   const defaultColor = event ? LAYER_COLOR[event.kind] : LAYER_COLOR.CUSTOM;
-  const projectOptions = projects.map((p) => ({ id: p.id, name: p.projectName, hint: p.location }));
+  // Dự án vừa chỉnh sửa lên đầu (thường là dự án đang làm), phần còn lại xếp A–Z.
+  const projectOptions = useMemo(() => {
+    const recent = [...projects].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)).slice(0, 5);
+    const recentIds = new Set(recent.map((p) => p.id));
+    const rest = projects.filter((p) => !recentIds.has(p.id)).sort((a, b) => compareVi(a.projectName, b.projectName));
+    return [
+      ...recent.map((p) => ({ id: p.id, name: p.label, hint: 'Vừa chỉnh sửa' })),
+      ...rest.map((p) => ({ id: p.id, name: p.label, hint: p.location })),
+    ];
+  }, [projects]);
 
   const close = async () => {
     if (dirty && !(await confirm({ title: 'Bỏ thay đổi?', message: 'Sự kiện có thay đổi chưa lưu. Đóng và bỏ thay đổi?', confirmText: 'Bỏ thay đổi', danger: true }))) return;
@@ -644,7 +654,7 @@ function EventForm({ event, preset, onClose, onSaved, onDelete }: { event?: Cale
           {projectKind ? (
             <div className="muted">{event?.projectName ?? '—'}</div>
           ) : (
-            <SearchableSelect options={projectOptions} value={form.projectId} onChange={(v) => set('projectId', v)} placeholder="Chọn dự án (không bắt buộc)" />
+            <SearchableSelect options={projectOptions} keepOrder value={form.projectId} onChange={(v) => set('projectId', v)} placeholder="Chọn dự án (không bắt buộc)" />
           )}
         </Field>
         <Field label="Ghi chú" error={err('note')}>
@@ -701,14 +711,15 @@ export function CalendarPage() {
 
   const items = useMemo(() => {
     const out: CalItem[] = events.filter((e) => layers[e.kind] !== false).map(eventItem);
-    if (layers.DUE !== false) for (const p of projects) if (!p.isCompleted && p.dueDate >= range.from && p.dueDate <= range.to) out.push(dueItem(p));
+    if (layers.DUE !== false)
+      for (const p of projects) if (!p.isCompleted && p.dueDate && p.dueDate >= range.from && p.dueDate <= range.to) out.push(dueItem({ ...p, dueDate: p.dueDate }));
     return out;
   }, [events, projects, layers, range.from, range.to]);
   const byDate = useMemo(() => groupByDate(items), [items]);
   const counts = useMemo(() => {
     const c: Record<LayerKey, number> = { PROJECT_START: 0, PROJECT_UPDATE: 0, CUSTOM: 0, DUE: 0 };
     for (const e of events) c[e.kind]++;
-    for (const p of projects) if (!p.isCompleted && p.dueDate >= range.from && p.dueDate <= range.to) c.DUE++;
+    for (const p of projects) if (!p.isCompleted && p.dueDate && p.dueDate >= range.from && p.dueDate <= range.to) c.DUE++;
     return c;
   }, [events, projects, range.from, range.to]);
 

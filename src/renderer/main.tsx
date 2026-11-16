@@ -8,3 +8,7 @@ createRoot(document.getElementById('root')!).render(
     <App />
   </StrictMode>,
 );
+
+// Thả file ra ngoài vùng nhận ảnh thì Chromium sẽ mở luôn file đó trong cửa sổ app — chặn lại.
+window.addEventListener('dragover', (e) => e.preventDefault());
+window.addEventListener('drop', (e) => e.preventDefault());

@@ -31,6 +31,7 @@ const DEFAULT_SETTINGS: AppSettings = {
   xlsxMaxMb: 20,
   xlsxMaxRows: 20000,
   autoUpdate: true,
+  projectRootDir: null,
   updatedAt: '',
 };
 
@@ -61,7 +62,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
   const [ready, setReady] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [settings, setSettings] = useState<AppSettings>(DEFAULT_SETTINGS);
-  const [masters, setMasters] = useState<Record<MasterKind, MasterItem[]>>({ clients: [], designUnits: [], stages: [], brands: [], salespersons: [] });
+  const [masters, setMasters] = useState<Record<MasterKind, MasterItem[]>>(() => Object.fromEntries(MASTER_KINDS.map((k) => [k, []])) as unknown as Record<MasterKind, MasterItem[]>);
   const [years, setYears] = useState<JobYear[]>([]);
   const [rawProjects, setRawProjects] = useState<Project[]>([]);
   const today = useToday();

@@ -16,7 +16,7 @@ import {
 } from 'lucide-react';
 import { isNoteEmpty, noteImageSrc, sanitizeNoteHtml } from '../../shared/noteHtml';
 import type { ImageRef } from '../../shared/types';
-import { api } from '../api';
+import { api, droppedPaths } from '../api';
 import { useUi } from '../state/ui';
 import { useClickOutside } from './common';
 
@@ -59,7 +59,7 @@ const imagesHtml = (imgs: ImageRef[]) => imgs.map((i) => `<img src="${noteImageS
 export function RichNoteEditor({
   initialHtml,
   onChange,
-  placeholder = 'Viết ghi chú… (dán ảnh bằng Ctrl+V)',
+  placeholder = 'Viết ghi chú… (dán ảnh Ctrl+V hoặc kéo thả ảnh vào đây)',
   autoFocus,
   minHeight = 160,
   onSubmit,
@@ -284,11 +284,24 @@ export function RichNoteEditor({
           style={{ minHeight }}
           onInput={emit}
           onPaste={onPaste}
-          onDrop={(e) => {
-            if (e.dataTransfer.files.length) {
+          onDragOver={(e) => {
+            if (e.dataTransfer.types.includes('Files')) {
               e.preventDefault();
-              toast('info', 'Để thêm ảnh: bấm “Ảnh”, hoặc copy ảnh rồi nhấn Ctrl+V.');
+              e.dataTransfer.dropEffect = 'copy';
             }
+          }}
+          onDrop={(e) => {
+            if (!e.dataTransfer.files.length) return;
+            e.preventDefault();
+            const paths = droppedPaths(e.dataTransfer);
+            if (!paths.length) {
+              toast('warn', 'Không đọc được file kéo vào — hãy kéo file ảnh từ thư mục trên máy.');
+              return;
+            }
+            // Chèn ảnh đúng chỗ thả chuột.
+            const at = document.caretRangeFromPoint?.(e.clientX, e.clientY);
+            if (at && ref.current?.contains(at.startContainer)) savedRange.current = at;
+            void insertImages(() => api.importDroppedImages(paths));
           }}
           onKeyDown={(e) => {
             if (e.key === 'Enter' && (e.ctrlKey || e.metaKey) && onSubmit) {

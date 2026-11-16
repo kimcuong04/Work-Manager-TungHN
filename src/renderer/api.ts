@@ -6,6 +6,7 @@ declare global {
     ppm?: {
       call(method: string, args: unknown[]): Promise<ApiResult>;
       onEvent(cb: (e: AppEvent) => void): () => void;
+      pathForFile?(file: File): string | null;
     };
   }
 }
@@ -25,6 +26,11 @@ export const api = new Proxy({} as Api, {
     };
   },
 });
+
+/** Đường dẫn các file được kéo thả từ máy vào cửa sổ app. */
+export function droppedPaths(dt: DataTransfer): string[] {
+  return [...dt.files].map((f) => window.ppm?.pathForFile?.(f) ?? null).filter((p): p is string => !!p);
+}
 
 export function imgUrl(storageKey: string, thumb = false): string {
   return `ppm-img://${thumb ? 'thumb' : 'full'}/${encodeURIComponent(storageKey)}`;

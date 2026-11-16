@@ -43,7 +43,7 @@ import { useProjectActions } from '../state/projectActions';
 import { useUi } from '../state/ui';
 import { ColumnToggle, EmptyState, MenuButton, MultiSelect, PriorityBadge, SearchInput, type MenuItem } from './common';
 import { useOpenFile } from './FileLink';
-import { DEFAULT_HIDDEN_PROJECT_COLS, PROJECT_COLUMNS, ProjectTable } from './ProjectTable';
+import { DEFAULT_HIDDEN_PROJECT_COLS, PROJECT_COLUMNS, ProjectPreviewPanel, ProjectTable } from './ProjectTable';
 
 export type ProjectViewMode = 'list' | 'board';
 
@@ -81,7 +81,7 @@ function ProjectCard({
     { label: '', onClick: () => {}, separator: true },
     { label: 'Xóa dự án', icon: <Trash2 size={14} />, danger: true, onClick: () => void actions.remove(p) },
   ];
-  const meta = [p.clientName, p.designUnitName].filter(Boolean).join(' · ');
+  const meta = [p.siName, p.brandNames, p.clientName && `EU ${p.clientName}`].filter(Boolean).join(' · ');
   return (
     <article
       className={`pcard st-${p.status} ${p.status === 'COMPLETED' ? 'completed' : ''} ${pending ? 'pending' : ''} ${dragging ? 'dragging' : ''}`}
@@ -95,18 +95,18 @@ function ProjectCard({
       onDragEnd={onDragEnd}
       onClick={open}
       onKeyDown={(e) => e.key === 'Enter' && e.target === e.currentTarget && open()}
-      aria-label={`${p.projectName}, ${STATUS_LABEL[p.status]}`}
+      aria-label={`${p.label}, ${STATUS_LABEL[p.status]}`}
     >
       <div className="pcard-menu">
         <MenuButton items={menu} />
       </div>
-      <div className="pcard-title">{p.projectName}</div>
+      <div className="pcard-title">{p.label}</div>
       {meta && <div className="pcard-meta">{meta}</div>}
       <div className="pcard-foot">
         <PriorityBadge value={p.priorityPoint} />
         {p.stageName && <span className="badge">{p.stageName}</span>}
         {p.salespersonName && (
-          <span className="icon-chip" title="Salesperson">
+          <span className="icon-chip" title="Sale">
             <UserRound size={12} />
             {p.salespersonName}
           </span>
@@ -125,11 +125,11 @@ function ProjectCard({
         )}
       </div>
       <div className="pcard-foot">
-        <span className="small muted">Hạn {formatDate(p.dueDate)}</span>
-        {p.status !== 'COMPLETED' ? (
-          <span className="pcard-due small">· {describeRemaining(p.remaining)}</span>
-        ) : (
+        <span className="small muted">{p.dueDate ? `Hạn ${formatDate(p.dueDate)}` : 'Chưa có hạn'}</span>
+        {p.status === 'COMPLETED' ? (
           <span className="small faint">· Đã hoàn thành</span>
+        ) : (
+          p.dueDate && <span className="pcard-due small">· {describeRemaining(p.remaining)}</span>
         )}
         {pending && <span className="badge accent">Chưa lưu</span>}
       </div>
@@ -227,7 +227,8 @@ export interface ProjectsViewProps {
 export function ProjectsView({ scopeKey, baseList, showLocationFilters, initialFilter, onAdd, addLabel = 'Thêm Project', viewKey, defaultView }: ProjectsViewProps) {
   const { masters, years, today, thresholds, refresh } = useAppData();
   const [mode, setMode] = useLocalState<ProjectViewMode>(viewKey, defaultView);
-  const [hiddenCols, setHiddenCols] = useLocalState<string[]>('project-list-hidden-cols', DEFAULT_HIDDEN_PROJECT_COLS);
+  const [hiddenCols, setHiddenCols] = useLocalState<string[]>('project-list-hidden-cols-v2', DEFAULT_HIDDEN_PROJECT_COLS);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
   const { confirm, toast, toastError } = useUi();
   const [filter, setFilter] = useSessionState<ProjectFilter>(`filter:${scopeKey}`, { ...EMPTY_FILTER, ...initialFilter });
   const [sort, setSort] = useLocalState<SortState>('board-sort', DEFAULT_SORT);
@@ -259,9 +260,8 @@ export function ProjectsView({ scopeKey, baseList, showLocationFilters, initialF
   const columns = filter.statuses.length ? STATUS_ORDER.filter((s) => filter.statuses.includes(s)) : STATUS_ORDER;
 
   const setF = <K extends keyof ProjectFilter>(k: K, v: ProjectFilter[K]) => setFilter((f) => ({ ...f, [k]: v }));
-  const clientOpts = masters.clients.map((m) => ({ id: m.id, name: m.name }));
-  const unitOpts = masters.designUnits.map((m) => ({ id: m.id, name: m.name }));
-  const salesOpts = masters.salespersons.map((m) => ({ id: m.id, name: m.name }));
+  const toOpts = (kind: 'clients' | 'siPartners' | 'brands' | 'salespersons') => masters[kind].map((m) => ({ id: m.id, name: m.name, inactive: !m.isActive }));
+  const selected = selectedId ? filtered.find((p) => p.id === selectedId) ?? null : null;
   const yearOpts = [...new Set(years.filter((y) => !filter.jobs.length || filter.jobs.includes(y.jobType)).map((y) => y.yearLabel))]
     .sort()
     .reverse()
@@ -327,10 +327,11 @@ export function ProjectsView({ scopeKey, baseList, showLocationFilters, initialF
   return (
     <>
       <div className="toolbar">
-        <SearchInput value={filter.q} onChange={(v) => setF('q', v)} placeholder="Tìm tên dự án, CĐT, đơn vị TK, giai đoạn, note…" width={320} />
-        <MultiSelect label="CĐT" options={clientOpts} value={filter.clients} onChange={(v) => setF('clients', v)} />
-        <MultiSelect label="Đơn vị thiết kế" options={unitOpts} value={filter.designUnits} onChange={(v) => setF('designUnits', v)} />
-        {salesOpts.length > 0 && <MultiSelect label="Salesperson" options={salesOpts} value={filter.salespersons ?? []} onChange={(v) => setF('salespersons', v)} />}
+        <SearchInput value={filter.q} onChange={(v) => setF('q', v)} placeholder="Tìm STT, tên dự án, SI, Hãng, EU, Sale, ghi chú…" width={320} />
+        <MultiSelect label="Tên SI" options={toOpts('siPartners')} value={filter.sis ?? []} onChange={(v) => setF('sis', v)} />
+        <MultiSelect label="Hãng" options={toOpts('brands')} value={filter.brands ?? []} onChange={(v) => setF('brands', v)} />
+        <MultiSelect label="Sale" options={toOpts('salespersons')} value={filter.salespersons ?? []} onChange={(v) => setF('salespersons', v)} />
+        <MultiSelect label="EU" options={toOpts('clients')} value={filter.clients} onChange={(v) => setF('clients', v)} />
         {showLocationFilters && (
           <>
             <MultiSelect
@@ -359,6 +360,8 @@ export function ProjectsView({ scopeKey, baseList, showLocationFilters, initialF
             <X size={14} /> Xóa bộ lọc
           </button>
         )}
+      </div>
+      <div className="toolbar view-bar">
         <span className="small muted">{filtered.length} dự án</span>
         <div className="grow" />
         <div className="row" style={{ gap: 4 }}>
@@ -435,7 +438,18 @@ export function ProjectsView({ scopeKey, baseList, showLocationFilters, initialF
           />
         </div>
       ) : mode === 'list' ? (
-        <ProjectTable list={filtered} showLocation={!!showLocationFilters} sort={sort} onSort={setSort} hidden={hiddenCols} />
+        <div className="split">
+          <ProjectTable
+            list={filtered}
+            showLocation={!!showLocationFilters}
+            sort={sort}
+            onSort={setSort}
+            hidden={hiddenCols}
+            selectedId={selected?.id ?? null}
+            onSelect={(p) => setSelectedId(p.id)}
+          />
+          {selected && <ProjectPreviewPanel key={selected.id} p={selected} onClose={() => setSelectedId(null)} />}
+        </div>
       ) : (
         <div className="board" style={{ '--cols': columns.length } as React.CSSProperties}>
           {columns.map((s) => (

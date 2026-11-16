@@ -123,39 +123,73 @@ function MoveDialog({ project, onClose }: { project: Project; onClose: () => voi
   );
 }
 
+/** Xóa dự án: Hủy / Xóa (giữ thư mục trên máy) / Xóa cả folder local (chuyển thư mục vào Thùng rác). */
+function DeleteDialog({ project, onDone }: { project: Project; onDone: (deleted: boolean) => void }) {
+  const { refresh } = useAppData();
+  const { toast, toastError } = useUi();
+  const [busy, setBusy] = useState<false | 'keep' | 'folder'>(false);
+  const run = async (deleteFolder: boolean) => {
+    setBusy(deleteFolder ? 'folder' : 'keep');
+    try {
+      await api.deleteProject(project.id, { deleteFolder });
+      await refresh('projects', 'years');
+      toast('success', deleteFolder ? `Đã xóa "${project.projectName}" và chuyển thư mục vào Thùng rác.` : `Đã xóa "${project.projectName}" (thư mục trên máy được giữ lại).`);
+      onDone(true);
+    } catch (e) {
+      toastError(e);
+      setBusy(false);
+    }
+  };
+  return (
+    <Modal
+      size="sm"
+      title="Xóa dự án"
+      onClose={() => onDone(false)}
+      footer={() => (
+        <>
+          <button className="btn" onClick={() => onDone(false)} disabled={!!busy}>
+            Hủy
+          </button>
+          <button className="btn danger" onClick={() => void run(false)} disabled={!!busy}>
+            {busy === 'keep' ? 'Đang xóa…' : 'Xóa'}
+          </button>
+          {project.folderPath && (
+            <button className="btn danger solid" onClick={() => void run(true)} disabled={!!busy}>
+              {busy === 'folder' ? 'Đang xóa…' : 'Xóa cả folder local'}
+            </button>
+          )}
+        </>
+      )}
+    >
+      <div className="stack" style={{ gap: 10 }}>
+        <div>
+          Xóa dự án <b>“{project.stt}. {project.projectName}”</b> khỏi ứng dụng?
+        </div>
+        <div className="muted small">Ghi chú, dữ liệu Excel đã import và lịch của dự án cũng bị xóa. File DWG/TXT liên kết không bị ảnh hưởng.</div>
+        {project.folderPath ? (
+          <div className="alert info small">
+            <div>
+              <b>Xóa</b>: giữ nguyên thư mục trên máy.
+              <br />
+              <b>Xóa cả folder local</b>: chuyển thư mục <span className="path-text">{project.folderPath}</span> vào Thùng rác (khôi phục được từ Thùng rác).
+            </div>
+          </div>
+        ) : (
+          <div className="muted small">Dự án chưa có thư mục trên máy.</div>
+        )}
+      </div>
+    </Modal>
+  );
+}
+
 export function ProjectActionsProvider({ children }: { children: ReactNode }) {
   const { refresh } = useAppData();
   const { confirm, toast, toastError } = useUi();
   const [form, setForm] = useState<{ project?: Project; defaults?: ProjectDefaults } | null>(null);
   const [moving, setMoving] = useState<Project | null>(null);
+  const [deleting, setDeleting] = useState<{ project: Project; resolve: (v: boolean) => void } | null>(null);
 
-  const remove = useCallback(
-    async (p: Project) => {
-      const ok = await confirm({
-        title: 'Xóa dự án',
-        message: (
-          <>
-            Xóa vĩnh viễn dự án <b>“{p.projectName}”</b>?
-            <br />
-            <span className="muted small">Dữ liệu Excel đã import của dự án cũng bị xóa. File gốc trên máy không bị ảnh hưởng.</span>
-          </>
-        ),
-        confirmText: 'Xóa dự án',
-        danger: true,
-      });
-      if (!ok) return false;
-      try {
-        await api.deleteProject(p.id);
-        await refresh('projects', 'years');
-        toast('success', `Đã xóa "${p.projectName}".`);
-        return true;
-      } catch (e) {
-        toastError(e);
-        return false;
-      }
-    },
-    [confirm, refresh, toast, toastError],
-  );
+  const remove = useCallback((p: Project) => new Promise<boolean>((resolve) => setDeleting({ project: p, resolve })), []);
 
   const setCompleted = useCallback(
     async (p: Project, completed: boolean) => {
@@ -202,6 +236,15 @@ export function ProjectActionsProvider({ children }: { children: ReactNode }) {
       {children}
       {form && <ProjectForm project={form.project} defaults={form.defaults} onClose={() => setForm(null)} />}
       {moving && <MoveDialog project={moving} onClose={() => setMoving(null)} />}
+      {deleting && (
+        <DeleteDialog
+          project={deleting.project}
+          onDone={(ok) => {
+            deleting.resolve(ok);
+            setDeleting(null);
+          }}
+        />
+      )}
     </Ctx.Provider>
   );
 }

@@ -122,8 +122,9 @@ export function eventItem(e: CalendarEvent): CalItem {
   };
 }
 
-export function dueItem(p: ProjectView): CalItem {
-  return { key: `due:${p.id}`, date: p.dueDate, startTime: null, endTime: null, title: p.projectName, color: 'due', layer: 'DUE', project: p };
+/** Chỉ gọi cho dự án có ngày tới hạn. */
+export function dueItem(p: ProjectView & { dueDate: string }): CalItem {
+  return { key: `due:${p.id}`, date: p.dueDate, startTime: null, endTime: null, title: p.label, color: 'due', layer: 'DUE', project: p };
 }
 
 /** Sắp xếp trong ngày: mục cả ngày trước, rồi theo giờ bắt đầu. */

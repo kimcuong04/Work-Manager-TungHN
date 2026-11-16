@@ -11,7 +11,15 @@ interface MasterSpec {
 }
 
 const SPECS: Record<MasterKind, MasterSpec> = {
-  clients: { table: 'clients', usage: [{ table: 'projects', column: 'client_id', nullable: false }] },
+  clients: { table: 'clients', usage: [{ table: 'projects', column: 'client_id', nullable: true }] },
+  siPartners: {
+    table: 'si_partners',
+    usage: [
+      { table: 'projects', column: 'si_id', nullable: true },
+      { table: 'warranty_records', column: 'si_id', nullable: true },
+    ],
+  },
+  departments: { table: 'departments', usage: [{ table: 'salespersons', column: 'department_id', nullable: true }] },
   designUnits: { table: 'design_units', usage: [{ table: 'projects', column: 'design_unit_id', nullable: true }] },
   stages: { table: 'project_stages', usage: [{ table: 'projects', column: 'stage_id', nullable: true }] },
   salespersons: { table: 'salespersons', usage: [{ table: 'projects', column: 'salesperson_id', nullable: true }] },
@@ -21,6 +29,7 @@ const SPECS: Record<MasterKind, MasterSpec> = {
       { table: 'warranty_records', column: 'brand_id', nullable: true },
       { table: 'experience_records', column: 'brand_id', nullable: false },
       { table: 'knowledge_records', column: 'brand_id', nullable: true },
+      { table: 'project_brands', column: 'brand_id', nullable: false },
     ],
   },
 };
@@ -44,14 +53,19 @@ export function listMaster(ctx: Ctx, kind: MasterKind): MasterItem[] {
     .map((u) => `(SELECT COUNT(*) FROM ${u.table} WHERE ${u.table}.${u.column} = m.id)`)
     .join(' + ');
   const order = kind === 'stages' ? 'm.sort_order, m.name' : 'm.name COLLATE NOCASE';
+  const dept = kind === 'salespersons';
   return ctx.db
-    .all<Record<string, any>>(`SELECT m.*, ${usageSql} AS usage_count FROM ${s.table} m ORDER BY ${order}`)
+    .all<Record<string, any>>(
+      `SELECT m.*, ${usageSql} AS usage_count${dept ? ', d.name AS department_name' : ''} FROM ${s.table} m
+       ${dept ? 'LEFT JOIN departments d ON d.id = m.department_id' : ''} ORDER BY ${order}`,
+    )
     .map((r) => ({
       id: r.id,
       name: r.name,
       sortOrder: r.sort_order,
       isActive: !!r.is_active,
       usageCount: r.usage_count,
+      ...(dept ? { departmentId: r.department_id ?? null, departmentName: r.department_name ?? null } : {}),
       createdAt: r.created_at,
       updatedAt: r.updated_at,
     }));
@@ -96,6 +110,13 @@ export function renameMaster(ctx: Ctx, kind: MasterKind, id: string, rawName: st
   return getMaster(ctx, kind, id);
 }
 
+export function setSalespersonDepartment(ctx: Ctx, id: string, departmentId: string | null): MasterItem {
+  getMaster(ctx, 'salespersons', id);
+  if (departmentId) getMaster(ctx, 'departments', departmentId);
+  ctx.db.tx(() => ctx.db.run('UPDATE salespersons SET department_id = ?, updated_at = ? WHERE id = ?', [departmentId, now(), id]));
+  return getMaster(ctx, 'salespersons', id);
+}
+
 export function setMasterActive(ctx: Ctx, kind: MasterKind, id: string, active: boolean): void {
   getMaster(ctx, kind, id);
   ctx.db.tx(() => ctx.db.run(`UPDATE ${spec(kind).table} SET is_active = ?, updated_at = ? WHERE id = ?`, [active, now(), id]));
@@ -119,7 +140,7 @@ export function deleteMaster(ctx: Ctx, kind: MasterKind, id: string, strategy: M
     if (kind === 'brands')
       throw new AppError(`Hãng "${item.name}" đang được ${used} bản ghi sử dụng. Hãy Deactivate thay vì xóa.`);
     if (!strategy)
-      throw new AppError(`${MASTER_LABEL[kind]} "${item.name}" đang được ${used} dự án sử dụng. Chọn mục thay thế hoặc gỡ liên kết trước khi xóa.`);
+      throw new AppError(`${MASTER_LABEL[kind]} "${item.name}" đang được ${used} mục sử dụng. Chọn mục thay thế hoặc gỡ liên kết trước khi xóa.`);
     if ('replaceWithId' in strategy) {
       if (strategy.replaceWithId === id) throw new AppError('Mục thay thế phải khác mục cần xóa.');
       getMaster(ctx, kind, strategy.replaceWithId);
@@ -132,6 +153,7 @@ export function deleteMaster(ctx: Ctx, kind: MasterKind, id: string, strategy: M
       const stamp = now();
       for (const u of s.usage) {
         const target = 'replaceWithId' in strategy ? strategy.replaceWithId : null;
+        if (u.table === 'project_brands') continue;
         ctx.db.run(`UPDATE ${u.table} SET ${u.column} = ?, updated_at = ? WHERE ${u.column} = ?`, [target, stamp, id]);
       }
     }

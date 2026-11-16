@@ -247,9 +247,70 @@ function backfillNotesV3(db: Db) {
   }
 }
 
+/**
+ * v1.4: STT, Tên SI, nhiều Hãng/dự án, thư mục dự án trên máy; EU (CĐT) và các ngày thành không bắt buộc.
+ * SQLite không bỏ được NOT NULL bằng ALTER nên tạo bảng projects mới, chép dữ liệu, rồi đổi tên
+ * (chạy với foreign_keys = OFF để DROP bảng cũ không xóa dây chuyền ghi chú, lịch, dữ liệu import).
+ */
+const V4 = `
+${MASTER_TABLE('si_partners')}
+${MASTER_TABLE('departments')}
+ALTER TABLE salespersons ADD COLUMN department_id TEXT REFERENCES departments(id);
+
+CREATE TABLE projects_v4 (
+  id TEXT PRIMARY KEY,
+  stt INTEGER NOT NULL,
+  job_year_id TEXT NOT NULL REFERENCES job_years(id),
+  work_category TEXT NOT NULL CHECK (work_category IN ('PRE_SALES','POST_SALES')),
+  received_date TEXT,
+  due_date TEXT,
+  project_name TEXT NOT NULL,
+  client_id TEXT REFERENCES clients(id),
+  si_id TEXT REFERENCES si_partners(id),
+  design_unit_id TEXT REFERENCES design_units(id),
+  stage_id TEXT REFERENCES project_stages(id),
+  salesperson_id TEXT REFERENCES salespersons(id),
+  note TEXT,
+  file_path TEXT,
+  file_name TEXT,
+  file_extension TEXT,
+  folder_path TEXT,
+  priority_point INTEGER NOT NULL CHECK (priority_point BETWEEN 1 AND 5),
+  is_completed INTEGER NOT NULL DEFAULT 0,
+  completed_at TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+INSERT INTO projects_v4 (id, stt, job_year_id, work_category, received_date, due_date, project_name, client_id, si_id,
+  design_unit_id, stage_id, salesperson_id, note, file_path, file_name, file_extension, folder_path, priority_point,
+  is_completed, completed_at, created_at, updated_at)
+SELECT id, ROW_NUMBER() OVER (ORDER BY created_at, id), job_year_id, work_category, received_date, due_date, project_name,
+  client_id, NULL, design_unit_id, stage_id, salesperson_id, note, file_path, file_name, file_extension, NULL, priority_point,
+  is_completed, completed_at, created_at, updated_at
+FROM projects;
+DROP TABLE projects;
+ALTER TABLE projects_v4 RENAME TO projects;
+CREATE INDEX idx_projects_node ON projects(job_year_id, work_category);
+CREATE UNIQUE INDEX ux_projects_stt ON projects(stt);
+
+CREATE TABLE project_brands (
+  project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+  brand_id TEXT NOT NULL REFERENCES brands(id),
+  sort_order INTEGER NOT NULL DEFAULT 0,
+  PRIMARY KEY (project_id, brand_id)
+);
+CREATE INDEX idx_project_brands_brand ON project_brands(brand_id);
+
+ALTER TABLE warranty_records ADD COLUMN si_id TEXT REFERENCES si_partners(id);
+ALTER TABLE experience_records ADD COLUMN local_path TEXT;
+ALTER TABLE knowledge_records ADD COLUMN local_path TEXT;
+`;
+
 export interface Migration {
   version: number;
   up: (db: Db) => void;
+  /** Tắt kiểm tra khóa ngoại trong lúc chạy (bắt buộc khi tạo lại bảng có bảng con tham chiếu). */
+  foreignKeysOff?: boolean;
 }
 
 /**
@@ -278,6 +339,11 @@ export const MIGRATIONS: Migration[] = [
       backfillNotesV3(db);
     },
   },
+  {
+    version: 4,
+    foreignKeysOff: true,
+    up: (db) => db.exec(V4),
+  },
 ];
 
 export const SCHEMA_VERSION = MIGRATIONS[MIGRATIONS.length - 1].version;
@@ -289,9 +355,19 @@ export function migrate(db: Db, migrations: Migration[] = MIGRATIONS): void {
     throw new Error(`Dữ liệu được tạo bởi phiên bản mới hơn (schema ${current}). Hãy cập nhật ứng dụng.`);
   for (const m of migrations) {
     if (m.version <= current) continue;
-    db.tx(() => {
-      m.up(db);
-      db.exec(`PRAGMA user_version = ${m.version}`);
-    });
+    // PRAGMA foreign_keys không có tác dụng bên trong transaction nên phải tắt trước BEGIN.
+    if (m.foreignKeysOff) db.exec('PRAGMA foreign_keys = OFF');
+    try {
+      db.tx(() => {
+        m.up(db);
+        if (m.foreignKeysOff) {
+          const broken = db.all('PRAGMA foreign_key_check');
+          if (broken.length) throw new Error(`Nâng cấp dữ liệu lên schema ${m.version} làm hỏng ${broken.length} liên kết — đã hủy, dữ liệu giữ nguyên.`);
+        }
+        db.exec(`PRAGMA user_version = ${m.version}`);
+      });
+    } finally {
+      if (m.foreignKeysOff) db.exec('PRAGMA foreign_keys = ON');
+    }
   }
 }

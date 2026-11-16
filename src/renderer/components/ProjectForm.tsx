@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
-import { CalendarCheck, CalendarClock, Info } from 'lucide-react';
+import { CalendarCheck, CalendarClock, ChevronDown, FolderCog, FolderOpen, FolderPlus, Info } from 'lucide-react';
 import { formatDate } from '../../shared/dates';
+import { projectFolderName } from '../../shared/folderName';
+import { isNoteEmpty, sanitizeNoteHtml } from '../../shared/noteHtml';
 import { computeStatus, describeRemaining, remainingDays } from '../../shared/status';
 import {
   CATEGORY_LABEL,
@@ -13,13 +15,13 @@ import {
   type Project,
   type ProjectCategory,
   type ProjectInput,
+  type ProjectSaved,
 } from '../../shared/types';
-import { isNoteEmpty, sanitizeNoteHtml } from '../../shared/noteHtml';
 import { LIMITS, hasErrors, validateProjectInput } from '../../shared/validation';
 import { api } from '../api';
 import { useAppData } from '../state/AppData';
 import { useUi } from '../state/ui';
-import { DateInput, Field, PriorityPicker, SearchableSelect, StatusBadge } from './common';
+import { DateInput, Field, MultiSearchSelect, PriorityPicker, SearchableSelect, StatusBadge, shortenPath } from './common';
 import { FileLinkField } from './FileLink';
 import { Modal } from './Modal';
 import { RichNoteEditor } from './RichNoteEditor';
@@ -33,12 +35,15 @@ export interface ProjectDefaults {
 function initialInput(project: Project | undefined, defaults: ProjectDefaults | undefined, today: string, fallbackYear: string): ProjectInput {
   if (project)
     return {
+      stt: project.stt,
       jobYearId: project.jobYearId,
       workCategory: project.workCategory,
       receivedDate: project.receivedDate,
       dueDate: project.dueDate,
       projectName: project.projectName,
       clientId: project.clientId,
+      siId: project.siId,
+      brandIds: project.brands.map((b) => b.id),
       designUnitId: project.designUnitId,
       stageId: project.stageId,
       salespersonId: project.salespersonId,
@@ -47,14 +52,18 @@ function initialInput(project: Project | undefined, defaults: ProjectDefaults | 
       fileName: project.fileName,
       fileExtension: project.fileExtension,
       priorityPoint: project.priorityPoint,
+      folderParent: undefined,
     };
   return {
+    stt: null,
     jobYearId: defaults?.jobYearId ?? fallbackYear,
     workCategory: defaults?.workCategory ?? 'PRE_SALES',
     receivedDate: today,
-    dueDate: '',
+    dueDate: null,
     projectName: '',
-    clientId: '',
+    clientId: null,
+    siId: null,
+    brandIds: [],
     designUnitId: null,
     stageId: null,
     salespersonId: null,
@@ -63,8 +72,12 @@ function initialInput(project: Project | undefined, defaults: ProjectDefaults | 
     fileName: null,
     fileExtension: null,
     priorityPoint: 3,
+    folderParent: null,
   };
 }
+
+const dirOf = (p: string) => p.replace(/[\\/][^\\/]*$/, '');
+const joinPath = (dir: string, name: string) => `${dir.replace(/[\\/]+$/, '')}\\${name}`;
 
 export function ProjectForm({
   project,
@@ -77,7 +90,7 @@ export function ProjectForm({
   onClose: () => void;
   onSaved?: (p: Project) => void;
 }) {
-  const { years, yearById, masters, today, thresholds, refresh } = useAppData();
+  const { years, yearById, masters, today, thresholds, settings, refresh } = useAppData();
   const { toast, toastError, confirm } = useUi();
   const isEdit = !!project;
 
@@ -87,17 +100,34 @@ export function ProjectForm({
     return (list.find((y) => y.yearLabel === today.slice(0, 4)) ?? list[0])?.id ?? '';
   }, [years, defaults, today]);
 
-  const [initial] = useState(() => initialInput(project, defaults, today, fallbackYear));
+  const [initial, setInitial] = useState(() => initialInput(project, defaults, today, fallbackYear));
   const [form, setForm] = useState<ProjectInput>(initial);
   const [jobType, setJobType] = useState<JobType>(project?.jobType ?? defaults?.jobType ?? yearById.get(initial.jobYearId)?.jobType ?? 'MAIN');
   const [touched, setTouched] = useState<Record<string, boolean>>({});
   const [submitted, setSubmitted] = useState(false);
   const [saving, setSaving] = useState<false | 'save' | 'calendar'>(false);
+  const [moreOpen, setMoreOpen] = useState(() => !!(project?.designUnitId || project?.stageId || project?.filePath));
+
+  // Dự án mới: gợi ý STT lớn nhất + 1 và nơi lưu thư mục dùng lần trước.
+  useEffect(() => {
+    if (isEdit) return;
+    api
+      .nextProjectStt()
+      .then((stt) => {
+        const parent = settings.projectRootDir;
+        setInitial((i) => ({ ...i, stt, folderParent: parent }));
+        setForm((f) => ({ ...f, stt: f.stt ?? stt, folderParent: f.folderParent ?? parent }));
+      })
+      .catch(toastError);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const errors = validateProjectInput(form);
+  if (!isEdit && !form.folderParent) errors.folderParent = 'Chọn nơi lưu thư mục dự án trên máy.';
   const show = (k: string) => (submitted || touched[k] ? errors[k] : undefined);
   const touch = (k: string) => setTouched((t) => ({ ...t, [k]: true }));
   const set = <K extends keyof ProjectInput>(k: K, v: ProjectInput[K]) => setForm((f) => ({ ...f, [k]: v }));
+
   // Ghi chú lưu theo ngày: form chỉ soạn mục của hôm nay; các ngày trước xem/sửa ở trang chi tiết.
   const [noteInit, setNoteInit] = useState<string | null>(isEdit ? null : '');
   const [noteDraft, setNoteDraft] = useState('');
@@ -134,6 +164,15 @@ export function ProjectForm({
     }
   };
 
+  const pickParent = async () => {
+    try {
+      const dir = await api.pickFolder('Chọn nơi lưu thư mục dự án');
+      if (dir) set('folderParent', dir);
+    } catch (e) {
+      toastError(e);
+    }
+  };
+
   const save = async (addToCalendar = false) => {
     setSubmitted(true);
     if (hasErrors(errors)) {
@@ -142,20 +181,22 @@ export function ProjectForm({
     }
     setSaving(addToCalendar ? 'calendar' : 'save');
     try {
-      const saved = isEdit
+      const saved: ProjectSaved = isEdit
         ? await api.updateProject(project!.id, form, { addToCalendar, noteHtml: noteChanged ? noteDraft : undefined })
         : await api.createProject(form, { noteHtml: isNoteEmpty(noteDraft) ? undefined : noteDraft });
-      await refresh('projects', 'years');
+      await refresh('projects', 'years', 'settings');
+      const name = `${saved.stt}. ${saved.projectName}`;
       toast(
         'success',
         isEdit
           ? addToCalendar
-            ? `Đã lưu "${saved.projectName}" và thêm vào Calendar hôm nay.`
-            : `Đã cập nhật "${saved.projectName}".`
+            ? `Đã lưu "${name}" và thêm vào Calendar hôm nay.`
+            : `Đã cập nhật "${name}".`
           : saved.isCompleted
-            ? `Đã tạo dự án "${saved.projectName}" ở trạng thái Đã hoàn thành (ngày tới hạn đã qua).`
-            : `Đã tạo dự án "${saved.projectName}" — ngày tiếp nhận đã có trên Calendar.`,
+            ? `Đã tạo dự án "${name}" ở trạng thái Đã hoàn thành (ngày tới hạn đã qua).`
+            : `Đã tạo dự án "${name}"${saved.folderPath ? ' và thư mục trên máy' : ''}.`,
       );
+      if (saved.notice) toast('warn', saved.notice);
       onSaved?.(saved);
       onClose();
     } catch (e) {
@@ -169,10 +210,21 @@ export function ProjectForm({
   const jobYears = years.filter((y) => y.jobType === jobType);
   const linked: LinkedFile | null = form.filePath ? { path: form.filePath, name: form.fileName ?? '', extension: form.fileExtension ?? '' } : null;
   const dueValid = !!form.dueDate && !errors.dueDate;
-  const overdue = dueValid && remainingDays(form.dueDate, today) < 0;
+  const overdue = dueValid && (remainingDays(form.dueDate, today) ?? 0) < 0;
   // Nhập mới với hạn đã qua = việc đã xong (nhập bù) → lưu ở trạng thái Đã hoàn thành.
-  const previewStatus = dueValid ? computeStatus({ isCompleted: project ? project.isCompleted : overdue, dueDate: form.dueDate }, today, thresholds) : null;
+  const previewStatus = computeStatus({ isCompleted: project ? project.isCompleted : overdue, dueDate: dueValid ? form.dueDate : null }, today, thresholds);
   const year = yearById.get(form.jobYearId);
+
+  const nameOf = (kind: MasterKind, id: string | null | undefined) => (id ? masters[kind].find((m) => m.id === id)?.name ?? '' : '');
+  const folderName = projectFolderName({
+    stt: form.stt,
+    projectName: form.projectName,
+    siName: nameOf('siPartners', form.siId),
+    brandNames: (form.brandIds ?? []).map((b) => nameOf('brands', b)),
+  });
+  const parent = form.folderParent ?? (project?.folderPath ? dirOf(project.folderPath) : null);
+  const targetFolder = parent ? joinPath(parent, folderName) : null;
+  const willRename = !!project?.folderPath && targetFolder !== null && targetFolder !== project.folderPath;
 
   return (
     <Modal
@@ -183,7 +235,6 @@ export function ProjectForm({
         <>
           <span className="left faint small">
             <span className="req" style={{ color: 'var(--danger)' }}>*</span> là trường bắt buộc
-            {!isEdit && ' · Ngày tiếp nhận được tự thêm vào Calendar'}
           </span>
           <button className="btn" onClick={close}>
             Hủy
@@ -268,57 +319,52 @@ export function ProjectForm({
         </section>
 
         <section className="form-section">
-          <h3>Thông tin chung</h3>
+          <h3>Thông tin dự án</h3>
           <div className="stack">
-            <Field label="Tên dự án" required error={show('projectName')} htmlFor="pf-name" hint={`${form.projectName.trim().length}/${LIMITS.projectName}`}>
-              <input
-                id="pf-name"
-                autoFocus
-                className={`input ${show('projectName') ? 'invalid' : ''}`}
-                value={form.projectName}
-                maxLength={LIMITS.projectName + 50}
-                onChange={(e) => set('projectName', e.target.value)}
-                onBlur={() => touch('projectName')}
-                placeholder="Ví dụ: Nhà máy ABC – hệ thống camera"
-              />
-            </Field>
-            <div className="grid-2">
-              <Field label="CĐT" required error={show('clientId')}>
-                <SearchableSelect
-                  options={opts('clients')}
-                  value={form.clientId || null}
-                  onChange={(id) => {
-                    set('clientId', id ?? '');
-                    touch('clientId');
-                  }}
-                  onBlur={() => touch('clientId')}
-                  onCreate={createMaster('clients')}
-                  invalid={!!show('clientId')}
-                  placeholder="Chọn hoặc thêm CĐT"
-                  clearable={false}
+            <div className="stt-row">
+              <Field label="STT" required error={show('stt')} htmlFor="pf-stt">
+                <input
+                  id="pf-stt"
+                  className={`input ${show('stt') ? 'invalid' : ''}`}
+                  type="number"
+                  min={1}
+                  value={form.stt ?? ''}
+                  onChange={(e) => set('stt', e.target.value === '' ? null : Number(e.target.value))}
+                  onBlur={() => touch('stt')}
                 />
               </Field>
-              <Field label="Salesperson">
+              <Field label="Tên dự án" required error={show('projectName')} htmlFor="pf-name" hint={`${form.projectName.trim().length}/${LIMITS.projectName}`}>
+                <input
+                  id="pf-name"
+                  autoFocus
+                  className={`input ${show('projectName') ? 'invalid' : ''}`}
+                  value={form.projectName}
+                  maxLength={LIMITS.projectName + 50}
+                  onChange={(e) => set('projectName', e.target.value)}
+                  onBlur={() => touch('projectName')}
+                  placeholder="Ví dụ: Nhà máy ABC – hệ thống camera"
+                />
+              </Field>
+            </div>
+            <div className="grid-2">
+              <Field label="Tên SI">
+                <SearchableSelect options={opts('siPartners')} value={form.siId ?? null} onChange={(id) => set('siId', id)} onCreate={createMaster('siPartners')} createLabel="Thêm SI" placeholder="Không bắt buộc" />
+              </Field>
+              <Field label="Hãng" hint="Chọn được nhiều Hãng">
+                <MultiSearchSelect options={opts('brands')} value={form.brandIds ?? []} onChange={(ids) => set('brandIds', ids)} onCreate={createMaster('brands')} createLabel="Thêm Hãng" placeholder="Không bắt buộc" />
+              </Field>
+              <Field label="Sale">
                 <SearchableSelect
-                  options={opts('salespersons')}
+                  options={masters.salespersons.map((m) => ({ id: m.id, name: m.name, inactive: !m.isActive, hint: m.departmentName ?? undefined }))}
                   value={form.salespersonId}
                   onChange={(id) => set('salespersonId', id)}
                   onCreate={createMaster('salespersons')}
-                  createLabel="Thêm Salesperson"
+                  createLabel="Thêm Sale"
                   placeholder="Không bắt buộc"
                 />
               </Field>
-              <Field label="Đơn vị thiết kế">
-                <SearchableSelect
-                  options={opts('designUnits')}
-                  value={form.designUnitId}
-                  onChange={(id) => set('designUnitId', id)}
-                  onCreate={createMaster('designUnits')}
-                  placeholder="Không bắt buộc"
-                />
-              </Field>
-              <Field label="Giai đoạn">
-                <SearchableSelect options={opts('stages')} value={form.stageId} onChange={(id) => set('stageId', id)} onCreate={createMaster('stages')} placeholder="Không bắt buộc" />
+              <Field label="EU">
+                <SearchableSelect options={opts('clients')} value={form.clientId} onChange={(id) => set('clientId', id)} onCreate={createMaster('clients')} createLabel="Thêm EU" placeholder="Không bắt buộc" />
               </Field>
             </div>
           </div>
@@ -327,12 +373,11 @@ export function ProjectForm({
         <section className="form-section">
           <h3>Thời hạn &amp; ưu tiên</h3>
           <div className="grid-2">
-            <Field label="Ngày tiếp nhận" required error={show('receivedDate')}>
-              <DateInput value={form.receivedDate || null} onChange={(v) => set('receivedDate', v ?? '')} onBlur={() => touch('receivedDate')} invalid={!!show('receivedDate')} />
+            <Field label="Ngày bắt đầu" error={show('receivedDate')}>
+              <DateInput value={form.receivedDate} onChange={(v) => set('receivedDate', v)} onBlur={() => touch('receivedDate')} invalid={!!show('receivedDate')} clearable />
             </Field>
             <Field
               label="Ngày tới hạn"
-              required
               error={show('dueDate')}
               warn={
                 overdue
@@ -344,35 +389,83 @@ export function ProjectForm({
                   : undefined
               }
             >
-              <DateInput value={form.dueDate || null} onChange={(v) => set('dueDate', v ?? '')} onBlur={() => touch('dueDate')} invalid={!!show('dueDate')} />
+              <DateInput value={form.dueDate} onChange={(v) => set('dueDate', v)} onBlur={() => touch('dueDate')} invalid={!!show('dueDate')} clearable />
             </Field>
           </div>
           <div className="row wrap" style={{ marginTop: 14, alignItems: 'flex-start', gap: 28 }}>
-            <Field label="Priority Point" required error={show('priorityPoint')}>
+            <Field label="Priority Point">
               <PriorityPicker value={form.priorityPoint} onChange={(v) => set('priorityPoint', v)} />
             </Field>
-            {previewStatus && (
-              <div className="field">
-                <span className="field-label">Trạng thái sau khi lưu</span>
-                <div className="row">
-                  <StatusBadge status={previewStatus} />
-                  <span className="small muted">
-                    <CalendarClock size={13} style={{ verticalAlign: -2 }} /> Hạn {formatDate(form.dueDate)}
-                    {previewStatus !== 'COMPLETED' && ` · ${describeRemaining(remainingDays(form.dueDate, today))}`}
-                  </span>
-                </div>
+            <div className="field">
+              <span className="field-label">Trạng thái sau khi lưu</span>
+              <div className="row">
+                <StatusBadge status={previewStatus} />
+                <span className="small muted">
+                  <CalendarClock size={13} style={{ verticalAlign: -2 }} /> {form.dueDate ? `Hạn ${formatDate(form.dueDate)}` : 'Chưa có ngày tới hạn'}
+                  {dueValid && previewStatus !== 'COMPLETED' && ` · ${describeRemaining(remainingDays(form.dueDate, today))}`}
+                </span>
               </div>
-            )}
+            </div>
           </div>
         </section>
 
         <section className="form-section">
-          <h3>File liên kết</h3>
-          <FileLinkField
-            value={linked}
-            onChange={(f) => setForm((x) => ({ ...x, filePath: f?.path ?? null, fileName: f?.name ?? null, fileExtension: f?.extension ?? null }))}
-          />
-          {errors.file && <div className="field-error">{errors.file}</div>}
+          <h3>Thư mục dự án trên máy</h3>
+          <div className="stack" style={{ gap: 8 }}>
+            <div className="folder-pick">
+              <FolderOpen size={16} className="faint" />
+              <div className="grow" style={{ minWidth: 0 }}>
+                <div className="small muted">Nơi lưu{!isEdit && <span className="req" style={{ color: 'var(--danger)' }}> *</span>}</div>
+                <div className="ellipsis" title={parent ?? ''}>
+                  {parent ? shortenPath(parent, 70) : <span className="faint">Chưa chọn</span>}
+                </div>
+              </div>
+              <button type="button" className="btn sm" onClick={() => void pickParent()}>
+                <FolderCog size={14} /> {parent ? 'Đổi nơi lưu…' : 'Chọn nơi lưu…'}
+              </button>
+            </div>
+            {show('folderParent') && <div className="field-error">{show('folderParent')}</div>}
+            <div className="folder-preview">
+              <FolderPlus size={15} />
+              <div style={{ minWidth: 0 }}>
+                <div className="small muted">
+                  {isEdit ? (project?.folderPath ? (willRename ? 'Thư mục sẽ được đổi thành' : 'Thư mục') : form.folderParent ? 'Sẽ tạo thư mục' : 'Chưa có thư mục — chọn nơi lưu để tạo') : 'Sẽ tạo thư mục'}
+                  {' '}(STT.Tên dự án_Tên SI_Hãng)
+                </div>
+                <code className="folder-name">{folderName || '—'}</code>
+                {targetFolder && (
+                  <div className="small faint ellipsis" title={targetFolder}>
+                    {shortenPath(targetFolder, 90)}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section className="form-section">
+          <button type="button" className="section-toggle" onClick={() => setMoreOpen((o) => !o)} aria-expanded={moreOpen}>
+            <ChevronDown size={15} className={moreOpen ? '' : 'rot-90'} /> Thông tin bổ sung (Đơn vị thiết kế, Giai đoạn, File DWG/TXT)
+          </button>
+          {moreOpen && (
+            <div className="stack" style={{ marginTop: 12 }}>
+              <div className="grid-2">
+                <Field label="Đơn vị thiết kế">
+                  <SearchableSelect options={opts('designUnits')} value={form.designUnitId} onChange={(id) => set('designUnitId', id)} onCreate={createMaster('designUnits')} placeholder="Không bắt buộc" />
+                </Field>
+                <Field label="Giai đoạn">
+                  <SearchableSelect options={opts('stages')} value={form.stageId} onChange={(id) => set('stageId', id)} onCreate={createMaster('stages')} placeholder="Không bắt buộc" />
+                </Field>
+              </div>
+              <Field label="File liên kết (DWG/TXT)">
+                <FileLinkField
+                  value={linked}
+                  onChange={(f) => setForm((x) => ({ ...x, filePath: f?.path ?? null, fileName: f?.name ?? null, fileExtension: f?.extension ?? null }))}
+                />
+              </Field>
+              {errors.file && <div className="field-error">{errors.file}</div>}
+            </div>
+          )}
         </section>
 
         <section className="form-section">
@@ -381,7 +474,7 @@ export function ProjectForm({
             {isEdit
               ? 'Lưu vào mục ghi chú của hôm nay. Ghi chú các ngày trước xem và sửa ở trang chi tiết dự án.'
               : 'Ghi chú đầu tiên của dự án, lưu theo ngày hôm nay.'}{' '}
-            Định dạng tự do, dán ảnh bằng Ctrl+V.
+            Định dạng tự do, dán hoặc kéo thả ảnh.
           </div>
           {noteInit === null ? (
             <div className="faint small">Đang tải ghi chú…</div>

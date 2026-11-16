@@ -1,13 +1,9 @@
-import { useMemo, useRef, useState } from 'react';
-import { HashRouter, Route, Routes, useLocation, useNavigate } from 'react-router';
-import { AlertTriangle, Menu, Moon, Search, Settings, Sun } from 'lucide-react';
-import { STATUS_LABEL } from '../shared/status';
-import { matchesQuery, normalizeText } from '../shared/text';
-import { useClickOutside } from './components/common';
+import { HashRouter, Route, Routes, useLocation } from 'react-router';
+import { AlertTriangle, Menu, Moon, Settings, Sun } from 'lucide-react';
+import { GlobalSearch } from './components/GlobalSearch';
 import { Sidebar } from './components/Sidebar';
 import { UpdateNotice } from './components/UpdateNotice';
-import { readLocal, setSessionValue, useLocalState } from './lib/persist';
-import { EMPTY_FILTER } from './lib/projects';
+import { readLocal, useLocalState } from './lib/persist';
 import { AiAssistantPage } from './pages/AiAssistantPage';
 import { AllProjectsPage } from './pages/AllProjectsPage';
 import { CalendarPage } from './pages/CalendarPage';
@@ -16,87 +12,11 @@ import { DashboardPage } from './pages/DashboardPage';
 import { ExperienceBrandPage, ExperienceHomePage } from './pages/ExperiencePages';
 import { KnowledgeBrandPage, KnowledgeHomePage } from './pages/KnowledgePages';
 import { ProjectDetailPage } from './pages/ProjectDetailPage';
+import { SearchPage } from './pages/SearchPage';
 import { SettingsPage } from './pages/SettingsPage';
 import { AppDataProvider, useAppData } from './state/AppData';
 import { ProjectActionsProvider } from './state/projectActions';
 import { UiProvider, useUi } from './state/ui';
-
-function GlobalSearch() {
-  const { projects } = useAppData();
-  const navigate = useNavigate();
-  const [q, setQ] = useState('');
-  const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
-  useClickOutside(ref, () => setOpen(false), open);
-  const results = useMemo(() => {
-    const nq = normalizeText(q);
-    if (!nq) return [];
-    return projects.filter((p) => matchesQuery(nq, p.haystack)).slice(0, 8);
-  }, [projects, q]);
-
-  const showAll = () => {
-    setSessionValue('filter:all', { ...EMPTY_FILTER, q });
-    setOpen(false);
-    navigate('/all', { state: { from: 'search', at: Date.now() } });
-  };
-
-  return (
-    <div className="pop-anchor" ref={ref} style={{ width: 380 }}>
-      <div className="search-box" style={{ width: '100%' }}>
-        <Search size={16} />
-        <input
-          className="input"
-          placeholder="Tìm dự án (gõ không dấu cũng được)…"
-          value={q}
-          onChange={(e) => {
-            setQ(e.target.value);
-            setOpen(true);
-          }}
-          onFocus={() => setOpen(true)}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter' && q.trim()) showAll();
-            if (e.key === 'Escape') setOpen(false);
-          }}
-          aria-label="Tìm kiếm toàn cục"
-        />
-      </div>
-      {open && q.trim() && (
-        <div className="popover" style={{ minWidth: 380 }}>
-          {results.length === 0 && <div className="opt-empty">Không tìm thấy dự án phù hợp</div>}
-          {results.map((p) => (
-            <button
-              key={p.id}
-              className={`opt st-${p.status}`}
-              onClick={() => {
-                setOpen(false);
-                navigate(`/project/${p.id}`);
-              }}
-            >
-              <span className="status-dot" />
-              <span className="grow" style={{ minWidth: 0 }}>
-                <div className="ellipsis" style={{ fontWeight: 600 }}>
-                  {p.projectName}
-                </div>
-                <div className="small faint ellipsis">
-                  {p.clientName} · {p.location}
-                </div>
-              </span>
-              <span className="small faint nowrap">{STATUS_LABEL[p.status]}</span>
-            </button>
-          ))}
-          {results.length > 0 && (
-            <>
-              <div className="menu-sep" />
-              <button className="opt" onClick={showAll}>
-                <Search size={14} /> Xem tất cả kết quả trong “Tất cả mục”
-              </button>
-            </>
-          )}
-        </div>
-      )}
-    </div>
-  );
-}
 
 function Shell() {
   const { ready, loadError, settings, updateSettings } = useAppData();
@@ -155,6 +75,7 @@ function Shell() {
             <Route path="/knowledge" element={<KnowledgeHomePage />} />
             <Route path="/knowledge/:brandId" element={<KnowledgeBrandPage />} />
             <Route path="/calendar" element={<CalendarPage />} />
+            <Route path="/search" element={<SearchPage key={location.key} />} />
             <Route path="/ai" element={<AiAssistantPage />} />
             <Route path="/settings" element={<SettingsPage />} />
             <Route path="*" element={<div className="empty">Không tìm thấy trang.</div>} />

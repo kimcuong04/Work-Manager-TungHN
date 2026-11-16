@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { formatDate } from '../../shared/dates';
-import type { CalendarColor, CalendarEvent, CalendarEventInput, CalendarEventKind, CalendarQuery, Project, ProjectInput } from '../../shared/types';
+import type { CalendarColor, CalendarEvent, CalendarEventInput, CalendarEventKind, CalendarQuery, Project } from '../../shared/types';
 import { hasErrors, validateCalendarEventInput } from '../../shared/validation';
 import { AppError, now, str, strOrNull, todayOf, type Ctx } from '../context';
 
@@ -138,16 +138,20 @@ export function addProjectStartEvent(ctx: Ctx, projectId: string, name: string, 
   });
 }
 
-/** Ngày tiếp nhận/tên dự án đổi thì sự kiện "Bắt đầu dự án" đi theo; tiêu đề người dùng đã tự sửa thì giữ. */
-export function syncProjectStartEvent(ctx: Ctx, before: Project, after: { projectName: string; receivedDate: string }): void {
+/**
+ * Ngày bắt đầu/tên dự án đổi thì sự kiện "Bắt đầu dự án" đi theo; tiêu đề người dùng đã tự sửa thì giữ.
+ * Dự án trước chưa có ngày bắt đầu mà nay có thì thêm sự kiện; xóa ngày bắt đầu thì giữ sự kiện cũ.
+ */
+export function syncProjectStartEvent(ctx: Ctx, before: Project, after: { projectName: string; receivedDate: string | null }): void {
   const rows = ctx.db.all<{ id: string; title: string; event_date: string }>(
     `SELECT id, title, event_date FROM calendar_events WHERE project_id = ? AND kind = 'PROJECT_START'`,
     [before.id],
   );
   const stamp = now();
+  if (!rows.length && !before.receivedDate && after.receivedDate) addProjectStartEvent(ctx, before.id, after.projectName, after.receivedDate);
   for (const r of rows) {
     const title = r.title === before.projectName ? after.projectName : r.title;
-    const date = r.event_date === before.receivedDate ? after.receivedDate : r.event_date;
+    const date = after.receivedDate && r.event_date === before.receivedDate ? after.receivedDate : r.event_date;
     if (title !== r.title || date !== r.event_date)
       ctx.db.run('UPDATE calendar_events SET title = ?, event_date = ?, updated_at = ? WHERE id = ?', [title, date, stamp, r.id]);
   }
@@ -160,18 +164,36 @@ export function hasProjectStartEvent(ctx: Ctx, projectId: string): boolean {
 
 type NameLookup = (table: string, id: string | null) => string;
 
+export interface ChangedProject {
+  stt: number;
+  projectName: string;
+  clientId: string | null;
+  siId: string | null;
+  brandIds: string[];
+  designUnitId: string | null;
+  salespersonId: string | null;
+  stageId: string | null;
+  receivedDate: string | null;
+  dueDate: string | null;
+  priorityPoint: number;
+  fileName: string | null;
+}
+
 /** Tóm tắt những gì đổi giữa bản cũ và bản mới của dự án, mỗi dòng một trường. */
-export function describeProjectChanges(before: Project, after: ProjectInput, lookup: NameLookup): string[] {
+export function describeProjectChanges(before: Project, after: ChangedProject, lookup: NameLookup): string[] {
   const lines: string[] = [];
   const cmp = (label: string, a: string, b: string) => {
     if (a !== b) lines.push(`${label}: ${a || '—'} → ${b || '—'}`);
   };
+  if (before.stt !== after.stt) lines.push(`STT: ${before.stt} → ${after.stt}`);
   cmp('Tên dự án', before.projectName, after.projectName);
-  cmp('CĐT', before.clientName, lookup('clients', after.clientId));
+  cmp('Tên SI', before.siName ?? '', lookup('si_partners', after.siId));
+  cmp('Hãng', before.brands.map((b) => b.name).join(', '), after.brandIds.map((b) => lookup('brands', b)).join(', '));
+  cmp('Sale', before.salespersonName ?? '', lookup('salespersons', after.salespersonId));
+  cmp('EU', before.clientName ?? '', lookup('clients', after.clientId));
   cmp('Đơn vị thiết kế', before.designUnitName ?? '', lookup('design_units', after.designUnitId));
-  cmp('Salesperson', before.salespersonName ?? '', lookup('salespersons', after.salespersonId));
   cmp('Giai đoạn', before.stageName ?? '', lookup('project_stages', after.stageId));
-  cmp('Ngày tiếp nhận', formatDate(before.receivedDate), formatDate(after.receivedDate));
+  cmp('Ngày bắt đầu', formatDate(before.receivedDate), formatDate(after.receivedDate));
   cmp('Ngày tới hạn', formatDate(before.dueDate), formatDate(after.dueDate));
   if (before.priorityPoint !== after.priorityPoint) lines.push(`Priority: ${before.priorityPoint} → ${after.priorityPoint}`);
   cmp('File liên kết', before.fileName ?? '', after.fileName ?? '');

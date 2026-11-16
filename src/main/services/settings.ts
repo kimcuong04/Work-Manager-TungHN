@@ -10,6 +10,7 @@ const KEY_MAP: Record<keyof SettingsPatch, string> = {
   xlsxMaxMb: 'xlsx_max_mb',
   xlsxMaxRows: 'xlsx_max_rows',
   autoUpdate: 'auto_update',
+  projectRootDir: 'project_root_dir',
 };
 
 export function getSettings({ db }: Ctx): AppSettings {
@@ -27,6 +28,7 @@ export function getSettings({ db }: Ctx): AppSettings {
     xlsxMaxMb: num('xlsx_max_mb', 20),
     xlsxMaxRows: num('xlsx_max_rows', 20000),
     autoUpdate: m.get('auto_update') !== 'false',
+    projectRootDir: m.get('project_root_dir') || null,
     updatedAt: rows.reduce((a, r) => (r.updated_at > a ? r.updated_at : a), ''),
   };
 }

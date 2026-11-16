@@ -335,7 +335,10 @@ export function SearchableSelect({
   clearable = true,
   createLabel = 'Thêm mới',
   onBlur,
+  keepOrder,
 }: {
+  /** Giữ thứ tự options truyền vào (ví dụ dự án vừa sửa lên đầu) thay vì xếp A–Z. */
+  keepOrder?: boolean;
   options: Option[];
   value: string | null;
   onChange: (id: string | null) => void;
@@ -365,8 +368,8 @@ export function SearchableSelect({
     const nq = normalizeText(q);
     return options
       .filter((o) => (!o.inactive || o.id === value) && (!nq || normalizeText(o.name).includes(nq)))
-      .sort((a, b) => compareVi(a.name, b.name));
-  }, [options, q, value]);
+      .sort((a, b) => (keepOrder ? 0 : compareVi(a.name, b.name)));
+  }, [options, q, value, keepOrder]);
   const exact = q.trim() ? options.find((o) => nameKey(o.name) === nameKey(q)) : undefined;
   const canCreate = !!onCreate && !!q.trim() && !exact;
   const total = shown.length + (canCreate ? 1 : 0);
@@ -502,16 +505,26 @@ export function shortenPath(p: string, max = 60): string {
 /** Ẩn/hiện cột của bảng; danh sách cột ẩn do nơi dùng lưu (localStorage). */
 export function ColumnToggle({ columns, hidden, onChange }: { columns: { key: string; label: string }[]; hidden: string[]; onChange: (v: string[]) => void }) {
   const [open, setOpen] = useState(false);
+  const [alignRight, setAlignRight] = useState(true);
   const ref = useRef<HTMLDivElement>(null);
   useClickOutside(ref, () => setOpen(false), open);
   const hiddenCount = columns.filter((c) => hidden.includes(c.key)).length;
   return (
     <div className="pop-anchor" ref={ref}>
-      <button className="btn" onClick={() => setOpen((o) => !o)} aria-expanded={open}>
+      <button
+        className="btn"
+        onClick={() => {
+          // Nút nằm sát bên trái thì mở popover sang phải để không bị sidebar che.
+          const r = ref.current?.getBoundingClientRect();
+          setAlignRight(!r || r.right > 520);
+          setOpen((o) => !o);
+        }}
+        aria-expanded={open}
+      >
         <Columns3 size={15} /> Cột {hiddenCount > 0 && `(${columns.length - hiddenCount}/${columns.length})`}
       </button>
       {open && (
-        <div className="popover right" style={{ minWidth: 200 }}>
+        <div className={`popover ${alignRight ? 'right' : ''}`} style={{ minWidth: 220, maxHeight: 420, overflow: 'auto' }}>
           {columns.map((c) => (
             <label key={c.key} className="opt" style={{ cursor: 'pointer' }}>
               <input type="checkbox" checked={!hidden.includes(c.key)} onChange={() => onChange(hidden.includes(c.key) ? hidden.filter((h) => h !== c.key) : [...hidden, c.key])} />
@@ -547,5 +560,112 @@ export function SortHeader({
         {active && <span className="sort-arrow">{dir === 'asc' ? '▲' : '▼'}</span>}
       </span>
     </th>
+  );
+}
+
+/** Chọn nhiều mục (ví dụ nhiều Hãng cho một dự án) có ô tìm và thêm mới ngay. */
+export function MultiSearchSelect({
+  options,
+  value,
+  onChange,
+  onCreate,
+  placeholder,
+  createLabel = 'Thêm mới',
+}: {
+  options: Option[];
+  value: string[];
+  onChange: (ids: string[]) => void;
+  onCreate?: (name: string) => Promise<string | null>;
+  placeholder?: string;
+  createLabel?: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const [q, setQ] = useState('');
+  const [busy, setBusy] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+  useClickOutside(ref, () => setOpen(false), open);
+  const byId = new Map(options.map((o) => [o.id, o]));
+  const nq = normalizeText(q);
+  const shown = options.filter((o) => (!o.inactive || value.includes(o.id)) && (!nq || normalizeText(o.name).includes(nq))).sort((a, b) => compareVi(a.name, b.name));
+  const exact = q.trim() ? options.find((o) => nameKey(o.name) === nameKey(q)) : undefined;
+  const toggle = (id: string) => onChange(value.includes(id) ? value.filter((v) => v !== id) : [...value, id]);
+  const create = async () => {
+    if (!onCreate || busy || !q.trim()) return;
+    if (exact) {
+      if (!value.includes(exact.id)) onChange([...value, exact.id]);
+      setQ('');
+      return;
+    }
+    setBusy(true);
+    try {
+      const id = await onCreate(q.trim());
+      if (id) {
+        onChange([...value, id]);
+        setQ('');
+      }
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <div className="pop-anchor" ref={ref}>
+      <div className="multi-input" onClick={() => (setOpen(true), inputRef.current?.focus())}>
+        {value.map((id) => (
+          <span key={id} className="chip">
+            {byId.get(id)?.name ?? '…'}
+            <button
+              type="button"
+              aria-label={`Bỏ ${byId.get(id)?.name ?? ''}`}
+              onClick={(e) => {
+                e.stopPropagation();
+                toggle(id);
+              }}
+            >
+              <X size={12} />
+            </button>
+          </span>
+        ))}
+        <input
+          ref={inputRef}
+          role="combobox"
+          aria-expanded={open}
+          value={q}
+          placeholder={value.length ? '' : placeholder ?? 'Chọn…'}
+          onFocus={() => setOpen(true)}
+          onChange={(e) => {
+            setQ(e.target.value);
+            setOpen(true);
+          }}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') {
+              e.preventDefault();
+              if (shown.length === 1 && !value.includes(shown[0].id)) {
+                toggle(shown[0].id);
+                setQ('');
+              } else void create();
+            }
+            if (e.key === 'Backspace' && !q && value.length) onChange(value.slice(0, -1));
+            if (e.key === 'Escape') setOpen(false);
+          }}
+        />
+      </div>
+      {open && (
+        <div className="popover" style={{ minWidth: 260, maxHeight: 300, overflow: 'auto' }}>
+          {shown.length === 0 && !q.trim() && <div className="opt-empty">Chưa có mục nào</div>}
+          {shown.map((o) => (
+            <button type="button" key={o.id} className={`opt ${value.includes(o.id) ? 'selected' : ''}`} onClick={() => toggle(o.id)} role="menuitemcheckbox" aria-checked={value.includes(o.id)}>
+              <span className={`check-box ${value.includes(o.id) ? 'on' : ''}`}>{value.includes(o.id) && <Check size={12} />}</span>
+              <span className={o.inactive ? 'faint' : ''}>{o.name}</span>
+            </button>
+          ))}
+          {onCreate && q.trim() && !exact && (
+            <button type="button" className="opt add" onClick={() => void create()} disabled={busy}>
+              <Plus size={14} /> {createLabel} “{q.trim()}”
+            </button>
+          )}
+        </div>
+      )}
+    </div>
   );
 }

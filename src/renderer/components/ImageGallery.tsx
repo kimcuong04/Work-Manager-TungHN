@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ChevronLeft, ChevronRight, ClipboardPaste, Copy, ImagePlus, Trash2, X } from 'lucide-react';
 import type { ImageRef } from '../../shared/types';
-import { api, imgUrl } from '../api';
+import { api, droppedPaths, imgUrl } from '../api';
 import { useUi } from '../state/ui';
 import { useEscape } from './Modal';
 import { formatBytes } from './common';
@@ -82,6 +82,7 @@ export function ImageGallery({
 }) {
   const [preview, setPreview] = useState<number | null>(null);
   const [busy, setBusy] = useState(false);
+  const [dragOver, setDragOver] = useState(false);
   const { toastError, toast } = useUi();
   const latest = useRef({ images, onChange });
   latest.current = { images, onChange };
@@ -121,7 +122,26 @@ export function ImageGallery({
   }, [editable, append]);
 
   return (
-    <div className={`thumbs ${large ? 'lg' : ''}`}>
+    <div
+      className={`thumbs ${large ? 'lg' : ''} ${editable ? 'droppable' : ''} ${dragOver ? 'drop-over' : ''}`}
+      onDragOver={(e) => {
+        if (!editable || !e.dataTransfer.types.includes('Files')) return;
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'copy';
+        if (!dragOver) setDragOver(true);
+      }}
+      onDragLeave={(e) => {
+        if (!e.currentTarget.contains(e.relatedTarget as Node)) setDragOver(false);
+      }}
+      onDrop={(e) => {
+        if (!editable) return;
+        e.preventDefault();
+        setDragOver(false);
+        const paths = droppedPaths(e.dataTransfer);
+        if (paths.length) void append(() => api.importDroppedImages(paths), false);
+        else toast('warn', 'Không đọc được file kéo vào — hãy kéo file ảnh từ thư mục trên máy.');
+      }}
+    >
       {images.map((img, i) => (
         <div key={img.storageKey} style={{ position: 'relative' }}>
           <button type="button" className="thumb" onClick={() => setPreview(i)} title={img.fileName} aria-label={`Xem ảnh ${img.fileName}`}>
@@ -144,6 +164,9 @@ export function ImageGallery({
           <button type="button" className="thumb-add" onClick={() => void append(() => api.pickImages(), false)} disabled={busy}>
             <ImagePlus size={20} />
             {busy ? 'Đang thêm…' : 'Thêm ảnh'}
+            <span className="faint" style={{ fontSize: 11 }}>
+              hoặc kéo thả
+            </span>
           </button>
           <button
             type="button"

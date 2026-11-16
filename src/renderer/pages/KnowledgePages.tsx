@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router';
-import { BookMarked, ExternalLink, Globe, GraduationCap, Image as ImageIcon, Maximize2, Pencil, Plus, Tag, Trash2, X } from 'lucide-react';
+import { BookMarked, FolderOpen, Globe, GraduationCap, Image as ImageIcon, Maximize2, Pencil, Plus, Tag, Trash2, X } from 'lucide-react';
 import { formatDate, formatDateTime, inRange, todayISO } from '../../shared/dates';
 import { buildHaystack, compareVi, matchesQuery, normalizeText } from '../../shared/text';
 import type { KnowledgeInput, KnowledgeRecord } from '../../shared/types';
@@ -8,11 +8,12 @@ import { hasErrors, validateKnowledgeInput, validateMasterName } from '../../sha
 import { api } from '../api';
 import { Breadcrumbs, DateInput, EmptyState, Field, SearchInput, SearchableSelect } from '../components/common';
 import { ImageGallery } from '../components/ImageGallery';
+import { LocalLinkButton, LocalLinkField, WEB_LINK_HINT, WebLinkButton } from '../components/LinkFields';
 import { Modal, SidePanel } from '../components/Modal';
 import { useLocalState, useSessionState } from '../lib/persist';
 import { useAppData } from '../state/AppData';
 import { usePageTitle, useUi } from '../state/ui';
-import { useOpenUrl } from './ExperiencePages';
+import { useOpenLocal, useOpenUrl } from './ExperiencePages';
 import { DateFilterControls, resolveDateRange, useBrandOptions } from './WarrantyPage';
 
 /** Mục không gắn Hãng nằm ở "Kiến thức chung" (đường dẫn /knowledge/general). */
@@ -33,9 +34,10 @@ function KnowledgeForm({ defaultBrandId, record, onClose, onSaved }: { defaultBr
           deviceModel: record.deviceModel,
           content: record.content,
           webUrl: record.webUrl,
+          localPath: record.localPath,
           images: record.images,
         }
-      : { brandId: defaultBrandId, knowledgeDate: todayISO(), title: '', deviceModel: '', content: '', webUrl: '', images: [] },
+      : { brandId: defaultBrandId, knowledgeDate: todayISO(), title: '', deviceModel: '', content: '', webUrl: '', localPath: '', images: [] },
   );
   const [form, setForm] = useState(initial);
   const [touched, setTouched] = useState<Record<string, boolean>>({});
@@ -108,24 +110,23 @@ function KnowledgeForm({ defaultBrandId, record, onClose, onSaved }: { defaultBr
         <Field label="Nội dung" error={err('content')}>
           <textarea className="textarea" rows={10} value={form.content} onChange={(e) => set('content', e.target.value)} placeholder="Ghi chú kiến thức, các bước cấu hình, thông số, lưu ý…" />
         </Field>
-        <Field label="Link web" error={err('webUrl')} hint="Chỉ chấp nhận http:// hoặc https://, mở bằng trình duyệt mặc định.">
-          <input className={`input ${err('webUrl') ? 'invalid' : ''}`} value={form.webUrl} onChange={(e) => set('webUrl', e.target.value)} onBlur={() => touch('webUrl')} placeholder="https://" />
+        <Field label="Hyperlink (file / thư mục trên máy)">
+          <LocalLinkField value={form.localPath ?? ''} onChange={(v) => set('localPath', v)} />
+        </Field>
+        <Field label="Link website" error={err('webUrl')} hint={WEB_LINK_HINT}>
+          <input
+            className={`input ${err('webUrl') ? 'invalid' : ''}`}
+            value={form.webUrl}
+            onChange={(e) => set('webUrl', e.target.value)}
+            onBlur={() => touch('webUrl')}
+            placeholder="Link hoặc từ khóa tìm kiếm"
+          />
         </Field>
         <Field label="Ảnh" hint="Bấm Thêm ảnh, hoặc chụp/copy ảnh rồi nhấn Ctrl+V để dán thẳng vào đây.">
           <ImageGallery images={form.images} editable onChange={(v) => set('images', v)} />
         </Field>
       </div>
     </Modal>
-  );
-}
-
-function LinkButton({ url }: { url: string }) {
-  const openUrl = useOpenUrl();
-  if (!url) return <span className="faint">—</span>;
-  return (
-    <button className="btn sm" onClick={() => openUrl(url)} title={url}>
-      <ExternalLink size={13} /> <span className="ellipsis" style={{ maxWidth: 280 }}>{url}</span>
-    </button>
   );
 }
 
@@ -138,9 +139,13 @@ function KnowledgeMeta({ r }: { r: KnowledgeRecord }) {
       <span>{scopeName(r.brandName)}</span>
       <span className="k">Mode Device</span>
       <span>{r.deviceModel || <span className="faint">—</span>}</span>
-      <span className="k">Link web</span>
+      <span className="k">Hyperlink</span>
       <span>
-        <LinkButton url={r.webUrl} />
+        <LocalLinkButton path={r.localPath} />
+      </span>
+      <span className="k">Link website</span>
+      <span>
+        <WebLinkButton text={r.webUrl} />
       </span>
     </div>
   );
@@ -398,6 +403,7 @@ function KnowledgeBrandView({ scope }: { scope: string }) {
   const [detailId, setDetailId] = useState<string | null>((location.state as { select?: string } | null)?.select ?? null);
   const [viewId, setViewId] = useState<string | null>(null);
   const openUrl = useOpenUrl();
+  const openLocal = useOpenLocal();
 
   const load = useCallback(() => {
     api
@@ -533,8 +539,13 @@ function KnowledgeBrandView({ scope }: { scope: string }) {
                     </td>
                     <td onClick={(e) => e.stopPropagation()}>
                       <div className="row" style={{ gap: 6 }}>
+                        {r.localPath && (
+                          <button className="btn sm icon" title={r.localPath} aria-label="Mở hyperlink" onClick={() => openLocal(r.localPath)}>
+                            <FolderOpen size={14} />
+                          </button>
+                        )}
                         {r.webUrl && (
-                          <button className="btn sm icon" title={r.webUrl} aria-label="Mở link web" onClick={() => openUrl(r.webUrl)}>
+                          <button className="btn sm icon" title={r.webUrl} aria-label="Mở link website" onClick={() => openUrl(r.webUrl)}>
                             <Globe size={14} />
                           </button>
                         )}

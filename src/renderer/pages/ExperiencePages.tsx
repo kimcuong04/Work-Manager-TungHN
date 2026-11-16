@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router';
-import { ExternalLink, Globe, Image as ImageIcon, Lightbulb, Pencil, Plus, Tag, Trash2, X } from 'lucide-react';
+import { FolderOpen, Globe, Image as ImageIcon, Lightbulb, Pencil, Plus, Tag, Trash2, X } from 'lucide-react';
 import { formatDate, formatDateTime, inRange, todayISO } from '../../shared/dates';
 import { buildHaystack, compareVi, matchesQuery, normalizeText } from '../../shared/text';
 import type { ExperienceInput, ExperienceRecord, MasterItem } from '../../shared/types';
@@ -8,6 +8,7 @@ import { hasErrors, validateExperienceInput, validateMasterName } from '../../sh
 import { api } from '../api';
 import { Breadcrumbs, DateInput, EmptyState, Field, SearchInput, SearchableSelect } from '../components/common';
 import { ImageGallery } from '../components/ImageGallery';
+import { LocalLinkButton, LocalLinkField, WEB_LINK_HINT, WebLinkButton } from '../components/LinkFields';
 import { Modal, SidePanel } from '../components/Modal';
 import { useLocalState, useSessionState } from '../lib/persist';
 import { useAppData } from '../state/AppData';
@@ -19,6 +20,11 @@ type DateMode = Parameters<typeof resolveDateRange>[0];
 export function useOpenUrl() {
   const { toastError } = useUi();
   return (url: string) => api.openExternalUrl(url).catch(toastError);
+}
+
+export function useOpenLocal() {
+  const { toastError } = useUi();
+  return (p: string) => api.openLocalLink(p).catch(toastError);
 }
 
 export function ExperienceHomePage() {
@@ -136,9 +142,10 @@ function ExperienceForm({ brand, record, onClose, onSaved }: { brand: MasterItem
           deviceModel: record.deviceModel,
           event: record.event,
           webUrl: record.webUrl,
+          localPath: record.localPath,
           images: record.images,
         }
-      : { brandId: brand.id, experienceDate: todayISO(), projectId: null, projectText: '', deviceModel: '', event: '', webUrl: '', images: [] },
+      : { brandId: brand.id, experienceDate: todayISO(), projectId: null, projectText: '', deviceModel: '', event: '', webUrl: '', localPath: '', images: [] },
   );
   const [form, setForm] = useState(initial);
   const [linkMode, setLinkMode] = useState<'internal' | 'text'>(initial.projectId ? 'internal' : 'text');
@@ -236,13 +243,16 @@ function ExperienceForm({ brand, record, onClose, onSaved }: { brand: MasterItem
             placeholder="Mô tả sự kiện, tình huống hoặc kinh nghiệm…"
           />
         </Field>
-        <Field label="Link web" error={err('webUrl')} hint="Chỉ chấp nhận http:// hoặc https://, mở bằng trình duyệt mặc định.">
+        <Field label="Hyperlink (file / thư mục trên máy)">
+          <LocalLinkField value={form.localPath ?? ''} onChange={(v) => set('localPath', v)} />
+        </Field>
+        <Field label="Link website" error={err('webUrl')} hint={WEB_LINK_HINT}>
           <input
             className={`input ${err('webUrl') ? 'invalid' : ''}`}
             value={form.webUrl}
             onChange={(e) => set('webUrl', e.target.value)}
             onBlur={() => setTouched((t) => ({ ...t, webUrl: true }))}
-            placeholder="https://"
+            placeholder="Link hoặc từ khóa tìm kiếm"
           />
         </Field>
         <Field label="Image">
@@ -270,7 +280,6 @@ function ProjectCell({ r }: { r: ExperienceRecord }) {
 }
 
 function ExperienceDetail({ r, onClose, onEdit, onDelete }: { r: ExperienceRecord; onClose: () => void; onEdit: () => void; onDelete: () => void }) {
-  const openUrl = useOpenUrl();
   return (
     <SidePanel
       title={`${r.brandName} · ${formatDate(r.experienceDate)}`}
@@ -299,15 +308,13 @@ function ExperienceDetail({ r, onClose, onEdit, onDelete }: { r: ExperienceRecor
         </span>
         <span className="k">Mode Device</span>
         <span>{r.deviceModel || <span className="faint">—</span>}</span>
-        <span className="k">Link web</span>
+        <span className="k">Hyperlink</span>
         <span>
-          {r.webUrl ? (
-            <button className="btn sm" onClick={() => openUrl(r.webUrl)} title={r.webUrl}>
-              <ExternalLink size={13} /> <span className="ellipsis" style={{ maxWidth: 280 }}>{r.webUrl}</span>
-            </button>
-          ) : (
-            <span className="faint">—</span>
-          )}
+          <LocalLinkButton path={r.localPath} />
+        </span>
+        <span className="k">Link website</span>
+        <span>
+          <WebLinkButton text={r.webUrl} />
         </span>
       </div>
       <h3 className="card-title" style={{ marginTop: 18, fontSize: 14 }}>
@@ -352,6 +359,7 @@ function ExperienceBrandView({ brandId }: { brandId: string }) {
   const [form, setForm] = useState<{ record?: ExperienceRecord } | null>(null);
   const [detailId, setDetailId] = useState<string | null>(null);
   const openUrl = useOpenUrl();
+  const openLocal = useOpenLocal();
 
   const load = useCallback(() => {
     setRecords(null);
@@ -482,8 +490,13 @@ function ExperienceBrandView({ brandId }: { brandId: string }) {
                   </td>
                   <td onClick={(e) => e.stopPropagation()}>
                     <div className="row" style={{ gap: 6 }}>
+                      {r.localPath && (
+                        <button className="btn sm icon" title={r.localPath} aria-label="Mở hyperlink" onClick={() => openLocal(r.localPath)}>
+                          <FolderOpen size={14} />
+                        </button>
+                      )}
                       {r.webUrl && (
-                        <button className="btn sm icon" title={r.webUrl} aria-label="Mở link web" onClick={() => openUrl(r.webUrl)}>
+                        <button className="btn sm icon" title={r.webUrl} aria-label="Mở link website" onClick={() => openUrl(r.webUrl)}>
                           <Globe size={14} />
                         </button>
                       )}

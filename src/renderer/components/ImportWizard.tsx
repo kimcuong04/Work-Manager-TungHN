@@ -1,28 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { AlertTriangle, FileSpreadsheet, Info, RefreshCw, Wand2 } from 'lucide-react';
 import type { WorkbookData, WorkbookSheet } from '../../shared/types';
-import {
-  INFO_FIELDS,
-  ITEM_FIELDS,
-  REQ_FIELDS,
-  autoDetect,
-  buildImport,
-  cellText,
-  colName,
-  configFromMappings,
-  configToMappings,
-  detectTableEnd,
-  getSheet,
-  type ImportConfig,
-  type InfoField,
-} from '../../shared/xlsxMapping';
+import { ITEM_FIELDS, autoDetect, buildImport, cellText, colName, configFromMappings, configToMappings, detectTableEnd, getSheet, type ImportConfig } from '../../shared/xlsxMapping';
 import { api, errorMessage } from '../api';
 import { useUi } from '../state/ui';
 import { formatBytes } from './common';
 import { ImportedContent } from './ImportedContent';
 import { Modal } from './Modal';
-
-const GRID_ROWS = 400;
 
 function ColSelect({
   sheet,
@@ -82,55 +66,13 @@ function SheetSelect({ sheets, value, onChange }: { sheets: WorkbookSheet[]; val
   );
 }
 
-function SheetGrid({ sheet, config }: { sheet: WorkbookSheet; config: ImportConfig }) {
-  const rowClass = (r: number) => {
-    const { info, requirements: rq, items } = config;
-    if (items.enabled && items.sheet === sheet.name) {
-      if (r === items.headerRow) return 'm-item m-head';
-      if (r > items.headerRow && r <= items.endRow) return 'm-item';
-    }
-    if (rq.enabled && rq.sheet === sheet.name) {
-      if (r === rq.headerRow) return 'm-req m-head';
-      if (r > rq.headerRow && r <= rq.endRow) return 'm-req';
-    }
-    if (info.enabled && info.sheet === sheet.name && r >= info.startRow && r <= info.endRow) return 'm-info';
-    return '';
-  };
-  const cols = Math.max(sheet.colCount, 1);
-  return (
-    <div className="table-wrap" style={{ flex: 1 }}>
-      <table className="sheet-grid">
-        <thead>
-          <tr>
-            <th />
-            {Array.from({ length: cols }, (_, c) => (
-              <th key={c}>{colName(c)}</th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {sheet.rows.slice(0, GRID_ROWS).map((row, r) => (
-            <tr key={r} className={rowClass(r)}>
-              <td className="rn">{r + 1}</td>
-              {Array.from({ length: cols }, (_, c) => {
-                const t = cellText(row[c]);
-                return (
-                  <td key={c} title={t.length > 30 ? t : undefined}>
-                    {t}
-                  </td>
-                );
-              })}
-            </tr>
-          ))}
-        </tbody>
-      </table>
-      {sheet.rows.length > GRID_ROWS && <div className="faint small" style={{ padding: 8 }}>Chỉ hiển thị {GRID_ROWS} dòng đầu để xem trước; import vẫn dùng toàn bộ vùng đã chọn.</div>}
-    </div>
-  );
+/** Chỉ import bảng thiết bị: tắt hẳn phần Thông tin dự án / Nội dung yêu cầu của bộ nhận diện. */
+function itemsOnly(c: ImportConfig): ImportConfig {
+  return { ...c, info: { ...c.info, enabled: false }, requirements: { ...c.requirements, enabled: false } };
 }
 
 /**
- * Luồng import: Chọn file → Đọc workbook → Chọn sheet/vùng + mapping → Preview → Xác nhận.
+ * Luồng import: Chọn file → Đọc workbook → Chọn sheet/vùng + map cột thiết bị → Preview → Xác nhận.
  * Chỉ ghi khi người dùng xác nhận; lỗi giữa chừng không đụng dữ liệu import cũ.
  */
 export function ImportWizard({ projectId, hasExisting, onClose, onDone }: { projectId: string; hasExisting: boolean; onClose: () => void; onDone: () => void }) {
@@ -141,10 +83,15 @@ export function ImportWizard({ projectId, hasExisting, onClose, onDone }: { proj
   const [config, setConfig] = useState<ImportConfig | null>(null);
   const [notes, setNotes] = useState<string[]>([]);
   const [usedSaved, setUsedSaved] = useState(false);
-  const [viewSheet, setViewSheet] = useState('');
-  const [tab, setTab] = useState<'sheet' | 'preview'>('preview');
   const [saveMapping, setSaveMapping] = useState(true);
   const [saving, setSaving] = useState(false);
+
+  const applyAuto = (sheets: WorkbookSheet[]) => {
+    const auto = autoDetect(sheets);
+    setConfig(itemsOnly(auto.config));
+    setNotes(auto.config.items.enabled ? [] : ['Không nhận diện được bảng thiết bị — hãy chọn sheet, dòng header và cột ở bên trái.']);
+    setUsedSaved(false);
+  };
 
   const load = async () => {
     setPhase('loading');
@@ -154,13 +101,12 @@ export function ImportWizard({ projectId, hasExisting, onClose, onDone }: { proj
       if (!path) return onClose();
       const data = await api.readWorkbook(path);
       const saved = configFromMappings(data.sheets, data.savedMappings);
-      const auto = autoDetect(data.sheets);
       setWb(data);
-      setConfig(saved ?? auto.config);
-      setUsedSaved(!!saved);
-      setNotes(saved ? [] : auto.notes);
-      setViewSheet(data.sheets.find((s) => s.rowCount > 0)?.name ?? data.sheets[0].name);
-      setTab(saved || auto.notes.length < 3 ? 'preview' : 'sheet');
+      if (saved && saved.items.enabled) {
+        setConfig(itemsOnly(saved));
+        setNotes([]);
+        setUsedSaved(true);
+      } else applyAuto(data.sheets);
       setPhase('map');
     } catch (e) {
       setError(errorMessage(e));
@@ -208,24 +154,8 @@ export function ImportWizard({ projectId, hasExisting, onClose, onDone }: { proj
 
   const sheets = wb.sheets;
   const upd = (fn: (c: ImportConfig) => ImportConfig) => setConfig((c) => (c ? fn(structuredClone(c)) : c));
-  const infoSheet = getSheet(sheets, config.info.sheet);
-  const reqSheet = getSheet(sheets, config.requirements.sheet);
   const itemSheet = getSheet(sheets, config.items.sheet);
-  const hasData = built.info.some((r) => r.fieldValue.trim()) || built.requirements.length > 0 || built.items.length > 0;
-
-  const infoRowOptions: { r: number; label: string }[] = [];
-  if (infoSheet)
-    for (let r = config.info.startRow; r <= Math.min(config.info.endRow, config.info.startRow + 200); r++) {
-      const k = cellText(infoSheet.rows[r]?.[config.info.keyCol]);
-      if (k) infoRowOptions.push({ r, label: `Dòng ${r + 1}: ${k.slice(0, 40)}` });
-    }
-
-  const redetect = () => {
-    const auto = autoDetect(sheets);
-    setConfig(auto.config);
-    setNotes(auto.notes);
-    setUsedSaved(false);
-  };
+  const hasData = built.items.length > 0;
 
   const commit = async () => {
     if (!hasData) return;
@@ -233,7 +163,7 @@ export function ImportWizard({ projectId, hasExisting, onClose, onDone }: { proj
       hasExisting &&
       !(await confirm({
         title: 'Thay thế dữ liệu import?',
-        message: 'Project này đã có dữ liệu Excel. Nội dung import hiện tại sẽ được thay thế hoàn toàn bằng dữ liệu mới. Tiếp tục?',
+        message: 'Project này đã có bảng thiết bị import. Bảng hiện tại sẽ được thay thế hoàn toàn bằng dữ liệu mới. Tiếp tục?',
         confirmText: 'Thay thế',
         danger: true,
       }))
@@ -244,14 +174,14 @@ export function ImportWizard({ projectId, hasExisting, onClose, onDone }: { proj
       await api.commitImport(projectId, {
         sourceFileName: wb.fileName,
         sourcePath: wb.filePath,
-        sheetNames: [...new Set([config.info, config.requirements, config.items].filter((s) => s.enabled).map((s) => s.sheet))],
+        sheetNames: [config.items.sheet],
         workbookSignature: wb.signature,
-        info: built.info,
-        requirements: built.requirements,
+        info: [],
+        requirements: [],
         items: built.items,
         mappings: saveMapping ? configToMappings(config) : [],
       });
-      toast('success', `Đã import ${built.items.length} thiết bị, ${built.requirements.length} lần yêu cầu từ ${wb.fileName}.`);
+      toast('success', `Đã import ${built.items.length} thiết bị từ ${wb.fileName}.`);
       onDone();
       onClose();
     } catch (e) {
@@ -260,14 +190,6 @@ export function ImportWizard({ projectId, hasExisting, onClose, onDone }: { proj
       setSaving(false);
     }
   };
-
-  const sectionHead = (title: string, color: string, enabled: boolean, onToggle: (v: boolean) => void) => (
-    <label className="row" style={{ fontWeight: 650, cursor: 'pointer' }}>
-      <input type="checkbox" checked={enabled} onChange={(e) => onToggle(e.target.checked)} />
-      <span className="legend-dot" style={{ background: color }} />
-      {title}
-    </label>
-  );
 
   return (
     <Modal
@@ -288,7 +210,7 @@ export function ImportWizard({ projectId, hasExisting, onClose, onDone }: { proj
           <button className="btn" onClick={close}>
             Hủy
           </button>
-          <button className="btn primary" disabled={!hasData || saving} onClick={commit} title={hasData ? undefined : 'Chưa có dữ liệu nào được map'}>
+          <button className="btn primary" disabled={!hasData || saving} onClick={commit} title={hasData ? undefined : 'Chưa có dòng thiết bị nào'}>
             {saving ? 'Đang import…' : 'Xác nhận Import'}
           </button>
         </>
@@ -304,7 +226,7 @@ export function ImportWizard({ projectId, hasExisting, onClose, onDone }: { proj
               {sheets.map((s) => `${s.name} (${s.rowCount} dòng × ${s.colCount} cột)`).join(' · ')}
             </div>
             <div className="row" style={{ marginTop: 8 }}>
-              <button className="btn sm" onClick={redetect}>
+              <button className="btn sm" onClick={() => applyAuto(sheets)}>
                 <Wand2 size={13} /> Tự nhận diện lại
               </button>
               <button className="btn sm" onClick={load}>
@@ -330,158 +252,52 @@ export function ImportWizard({ projectId, hasExisting, onClose, onDone }: { proj
           )}
 
           <section className="form-section">
-            {sectionHead('A. Thông tin dự án (key–value)', 'color-mix(in srgb, var(--new) 45%, transparent)', config.info.enabled, (v) =>
-              upd((c) => ((c.info.enabled = v), c)),
-            )}
-            {config.info.enabled && (
-              <div className="stack" style={{ gap: 8, marginTop: 10 }}>
-                <SheetSelect sheets={sheets} value={config.info.sheet} onChange={(v) => upd((c) => ((c.info.sheet = v), (c.info.fieldRows = {}), c))} />
-                <div className="map-grid">
-                  <div className="field">
-                    <label>Cột nhãn</label>
-                    <ColSelect sheet={infoSheet} headerRow={-1} optional={false} value={config.info.keyCol} onChange={(v) => upd((c) => ((c.info.keyCol = v ?? 0), c))} />
-                  </div>
-                  <div className="field">
-                    <label>Cột giá trị</label>
-                    <ColSelect sheet={infoSheet} headerRow={-1} optional={false} value={config.info.valueCol} onChange={(v) => upd((c) => ((c.info.valueCol = v ?? 1), c))} />
-                  </div>
-                  <div className="field">
-                    <label>Từ dòng</label>
-                    <RowInput label="Từ dòng" value={config.info.startRow} onChange={(v) => upd((c) => ((c.info.startRow = v), c))} />
-                  </div>
-                  <div className="field">
-                    <label>Đến dòng</label>
-                    <RowInput label="Đến dòng" value={config.info.endRow} onChange={(v) => upd((c) => ((c.info.endRow = v), c))} />
-                  </div>
+            <h3>Thông tin các thiết bị</h3>
+            <div className="stack" style={{ gap: 8 }}>
+              <div className="field">
+                <label>Sheet</label>
+                <SheetSelect sheets={sheets} value={config.items.sheet} onChange={(v) => upd((c) => ((c.items.enabled = true), (c.items.sheet = v), (c.items.columns = {}), c))} />
+              </div>
+              <div className="map-grid">
+                <div className="field">
+                  <label>Dòng header</label>
+                  <RowInput label="Dòng header" min={0} value={config.items.headerRow} onChange={(v) => upd((c) => ((c.items.enabled = true), (c.items.headerRow = v), c))} />
                 </div>
-                {INFO_FIELDS.map((f) => (
-                  <div key={f.key} className="row">
-                    <span className="small" style={{ width: 120, flexShrink: 0 }}>
-                      {f.label}
-                    </span>
-                    <select
-                      className="select"
-                      value={config.info.fieldRows[f.key as InfoField] ?? ''}
-                      onChange={(e) =>
-                        upd((c) => {
-                          if (e.target.value === '') delete c.info.fieldRows[f.key as InfoField];
-                          else c.info.fieldRows[f.key as InfoField] = Number(e.target.value);
-                          return c;
-                        })
+                <div className="field">
+                  <label>Đến dòng</label>
+                  <div className="row" style={{ gap: 4 }}>
+                    <RowInput label="Đến dòng" value={config.items.endRow} onChange={(v) => upd((c) => ((c.items.endRow = v), c))} />
+                    <button
+                      className="btn icon sm"
+                      title="Tự xác định dòng cuối"
+                      aria-label="Tự xác định dòng cuối"
+                      onClick={() =>
+                        itemSheet && upd((c) => ((c.items.endRow = detectTableEnd(itemSheet, c.items.headerRow, Object.values(c.items.columns) as number[])), c))
                       }
                     >
-                      <option value="">— Không có —</option>
-                      {infoRowOptions.map((o) => (
-                        <option key={o.r} value={o.r}>
-                          {o.label}
-                        </option>
-                      ))}
-                    </select>
+                      <Wand2 size={13} />
+                    </button>
+                  </div>
+                </div>
+                {ITEM_FIELDS.map((f) => (
+                  <div className="field" key={f.key}>
+                    <label>{f.label}</label>
+                    <ColSelect
+                      sheet={itemSheet}
+                      headerRow={config.items.headerRow}
+                      value={config.items.columns[f.key]}
+                      onChange={(v) => upd((c) => ((c.items.enabled = true), (c.items.columns[f.key] = v), c))}
+                    />
                   </div>
                 ))}
-                <label className="row small" style={{ cursor: 'pointer' }}>
-                  <input type="checkbox" checked={config.info.includeExtra} onChange={(e) => upd((c) => ((c.info.includeExtra = e.target.checked), c))} />
-                  Thêm các dòng không map vào bảng như trường bổ sung
-                </label>
               </div>
-            )}
-          </section>
-
-          <section className="form-section">
-            {sectionHead('B. Nội dung yêu cầu', 'color-mix(in srgb, var(--attention) 45%, transparent)', config.requirements.enabled, (v) =>
-              upd((c) => ((c.requirements.enabled = v), c)),
-            )}
-            {config.requirements.enabled && (
-              <div className="stack" style={{ gap: 8, marginTop: 10 }}>
-                <SheetSelect sheets={sheets} value={config.requirements.sheet} onChange={(v) => upd((c) => ((c.requirements.sheet = v), (c.requirements.columns = {}), c))} />
-                <div className="map-grid">
-                  <div className="field">
-                    <label>Dòng header (0 = không có)</label>
-                    <RowInput label="Dòng header" min={0} value={config.requirements.headerRow} onChange={(v) => upd((c) => ((c.requirements.headerRow = v), c))} />
-                  </div>
-                  <div className="field">
-                    <label>Đến dòng</label>
-                    <RowInput label="Đến dòng" value={config.requirements.endRow} onChange={(v) => upd((c) => ((c.requirements.endRow = v), c))} />
-                  </div>
-                  {REQ_FIELDS.map((f) => (
-                    <div className="field" key={f.key}>
-                      <label>
-                        {f.label}
-                        {f.key === 'content' && <span className="req">*</span>}
-                      </label>
-                      <ColSelect
-                        sheet={reqSheet}
-                        headerRow={config.requirements.headerRow}
-                        value={config.requirements.columns[f.key]}
-                        onChange={(v) => upd((c) => ((c.requirements.columns[f.key] = v), c))}
-                      />
-                    </div>
-                  ))}
-                </div>
-                <label className="row small" style={{ cursor: 'pointer' }}>
-                  <input
-                    type="checkbox"
-                    checked={config.requirements.mergeContinuation}
-                    onChange={(e) => upd((c) => ((c.requirements.mergeContinuation = e.target.checked), c))}
-                  />
-                  Dòng không có số “Lần” là phần tiếp theo của lần phía trên
-                </label>
-              </div>
-            )}
-          </section>
-
-          <section className="form-section">
-            {sectionHead('C. Thiết bị / sản phẩm', 'color-mix(in srgb, var(--success) 45%, transparent)', config.items.enabled, (v) =>
-              upd((c) => ((c.items.enabled = v), c)),
-            )}
-            {config.items.enabled && (
-              <div className="stack" style={{ gap: 8, marginTop: 10 }}>
-                <SheetSelect sheets={sheets} value={config.items.sheet} onChange={(v) => upd((c) => ((c.items.sheet = v), (c.items.columns = {}), c))} />
-                <div className="map-grid">
-                  <div className="field">
-                    <label>Dòng header</label>
-                    <RowInput label="Dòng header" min={0} value={config.items.headerRow} onChange={(v) => upd((c) => ((c.items.headerRow = v), c))} />
-                  </div>
-                  <div className="field">
-                    <label>Đến dòng</label>
-                    <div className="row" style={{ gap: 4 }}>
-                      <RowInput label="Đến dòng" value={config.items.endRow} onChange={(v) => upd((c) => ((c.items.endRow = v), c))} />
-                      <button
-                        className="btn icon sm"
-                        title="Tự xác định dòng cuối"
-                        aria-label="Tự xác định dòng cuối"
-                        onClick={() =>
-                          itemSheet &&
-                          upd((c) => ((c.items.endRow = detectTableEnd(itemSheet, c.items.headerRow, Object.values(c.items.columns) as number[])), c))
-                        }
-                      >
-                        <Wand2 size={13} />
-                      </button>
-                    </div>
-                  </div>
-                  {ITEM_FIELDS.map((f) => (
-                    <div className="field" key={f.key}>
-                      <label>{f.label}</label>
-                      <ColSelect sheet={itemSheet} headerRow={config.items.headerRow} value={config.items.columns[f.key]} onChange={(v) => upd((c) => ((c.items.columns[f.key] = v), c))} />
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
+            </div>
           </section>
         </div>
 
         <div className="wizard-right">
-          <div className="row">
-            <div className="tabs small" style={{ marginBottom: 0, flex: 1 }}>
-              <button className={tab === 'preview' ? 'on' : ''} onClick={() => setTab('preview')}>
-                Preview kết quả ({built.items.length} thiết bị · {built.requirements.length} lần yêu cầu)
-              </button>
-              <button className={tab === 'sheet' ? 'on' : ''} onClick={() => setTab('sheet')}>
-                Dữ liệu sheet
-              </button>
-            </div>
-            {tab === 'sheet' && <SheetSelect sheets={sheets} value={viewSheet} onChange={setViewSheet} />}
+          <div className="small" style={{ fontWeight: 650 }}>
+            Preview — {built.items.length} thiết bị
           </div>
           {built.warnings.length > 0 && (
             <div className="alert warn">
@@ -493,30 +309,16 @@ export function ImportWizard({ projectId, hasExisting, onClose, onDone }: { proj
               </ul>
             </div>
           )}
-          {tab === 'sheet' ? (
-            <>
-              <div className="small muted">
-                <span className="legend-dot" style={{ background: 'color-mix(in srgb, var(--new) 45%, transparent)' }} />
-                Thông tin dự án
-                <span className="legend-dot" style={{ background: 'color-mix(in srgb, var(--attention) 45%, transparent)', marginLeft: 12 }} />
-                Nội dung yêu cầu
-                <span className="legend-dot" style={{ background: 'color-mix(in srgb, var(--success) 45%, transparent)', marginLeft: 12 }} />
-                Thiết bị (dòng đậm = header)
+          <div style={{ overflow: 'auto', flex: 1, paddingRight: 4 }}>
+            {!hasData ? (
+              <div className="alert warn">
+                <AlertTriangle size={15} />
+                <div>Chưa có dòng thiết bị nào. Hãy chọn sheet, dòng header và các cột Model / Hãng / Mô tả ở bên trái.</div>
               </div>
-              {getSheet(sheets, viewSheet) && <SheetGrid sheet={getSheet(sheets, viewSheet)!} config={config} />}
-            </>
-          ) : (
-            <div style={{ overflow: 'auto', flex: 1, paddingRight: 4 }}>
-              {!hasData ? (
-                <div className="alert warn">
-                  <AlertTriangle size={15} />
-                  <div>Chưa có dữ liệu nào được map. Hãy chọn sheet, vùng dữ liệu và cột ở bên trái (xem tab “Dữ liệu sheet” để biết số dòng/cột).</div>
-                </div>
-              ) : (
-                <ImportedContent info={built.info} requirements={built.requirements} items={built.items} compact />
-              )}
-            </div>
-          )}
+            ) : (
+              <ImportedContent items={built.items} compact />
+            )}
+          </div>
         </div>
       </div>
     </Modal>

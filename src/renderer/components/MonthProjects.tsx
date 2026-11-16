@@ -1,15 +1,17 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router';
-import { CalendarRange, ChevronLeft, ChevronRight } from 'lucide-react';
+import { CalendarRange, ChevronLeft, ChevronRight, FileDown } from 'lucide-react';
 import { formatDate, monthRange } from '../../shared/dates';
-import { describeRemaining } from '../../shared/status';
+import { STATUS_LABEL, describeRemaining } from '../../shared/status';
+import { CATEGORY_LABEL } from '../../shared/types';
 import { useSessionState } from '../lib/persist';
-import type { ProjectView } from '../lib/projects';
+import { latestNote, type ProjectView } from '../lib/projects';
 import { useAppData } from '../state/AppData';
-import { EmptyState, PriorityBadge, StatusBadge } from './common';
+import { EmptyState, StatusBadge } from './common';
+import { XlsxExportDialog, type ExportColumn } from './XlsxExportDialog';
 
 type Basis = 'any' | 'received' | 'due';
-const BASIS_LABEL: Record<Basis, string> = { any: 'Tiếp nhận hoặc tới hạn', received: 'Theo ngày tiếp nhận', due: 'Theo ngày tới hạn' };
+const BASIS_LABEL: Record<Basis, string> = { any: 'Bắt đầu hoặc tới hạn', received: 'Theo ngày bắt đầu', due: 'Theo ngày tới hạn' };
 
 function shiftMonth(ym: string, d: number): string {
   const [y, m] = ym.split('-').map(Number);
@@ -17,22 +19,42 @@ function shiftMonth(ym: string, d: number): string {
   return `${Math.floor(t / 12)}-${String((t % 12) + 1).padStart(2, '0')}`;
 }
 
-/** Dashboard: tóm tắt các dự án có ngày tiếp nhận và/hoặc ngày tới hạn rơi vào tháng đang xem. */
+const EXPORT_COLUMNS: ExportColumn<ProjectView>[] = [
+  { key: 'stt', label: 'STT', value: (p) => p.stt },
+  { key: 'name', label: 'Tên dự án', value: (p) => p.projectName },
+  { key: 'category', label: 'Nhóm', value: (p) => CATEGORY_LABEL[p.workCategory] },
+  { key: 'location', label: 'Vị trí', value: (p) => p.location },
+  { key: 'brands', label: 'Hãng', value: (p) => p.brandNames },
+  { key: 'si', label: 'Tên SI', value: (p) => p.siName },
+  { key: 'sale', label: 'Sale', value: (p) => p.salespersonName },
+  { key: 'department', label: 'Phòng ban', value: (p) => p.salespersonDepartment },
+  { key: 'eu', label: 'EU', value: (p) => p.clientName },
+  { key: 'received', label: 'Ngày bắt đầu', value: (p) => formatDate(p.receivedDate) },
+  { key: 'due', label: 'Ngày tới hạn', value: (p) => formatDate(p.dueDate) },
+  { key: 'status', label: 'Trạng thái', value: (p) => STATUS_LABEL[p.status] },
+  { key: 'remaining', label: 'Còn lại', value: (p) => (p.isCompleted ? '' : describeRemaining(p.remaining)) },
+  { key: 'priority', label: 'Priority', value: (p) => p.priorityPoint },
+  { key: 'folder', label: 'Thư mục', value: (p) => p.folderPath },
+  { key: 'note', label: 'Ghi chú gần nhất', value: (p) => latestNote(p) },
+];
+
+/** Dashboard: tóm tắt các dự án có ngày bắt đầu và/hoặc ngày tới hạn rơi vào tháng đang xem; xuất được ra .xlsx. */
 export function MonthProjects({ scoped }: { scoped: ProjectView[] }) {
   const { today } = useAppData();
   const navigate = useNavigate();
   const thisMonth = today.slice(0, 7);
   const [ym, setYm] = useSessionState('dash-month', thisMonth);
   const [basis, setBasis] = useSessionState<Basis>('dash-month-basis', 'any');
+  const [exporting, setExporting] = useState(false);
   const [y, m] = ym.split('-').map(Number);
   const { from, to } = monthRange(y, m);
-  const inMonth = (d: string) => d >= from && d <= to;
+  const inMonth = (d: string | null) => !!d && d >= from && d <= to;
 
   const list = useMemo(
     () =>
       scoped
         .filter((p) => (basis === 'received' ? inMonth(p.receivedDate) : basis === 'due' ? inMonth(p.dueDate) : inMonth(p.receivedDate) || inMonth(p.dueDate)))
-        .sort((a, b) => Number(a.isCompleted) - Number(b.isCompleted) || a.dueDate.localeCompare(b.dueDate) || a.priorityPoint - b.priorityPoint),
+        .sort((a, b) => Number(a.isCompleted) - Number(b.isCompleted) || a.stt - b.stt),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [scoped, basis, from, to],
   );
@@ -68,6 +90,9 @@ export function MonthProjects({ scoped }: { scoped: ProjectView[] }) {
               </option>
             ))}
           </select>
+          <button className="btn sm" disabled={!list.length} onClick={() => setExporting(true)} title="Xuất danh sách ra file Excel">
+            <FileDown size={14} /> Xuất xlsx
+          </button>
         </span>
       </h2>
       {list.length === 0 ? (
@@ -76,7 +101,7 @@ export function MonthProjects({ scoped }: { scoped: ProjectView[] }) {
         <>
           <div className="row small muted" style={{ gap: 14, marginBottom: 10 }}>
             <span>
-              <b>{received}</b> tiếp nhận trong tháng
+              <b>{received}</b> bắt đầu trong tháng
             </span>
             <span>
               <b>{due}</b> tới hạn trong tháng
@@ -89,40 +114,36 @@ export function MonthProjects({ scoped }: { scoped: ProjectView[] }) {
             <table className="tbl">
               <thead>
                 <tr>
-                  <th>Dự án</th>
-                  <th>CĐT</th>
-                  <th>Salesperson</th>
-                  <th>Giai đoạn</th>
-                  <th>Tiếp nhận</th>
-                  <th>Tới hạn</th>
+                  <th className="num">STT</th>
+                  <th>Tên dự án</th>
+                  <th>Hãng</th>
+                  <th>Tên SI</th>
+                  <th>Sale</th>
+                  <th>Ngày bắt đầu</th>
                   <th>Trạng thái</th>
-                  <th>Priority</th>
                 </tr>
               </thead>
               <tbody>
                 {list.map((p) => (
                   <tr key={p.id} className={`clickable ${p.isCompleted ? 'row-done' : ''}`} onClick={() => navigate(`/project/${p.id}`)}>
-                    <td style={{ minWidth: 200 }}>
+                    <td className="num">
+                      <b>{p.stt}</b>
+                    </td>
+                    <td style={{ minWidth: 220 }}>
                       <div style={{ fontWeight: 600 }}>{p.projectName}</div>
                       <div className="small faint">{p.location}</div>
                     </td>
-                    <td className="nowrap">{p.clientName}</td>
+                    <td>{p.brandNames || <span className="faint">—</span>}</td>
+                    <td>{p.siName ?? <span className="faint">—</span>}</td>
                     <td className="nowrap">{p.salespersonName ?? <span className="faint">—</span>}</td>
-                    <td className="nowrap">{p.stageName ?? <span className="faint">—</span>}</td>
-                    <td className={`nowrap ${inMonth(p.receivedDate) ? 'hl-date' : ''}`}>{formatDate(p.receivedDate)}</td>
+                    <td className={`nowrap ${inMonth(p.receivedDate) ? 'hl-date' : ''}`}>{p.receivedDate ? formatDate(p.receivedDate) : <span className="faint">—</span>}</td>
                     <td className="nowrap">
-                      <div className={inMonth(p.dueDate) ? 'hl-date' : ''}>{formatDate(p.dueDate)}</div>
-                      {!p.isCompleted && (
-                        <div className={`small st-${p.status}`} style={{ color: 'var(--st)', fontWeight: 600 }}>
+                      <StatusBadge status={p.status} />
+                      {p.dueDate && !p.isCompleted && (
+                        <div className={`small st-${p.status}`} style={{ color: 'var(--st)', fontWeight: 600, marginTop: 3 }}>
                           {describeRemaining(p.remaining)}
                         </div>
                       )}
-                    </td>
-                    <td className="nowrap">
-                      <StatusBadge status={p.status} />
-                    </td>
-                    <td>
-                      <PriorityBadge value={p.priorityPoint} />
                     </td>
                   </tr>
                 ))}
@@ -130,6 +151,16 @@ export function MonthProjects({ scoped }: { scoped: ProjectView[] }) {
             </table>
           </div>
         </>
+      )}
+      {exporting && (
+        <XlsxExportDialog
+          title={`Xuất dự án tháng ${m}/${y}`}
+          columns={EXPORT_COLUMNS}
+          rows={list}
+          fileName={`Du-an-thang-${String(m).padStart(2, '0')}-${y}`}
+          sheetName={`Tháng ${m}-${y}`}
+          onClose={() => setExporting(false)}
+        />
       )}
     </section>
   );

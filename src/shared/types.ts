@@ -4,8 +4,8 @@ export type WorkCategory = ProjectCategory | 'WARRANTY';
 export type DeadlineStatus = 'URGENT' | 'ATTENTION' | 'NEW' | 'COMPLETED';
 export type ActiveStatus = Exclude<DeadlineStatus, 'COMPLETED'>;
 export type Theme = 'light' | 'dark';
-export type MasterKind = 'clients' | 'designUnits' | 'stages' | 'brands' | 'salespersons';
-export const MASTER_KINDS: MasterKind[] = ['clients', 'designUnits', 'salespersons', 'stages', 'brands'];
+export type MasterKind = 'clients' | 'designUnits' | 'stages' | 'brands' | 'salespersons' | 'siPartners' | 'departments';
+export const MASTER_KINDS: MasterKind[] = ['clients', 'siPartners', 'brands', 'salespersons', 'departments', 'designUnits', 'stages'];
 
 export const JOB_TYPES: JobType[] = ['MAIN', 'FREELANCE'];
 export const JOB_LABEL: Record<JobType, string> = { MAIN: 'Job Chính', FREELANCE: 'Job Freelance' };
@@ -17,11 +17,13 @@ export const CATEGORY_LABEL: Record<WorkCategory, string> = {
   WARRANTY: 'Warranty',
 };
 export const MASTER_LABEL: Record<MasterKind, string> = {
-  clients: 'CĐT',
+  clients: 'EU',
   designUnits: 'Đơn vị thiết kế',
   stages: 'Giai đoạn',
   brands: 'Hãng',
-  salespersons: 'Salesperson',
+  salespersons: 'Sale',
+  siPartners: 'Tên SI',
+  departments: 'Phòng ban',
 };
 
 export const LINK_FILE_EXTENSIONS = ['dwg', 'txt'];
@@ -35,6 +37,8 @@ export interface AppSettings {
   xlsxMaxMb: number;
   xlsxMaxRows: number;
   autoUpdate: boolean;
+  /** Thư mục cha dùng gần nhất khi tạo thư mục dự án (mặc định cho lần sau). */
+  projectRootDir: string | null;
   updatedAt: string;
 }
 
@@ -61,6 +65,9 @@ export interface MasterItem {
   sortOrder: number;
   isActive: boolean;
   usageCount: number;
+  /** Chỉ có ở Sale: phòng ban của người đó. */
+  departmentId?: string | null;
+  departmentName?: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -78,17 +85,32 @@ export interface JobYear {
   updatedAt: string;
 }
 
+export interface NamedRef {
+  id: string;
+  name: string;
+}
+
 export interface Project {
   id: string;
+  /** Số thứ tự dự án (duy nhất), dùng trong tên thư mục "STT.Tên dự án_Tên SI_Hãng". */
+  stt: number;
   jobYearId: string;
   jobType: JobType;
   yearLabel: string;
   workCategory: ProjectCategory;
-  receivedDate: string;
-  dueDate: string;
+  /** Ngày bắt đầu (tên cũ: Ngày tiếp nhận). */
+  receivedDate: string | null;
+  dueDate: string | null;
   projectName: string;
-  clientId: string;
-  clientName: string;
+  /** EU (tên cũ: CĐT). */
+  clientId: string | null;
+  clientName: string | null;
+  siId: string | null;
+  siName: string | null;
+  brands: NamedRef[];
+  salespersonDepartment: string | null;
+  /** Thư mục của dự án trên máy (tự tạo/đổi tên theo STT, tên, SI, Hãng). */
+  folderPath: string | null;
   designUnitId: string | null;
   designUnitName: string | null;
   stageId: string | null;
@@ -108,12 +130,18 @@ export interface Project {
 }
 
 export interface ProjectInput {
+  /** undefined = tự lấy STT lớn nhất + 1; null = người dùng bỏ trống (báo lỗi). */
+  stt?: number | null;
   jobYearId: string;
   workCategory: ProjectCategory;
-  receivedDate: string;
-  dueDate: string;
+  receivedDate: string | null;
+  dueDate: string | null;
   projectName: string;
-  clientId: string;
+  clientId: string | null;
+  siId?: string | null;
+  brandIds?: string[];
+  /** Thư mục cha chứa thư mục dự án; undefined = giữ nguyên (khi sửa) / không tạo thư mục. */
+  folderParent?: string | null;
   designUnitId: string | null;
   stageId: string | null;
   salespersonId: string | null;
@@ -123,6 +151,9 @@ export interface ProjectInput {
   fileExtension: string | null;
   priorityPoint: number;
 }
+
+/** Kết quả lưu dự án; `notice` = cảnh báo không chặn (ví dụ chưa đổi được tên thư mục vì đang mở). */
+export type ProjectSaved = Project & { notice?: string };
 
 export interface ProjectSaveOptions {
   /** Ghi một sự kiện "Cập nhật dự án" (kèm tóm tắt thay đổi) vào Calendar ngày hôm nay. */
@@ -242,6 +273,8 @@ export interface WarrantyRecord {
   model: string;
   brandId: string | null;
   brandName: string | null;
+  siId: string | null;
+  siName: string | null;
   ipAddress: string;
   username: string;
   hasPassword: boolean;
@@ -263,6 +296,7 @@ export interface WarrantyInput {
   jobYearId: string;
   model: string;
   brandId: string | null;
+  siId?: string | null;
   ipAddress: string;
   username: string;
   /** undefined = giữ nguyên mật khẩu cũ, '' = xóa mật khẩu. */
@@ -290,6 +324,7 @@ export interface ExperienceRecord {
   deviceModel: string;
   event: string;
   webUrl: string;
+  localPath: string;
   images: ImageRef[];
   createdAt: string;
   updatedAt: string;
@@ -303,6 +338,7 @@ export interface ExperienceInput {
   deviceModel: string;
   event: string;
   webUrl: string;
+  localPath?: string;
   images: ImageRef[];
 }
 
@@ -315,6 +351,7 @@ export interface KnowledgeRecord {
   deviceModel: string;
   content: string;
   webUrl: string;
+  localPath: string;
   images: ImageRef[];
   createdAt: string;
   updatedAt: string;
@@ -327,6 +364,7 @@ export interface KnowledgeInput {
   deviceModel: string;
   content: string;
   webUrl: string;
+  localPath?: string;
   images: ImageRef[];
 }
 
@@ -371,6 +409,45 @@ export interface CalendarQuery {
   from?: string;
   to?: string;
   projectId?: string;
+}
+
+export type SearchMode = 'name' | 'si' | 'serial' | 'brand' | 'model';
+
+export const SEARCH_MODE_LABEL: Record<SearchMode, string> = {
+  name: 'Tên dự án',
+  si: 'Tên SI',
+  serial: 'Serial number',
+  brand: 'Hãng',
+  model: 'Model / Mã TB',
+};
+
+export interface SearchQuery {
+  mode: SearchMode;
+  text: string;
+  /** Lọc theo Ngày bắt đầu (dự án) / Ngày nhận (Warranty). */
+  from?: string | null;
+  to?: string | null;
+  limit?: number;
+}
+
+export interface SearchHit {
+  kind: 'project' | 'warranty';
+  id: string;
+  title: string;
+  subtitle: string;
+  /** Giá trị khớp với từ khóa (tên SI, serial, model…). */
+  matched: string;
+  date: string | null;
+  jobType: JobType;
+  jobYearId: string;
+  yearLabel: string;
+  workCategory: WorkCategory;
+}
+
+export interface XlsxExport {
+  defaultName: string;
+  sheetName: string;
+  rows: (string | number | null)[][];
 }
 
 export interface BackupInfo {

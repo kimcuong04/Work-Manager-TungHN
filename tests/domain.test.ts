@@ -111,12 +111,15 @@ describe('Validate form (FR-FORM-001)', () => {
     priorityPoint: 3,
   };
   it('hợp lệ', () => expect(Object.keys(validateProjectInput(base))).toHaveLength(0));
-  it('bắt buộc tên, CĐT; ngày tới hạn >= ngày tiếp nhận; priority 1..5', () => {
-    const e = validateProjectInput({ ...base, projectName: '   ', clientId: '', dueDate: '2026-11-10', priorityPoint: 6 });
+  it('chỉ bắt buộc STT + tên; EU và các ngày không bắt buộc; ngày tới hạn >= ngày bắt đầu; priority 1..5', () => {
+    const e = validateProjectInput({ ...base, projectName: '   ', clientId: '', dueDate: '2026-11-10', priorityPoint: 6, stt: null });
     expect(e.projectName).toBeTruthy();
-    expect(e.clientId).toBeTruthy();
+    expect(e.stt).toBeTruthy();
+    expect(e.clientId).toBeUndefined();
     expect(e.dueDate).toBeTruthy();
     expect(e.priorityPoint).toBeTruthy();
+    expect(validateProjectInput({ ...base, clientId: null, receivedDate: null, dueDate: null })).toEqual({});
+    expect(validateProjectInput({ ...base, stt: 0 }).stt).toBeTruthy();
   });
   it('tên tối đa 200 ký tự; ghi chú tổng hợp nhiều ngày không bị giới hạn ở form', () => {
     expect(validateProjectInput({ ...base, projectName: 'x'.repeat(201) }).projectName).toBeTruthy();

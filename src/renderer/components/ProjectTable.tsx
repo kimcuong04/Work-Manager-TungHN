@@ -1,12 +1,15 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router';
-import { CheckCircle2, ExternalLink, FileSpreadsheet, FileText, FolderInput, Pencil, RotateCcw, Trash2 } from 'lucide-react';
+import { CheckCircle2, ExternalLink, FileSpreadsheet, FileText, FolderInput, FolderOpen, Maximize2, Pencil, RotateCcw, Trash2 } from 'lucide-react';
 import { formatDate } from '../../shared/dates';
 import { describeRemaining } from '../../shared/status';
-import type { ProjectView, SortKey, SortState } from '../lib/projects';
+import { api } from '../api';
+import { latestNote, salesLabel, type ProjectView, type SortKey, type SortState } from '../lib/projects';
 import { useProjectActions } from '../state/projectActions';
-import { MenuButton, PriorityBadge, SortHeader, StatusBadge, type MenuItem } from './common';
+import { useUi } from '../state/ui';
+import { MenuButton, PriorityBadge, SortHeader, StatusBadge, shortenPath, type MenuItem } from './common';
 import { useOpenFile } from './FileLink';
+import { SidePanel } from './Modal';
 
 const PAGE = 100;
 
@@ -20,7 +23,20 @@ interface Col {
 
 const dash = <span className="faint">—</span>;
 
+function DueCell({ p }: { p: ProjectView }) {
+  if (!p.dueDate) return dash;
+  return (
+    <>
+      <div>{formatDate(p.dueDate)}</div>
+      <div className={`small st-${p.status}`} style={{ color: p.status === 'COMPLETED' ? 'var(--text-faint)' : 'var(--st)', fontWeight: 600 }}>
+        {p.status === 'COMPLETED' ? 'Đã hoàn thành' : describeRemaining(p.remaining)}
+      </div>
+    </>
+  );
+}
+
 export const PROJECT_COLUMNS: Col[] = [
+  { key: 'stt', label: 'STT', sort: 'stt', cls: 'num nowrap', render: (p) => <b>{p.stt}</b> },
   {
     key: 'name',
     label: 'Tên dự án',
@@ -30,14 +46,8 @@ export const PROJECT_COLUMNS: Col[] = [
       <>
         <div className="row" style={{ gap: 6, alignItems: 'flex-start' }}>
           <span className="pt-title">{p.projectName}</span>
-          {p.filePath && (
-            <span className="icon-chip" title={p.fileName ?? ''}>
-              <FileText size={11} />
-              {p.fileExtension?.toUpperCase()}
-            </span>
-          )}
           {p.hasImport && (
-            <span className="icon-chip" title="Có dữ liệu Excel đã import">
+            <span className="icon-chip" title="Có bảng thiết bị import từ Excel">
               <FileSpreadsheet size={11} />
             </span>
           )}
@@ -47,69 +57,63 @@ export const PROJECT_COLUMNS: Col[] = [
     ),
   },
   { key: 'status', label: 'Trạng thái', sort: 'status', cls: 'nowrap', render: (p) => <StatusBadge status={p.status} /> },
-  { key: 'client', label: 'CĐT', sort: 'client', cls: 'pt-text', render: (p) => p.clientName },
-  { key: 'designUnit', label: 'Đơn vị thiết kế', cls: 'pt-text', render: (p) => p.designUnitName ?? dash },
-  { key: 'salesperson', label: 'Salesperson', cls: 'pt-text', render: (p) => p.salespersonName ?? dash },
-  { key: 'stage', label: 'Giai đoạn', cls: 'pt-text', render: (p) => p.stageName ?? dash },
-  { key: 'received', label: 'Ngày tiếp nhận', sort: 'received', cls: 'nowrap', render: (p) => formatDate(p.receivedDate) },
-  {
-    key: 'due',
-    label: 'Ngày tới hạn',
-    sort: 'due',
-    cls: 'nowrap',
-    render: (p) => (
-      <>
-        <div>{formatDate(p.dueDate)}</div>
-        <div className={`small st-${p.status}`} style={{ color: p.status === 'COMPLETED' ? 'var(--text-faint)' : 'var(--st)', fontWeight: 600 }}>
-          {p.status === 'COMPLETED' ? 'Đã hoàn thành' : describeRemaining(p.remaining)}
-        </div>
-      </>
-    ),
-  },
+  { key: 'si', label: 'Tên SI', sort: 'si', cls: 'pt-text', render: (p) => p.siName ?? dash },
+  { key: 'brands', label: 'Hãng', cls: 'pt-text', render: (p) => p.brandNames || dash },
+  { key: 'sale', label: 'Sale', cls: 'pt-text', render: (p) => p.salespersonName ?? dash },
+  { key: 'client', label: 'EU', sort: 'client', cls: 'pt-text', render: (p) => p.clientName ?? dash },
+  { key: 'received', label: 'Ngày bắt đầu', sort: 'received', cls: 'nowrap', render: (p) => (p.receivedDate ? formatDate(p.receivedDate) : dash) },
+  { key: 'due', label: 'Ngày tới hạn', sort: 'due', cls: 'nowrap', render: (p) => <DueCell p={p} /> },
   { key: 'priority', label: 'Priority', sort: 'priority', render: (p) => <PriorityBadge value={p.priorityPoint} /> },
-  { key: 'note', label: 'Ghi chú', cls: 'clamp', render: (p) => <div>{p.note}</div> },
+  { key: 'designUnit', label: 'Đơn vị thiết kế', cls: 'pt-text', render: (p) => p.designUnitName ?? dash },
+  { key: 'stage', label: 'Giai đoạn', cls: 'pt-text', render: (p) => p.stageName ?? dash },
+  { key: 'note', label: 'Ghi chú', cls: 'clamp', render: (p) => <div>{latestNote(p)}</div> },
 ];
 
-export const DEFAULT_HIDDEN_PROJECT_COLS = ['note'];
+export const DEFAULT_HIDDEN_PROJECT_COLS = ['note', 'designUnit', 'stage'];
 
-function RowMenu({ p }: { p: ProjectView }) {
+export function useProjectMenu() {
   const navigate = useNavigate();
   const actions = useProjectActions();
   const openFile = useOpenFile();
-  const items: MenuItem[] = [
+  const { toastError } = useUi();
+  return (p: ProjectView): MenuItem[] => [
     { label: 'Mở chi tiết', icon: <ExternalLink size={14} />, onClick: () => navigate(`/project/${p.id}`) },
     { label: 'Chỉnh sửa', icon: <Pencil size={14} />, onClick: () => actions.openEdit(p) },
     p.isCompleted
       ? { label: 'Bỏ hoàn thành', icon: <RotateCcw size={14} />, onClick: () => void actions.setCompleted(p, false) }
       : { label: 'Đánh dấu hoàn thành', icon: <CheckCircle2 size={14} />, onClick: () => void actions.setCompleted(p, true) },
     { label: 'Di chuyển…', icon: <FolderInput size={14} />, onClick: () => actions.openMove(p) },
+    ...(p.folderPath ? [{ label: 'Mở thư mục dự án', icon: <FolderOpen size={14} />, onClick: () => void api.openProjectFolder(p.id).catch(toastError) }] : []),
     ...(p.filePath ? [{ label: `Mở file ${p.fileName ?? ''}`, icon: <FileText size={14} />, onClick: () => void openFile(p.filePath!) }] : []),
     { label: '', onClick: () => {}, separator: true },
     { label: 'Xóa dự án', icon: <Trash2 size={14} />, danger: true, onClick: () => void actions.remove(p) },
   ];
-  return <MenuButton items={items} />;
 }
 
-/** Chế độ xem "Danh sách" (mặc định cho Pre-sales/Post-sales): bảng sắp xếp theo cột, ẩn/hiện cột như Warranty. */
+/** Chế độ xem "Danh sách" (mặc định cho Pre-sales/Post-sales): bấm một dòng mở panel xem nhanh, nhấp đúp mở chi tiết. */
 export function ProjectTable({
   list,
   showLocation,
   sort,
   onSort,
   hidden,
+  selectedId,
+  onSelect,
 }: {
   list: ProjectView[];
   showLocation: boolean;
   sort: SortState;
   onSort: (s: SortState) => void;
   hidden: string[];
+  selectedId: string | null;
+  onSelect: (p: ProjectView) => void;
 }) {
   const navigate = useNavigate();
+  const menu = useProjectMenu();
   const [limit, setLimit] = useState(PAGE);
   const cols = PROJECT_COLUMNS.filter((c) => !hidden.includes(c.key));
-  const open = (p: ProjectView) => navigate(`/project/${p.id}`);
   return (
-    <div className="table-wrap project-table" style={{ flex: 1 }}>
+    <div className="table-wrap project-table">
       <table className="tbl">
         <thead>
           <tr>
@@ -136,11 +140,13 @@ export function ProjectTable({
           {list.slice(0, limit).map((p) => (
             <tr
               key={p.id}
-              className={`clickable st-${p.status} ${p.isCompleted ? 'row-done' : ''}`}
+              className={`clickable st-${p.status} ${p.isCompleted ? 'row-done' : ''} ${p.id === selectedId ? 'selected' : ''}`}
               tabIndex={0}
-              onClick={() => open(p)}
-              onKeyDown={(e) => e.key === 'Enter' && e.target === e.currentTarget && open(p)}
-              aria-label={p.projectName}
+              aria-selected={p.id === selectedId}
+              onClick={() => onSelect(p)}
+              onDoubleClick={() => navigate(`/project/${p.id}`)}
+              onKeyDown={(e) => e.key === 'Enter' && e.target === e.currentTarget && onSelect(p)}
+              aria-label={p.label}
             >
               {cols.map((c) => (
                 <td key={c.key} className={c.cls}>
@@ -148,7 +154,7 @@ export function ProjectTable({
                 </td>
               ))}
               <td onClick={(e) => e.stopPropagation()}>
-                <RowMenu p={p} />
+                <MenuButton items={menu(p)} />
               </td>
             </tr>
           ))}
@@ -160,5 +166,91 @@ export function ProjectTable({
         </button>
       )}
     </div>
+  );
+}
+
+/** Panel xem nhanh bên phải danh sách (giống Warranty): View info mở trang chi tiết, Edit mở form. */
+export function ProjectPreviewPanel({ p, onClose }: { p: ProjectView; onClose: () => void }) {
+  const navigate = useNavigate();
+  const actions = useProjectActions();
+  const openFile = useOpenFile();
+  const { toastError } = useUi();
+  const row = (k: string, v: React.ReactNode) => (
+    <>
+      <span className="k">{k}</span>
+      <span>{v || dash}</span>
+    </>
+  );
+  const note = latestNote(p);
+  return (
+    <SidePanel
+      title={p.label}
+      subtitle={p.location}
+      label="Thông tin dự án"
+      onClose={onClose}
+      footer={
+        <>
+          <button className="btn danger left" onClick={() => void actions.remove(p)}>
+            <Trash2 size={15} /> Xóa
+          </button>
+          <button className="btn" onClick={() => navigate(`/project/${p.id}`)} title="Mở trang chi tiết dự án">
+            <Maximize2 size={15} /> View info
+          </button>
+          <button className="btn primary" onClick={() => actions.openEdit(p)}>
+            <Pencil size={15} /> Edit
+          </button>
+        </>
+      }
+    >
+      <div className="row wrap" style={{ gap: 8, marginBottom: 14 }}>
+        <StatusBadge status={p.status} />
+        <PriorityBadge value={p.priorityPoint} />
+        {p.status !== 'COMPLETED' && p.dueDate && (
+          <span className={`small st-${p.status}`} style={{ color: 'var(--st)', fontWeight: 600 }}>
+            {describeRemaining(p.remaining)}
+          </span>
+        )}
+      </div>
+      <div className="info-grid" style={{ gridTemplateColumns: '110px minmax(0, 1fr)' }}>
+        {row('STT', <b>{p.stt}</b>)}
+        {row('Tên dự án', <b>{p.projectName}</b>)}
+        {row('Tên SI', p.siName)}
+        {row(
+          'Hãng',
+          p.brands.length ? (
+            <span className="row wrap" style={{ gap: 4 }}>
+              {p.brands.map((b) => (
+                <span key={b.id} className="badge">
+                  {b.name}
+                </span>
+              ))}
+            </span>
+          ) : null,
+        )}
+        {row('Sale', salesLabel(p))}
+        {row('EU', p.clientName)}
+        {row('Ngày bắt đầu', p.receivedDate ? formatDate(p.receivedDate) : null)}
+        {row('Ngày tới hạn', p.dueDate ? formatDate(p.dueDate) : null)}
+        {row(
+          'Thư mục',
+          p.folderPath ? (
+            <button className="link-btn" title={p.folderPath} onClick={() => void api.openProjectFolder(p.id).catch(toastError)}>
+              <FolderOpen size={13} /> {shortenPath(p.folderPath, 46)}
+            </button>
+          ) : null,
+        )}
+        {p.filePath &&
+          row(
+            'File',
+            <button className="link-btn" title={p.filePath} onClick={() => void openFile(p.filePath!)}>
+              <FileText size={13} /> {p.fileName}
+            </button>,
+          )}
+      </div>
+      <h3 className="card-title" style={{ marginTop: 18, fontSize: 14 }}>
+        Ghi chú gần nhất
+      </h3>
+      {note ? <div className="pre small note-snippet">{note}</div> : <span className="faint small">Chưa có ghi chú.</span>}
+    </SidePanel>
   );
 }

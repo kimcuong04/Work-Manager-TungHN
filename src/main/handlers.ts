@@ -1,9 +1,11 @@
+import fs from 'node:fs';
 import path from 'node:path';
 import type { Api } from '../shared/api';
 import { IMAGE_EXTENSIONS, LINK_FILE_EXTENSIONS } from '../shared/types';
-import { fileExtension, validateWebUrl } from '../shared/validation';
+import { fileExtension } from '../shared/validation';
+import { resolveWebLink } from '../shared/webLink';
 import { AppError, type Ctx } from './context';
-import { checkFile, readWorkbook } from './integration/files';
+import { checkFile, readWorkbook, writeXlsx } from './integration/files';
 import { imagePath, importImageBuffer, importImages, storageUsage } from './integration/images';
 import { inspectBackup, restoreBackup, writeBackup } from './services/backup';
 import * as calendar from './services/calendar';
@@ -11,6 +13,7 @@ import * as master from './services/master';
 import * as notes from './services/notes';
 import * as projects from './services/projects';
 import * as records from './services/records';
+import { globalSearch } from './services/search';
 import { getSettings, updateSettings } from './services/settings';
 import type { Updater } from './updater';
 
@@ -29,6 +32,9 @@ export interface Desktop {
   /** Ảnh trong clipboard: dữ liệu PNG (ảnh chụp/ảnh copy) hoặc đường dẫn file ảnh copy từ Explorer. */
   readClipboardImage(): Promise<{ png?: Uint8Array; files?: string[] } | null>;
   writeClipboardImage(file: string): Promise<boolean>;
+  pickDirectory(title: string): Promise<string | null>;
+  /** Chuyển file/thư mục vào Thùng rác (khôi phục được). */
+  trashItem(p: string): Promise<void>;
   updater: Pick<Updater, 'getStatus' | 'check' | 'install'>;
 }
 
@@ -44,6 +50,19 @@ export function createHandlers(ctx: Ctx, desktop: Desktop): Handlers {
   // Renderer chỉ được đọc workbook/backup mà người dùng vừa chọn qua hộp thoại.
   const pickedWorkbooks = new Set<string>();
   const pickedBackups = new Set<string>();
+  const pickedDirs = new Set<string>();
+  const dirKey = (p: string) => path.resolve(p).toLowerCase();
+
+  /** Chỉ tạo/chuyển thư mục dự án vào nơi người dùng đã chọn qua hộp thoại (hoặc nơi lưu đã nhớ / nơi đang dùng). */
+  const assertFolderParent = (parent: string | null | undefined, currentFolder?: string | null) => {
+    if (!parent) return;
+    const k = dirKey(parent);
+    const saved = getSettings(ctx).projectRootDir;
+    const allowed = pickedDirs.has(k) || (saved && dirKey(saved) === k) || (currentFolder && dirKey(path.dirname(currentFolder)) === k);
+    if (!allowed) throw new AppError('Hãy chọn lại nơi lưu thư mục dự án.');
+  };
+
+  const DANGEROUS = new Set(['exe', 'bat', 'cmd', 'com', 'msi', 'ps1', 'vbs', 'vbe', 'js', 'jse', 'wsf', 'scr', 'lnk', 'reg', 'hta', 'cpl', 'pif']);
 
   const assertLinkedFile = (p: string) => {
     const linked = ctx.db.scalar<number>('SELECT COUNT(*) FROM projects WHERE file_path = ?', [p]);
@@ -53,13 +72,17 @@ export function createHandlers(ctx: Ctx, desktop: Desktop): Handlers {
   return {
     getAppInfo: () => ({ version: ctx.appVersion, dataDir: ctx.paths.dataDir, encryption: ctx.platform.encryptionKind }),
     getSettings: () => getSettings(ctx),
-    updateSettings: (patch) => updateSettings(ctx, patch),
+    updateSettings: (patch) => {
+      const { projectRootDir: _ignored, ...rest } = patch ?? {};
+      return updateSettings(ctx, rest);
+    },
 
     listMaster: (kind) => master.listMaster(ctx, kind),
     createMaster: (kind, name) => master.createMaster(ctx, kind, name),
     renameMaster: (kind, id, name) => master.renameMaster(ctx, kind, id, name),
     deleteMaster: (kind, id, strategy) => master.deleteMaster(ctx, kind, id, strategy),
     setMasterActive: (kind, id, active) => master.setMasterActive(ctx, kind, id, active),
+    setSalespersonDepartment: (id, dept) => master.setSalespersonDepartment(ctx, id, dept),
     moveMaster: (kind, id, dir) => master.moveMaster(ctx, kind, id, dir),
 
     listYears: () => master.listYears(ctx),
@@ -68,9 +91,42 @@ export function createHandlers(ctx: Ctx, desktop: Desktop): Handlers {
     deleteYear: (id) => master.deleteYear(ctx, id),
 
     listProjects: () => projects.listProjects(ctx),
-    createProject: (input, opts) => projects.createProject(ctx, input, opts ?? {}),
-    updateProject: (id, input, opts) => projects.updateProject(ctx, id, input, opts ?? {}),
-    deleteProject: (id) => projects.deleteProject(ctx, id),
+    createProject: (input, opts) => {
+      assertFolderParent(input?.folderParent);
+      return projects.createProject(ctx, input, opts ?? {});
+    },
+    updateProject: (id, input, opts) => {
+      assertFolderParent(input?.folderParent, projects.getProject(ctx, id).folderPath);
+      return projects.updateProject(ctx, id, input, opts ?? {});
+    },
+    deleteProject: async (id, opts) => {
+      const p = projects.getProject(ctx, id);
+      if (opts?.deleteFolder && p.folderPath && fs.existsSync(p.folderPath)) {
+        try {
+          await desktop.trashItem(p.folderPath);
+        } catch (e) {
+          throw new AppError(`Không chuyển được thư mục vào Thùng rác (${(e as Error).message}). Dự án chưa bị xóa — đóng các file đang mở rồi thử lại.`);
+        }
+      }
+      projects.deleteProject(ctx, id);
+    },
+    nextProjectStt: () => projects.nextProjectStt(ctx),
+    pickFolder: async (title) => {
+      const dir = await desktop.pickDirectory(title || 'Chọn thư mục');
+      if (dir) pickedDirs.add(dirKey(dir));
+      return dir;
+    },
+    openProjectFolder: async (id) => {
+      const p = projects.getProject(ctx, id);
+      if (!p.folderPath) throw new AppError('Dự án chưa có thư mục trên máy.');
+      if (!fs.existsSync(p.folderPath)) throw new AppError('Không thấy thư mục dự án (có thể đã bị xóa/chuyển). Dùng "Đồng bộ thư mục" để tạo lại.');
+      const err = await desktop.openPath(p.folderPath);
+      if (err) throw new AppError(`Không mở được thư mục: ${err}`);
+    },
+    syncProjectFolder: (id, parent) => {
+      assertFolderParent(parent, projects.getProject(ctx, id).folderPath);
+      return projects.syncProjectFolder(ctx, id, parent ?? null);
+    },
     setProjectCompleted: (id, completed) => projects.setProjectCompleted(ctx, id, completed),
     applyBoardChanges: (changes) => projects.applyBoardChanges(ctx, changes),
     moveProject: (id, jobYearId, category) => projects.moveProject(ctx, id, jobYearId, category),
@@ -144,6 +200,15 @@ export function createHandlers(ctx: Ctx, desktop: Desktop): Handlers {
       if (clip?.png?.length) return [importImageBuffer(ctx, clip.png, `Ảnh dán ${stamp()}.png`)];
       throw new AppError('Clipboard không có ảnh. Hãy chụp màn hình (Win+Shift+S) hoặc copy một ảnh rồi dán lại.');
     },
+    importDroppedImages: (paths) => {
+      if (!Array.isArray(paths)) throw new AppError('Dữ liệu không hợp lệ.');
+      const files = paths
+        .filter((f): f is string => typeof f === 'string' && path.isAbsolute(f))
+        .filter((f) => IMAGE_EXTENSIONS.includes(fileExtension(f)) && fs.existsSync(f) && fs.statSync(f).isFile())
+        .slice(0, 50);
+      if (!files.length) throw new AppError('Chỉ kéo thả được file ảnh JPG/JPEG/PNG/WEBP.');
+      return importImages(ctx, files);
+    },
     copyImageToClipboard: async (key) => {
       if (!(await desktop.writeClipboardImage(imagePath(ctx, key)))) throw new AppError('Không sao chép được ảnh này vào clipboard.');
     },
@@ -152,10 +217,38 @@ export function createHandlers(ctx: Ctx, desktop: Desktop): Handlers {
     createExperience: (input) => records.createExperience(ctx, input),
     updateExperience: (id, input) => records.updateExperience(ctx, id, input),
     deleteExperience: (id) => records.deleteExperience(ctx, id),
-    openExternalUrl: async (url) => {
-      const err = validateWebUrl(url);
-      if (err || !url.trim()) throw new AppError(err ?? 'Link trống.');
-      await desktop.openExternal(url.trim());
+    openExternalUrl: async (text) => {
+      const url = resolveWebLink(String(text ?? ''));
+      if (!url) throw new AppError('Link trống.');
+      await desktop.openExternal(url);
+    },
+    pickLocalLink: async (kind) => {
+      if (kind === 'folder') return desktop.pickDirectory('Chọn thư mục liên kết');
+      const [file] = await desktop.pickFiles({ title: 'Chọn file liên kết', filters: [{ name: 'Tất cả file', extensions: ['*'] }] });
+      return file ?? null;
+    },
+    openLocalLink: async (p) => {
+      const linked = ctx.db.scalar<number>(
+        'SELECT (SELECT COUNT(*) FROM experience_records WHERE local_path = ?) + (SELECT COUNT(*) FROM knowledge_records WHERE local_path = ?)',
+        [p, p],
+      );
+      if (!linked) throw new AppError('Đường dẫn này không được liên kết với mục nào.');
+      if (!fs.existsSync(p)) throw new AppError('File/thư mục không còn tồn tại hoặc đã bị di chuyển — hãy chọn lại.');
+      // File chạy được (.exe, .bat…) chỉ mở thư mục chứa nó, không tự chạy.
+      if (fs.statSync(p).isFile() && DANGEROUS.has(fileExtension(p))) return desktop.showItemInFolder(p);
+      const err = await desktop.openPath(p);
+      if (err) throw new AppError(`Không mở được: ${err}`);
+    },
+
+    globalSearch: (q) => globalSearch(ctx, q),
+    exportXlsx: async (spec) => {
+      const name = String(spec?.defaultName || 'Xuat').replace(/[<>:"/\\|?*\u0000-\u001f]/g, ' ').trim() || 'Xuat';
+      const target = await desktop.saveFile({
+        title: 'Xuất file Excel',
+        defaultName: name.toLowerCase().endsWith('.xlsx') ? name : `${name}.xlsx`,
+        filters: [{ name: 'Excel Workbook (*.xlsx)', extensions: ['xlsx'] }],
+      });
+      return target ? writeXlsx(target, spec.sheetName, spec.rows) : null;
     },
 
     listKnowledge: (scope) => records.listKnowledge(ctx, scope && 'brandId' in scope ? scope.brandId ?? null : undefined),

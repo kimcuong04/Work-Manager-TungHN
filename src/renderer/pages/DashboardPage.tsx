@@ -85,13 +85,13 @@ function UrgentRow({ p }: { p: ProjectView }) {
   return (
     <tr className="clickable" onClick={() => navigate(`/project/${p.id}`)}>
       <td style={{ minWidth: 240 }}>
-        <div style={{ fontWeight: 600 }}>{p.projectName}</div>
+        <div style={{ fontWeight: 600 }}>{p.label}</div>
         <div className="small faint">{p.location}</div>
       </td>
-      <td style={{ minWidth: 110 }}>{p.clientName}</td>
-      <td style={{ minWidth: 110 }}>{p.designUnitName ?? <span className="faint">—</span>}</td>
+      <td style={{ minWidth: 110 }}>{p.siName ?? <span className="faint">—</span>}</td>
+      <td style={{ minWidth: 110 }}>{p.brandNames || <span className="faint">—</span>}</td>
       <td className="nowrap">
-        <div>{formatDate(p.dueDate)}</div>
+        <div>{p.dueDate ? formatDate(p.dueDate) : '—'}</div>
         <div className="small" style={{ color: 'var(--urgent)', fontWeight: 600 }}>
           {describeRemaining(p.remaining)}
         </div>
@@ -148,7 +148,7 @@ export function DashboardPage() {
     () =>
       scoped
         .filter((p) => p.status === 'URGENT')
-        .sort((a, b) => a.priorityPoint - b.priorityPoint || a.dueDate.localeCompare(b.dueDate)),
+        .sort((a, b) => a.priorityPoint - b.priorityPoint || (a.dueDate ?? '9999').localeCompare(b.dueDate ?? '9999')),
     [scoped],
   );
 
@@ -271,8 +271,8 @@ export function DashboardPage() {
                     <thead>
                       <tr>
                         <th>Dự án</th>
-                        <th>CĐT</th>
-                        <th>Đơn vị thiết kế</th>
+                        <th>Tên SI</th>
+                        <th>Hãng</th>
                         <th>Ngày tới hạn</th>
                         <th>Priority</th>
                         <th>File / Mở</th>

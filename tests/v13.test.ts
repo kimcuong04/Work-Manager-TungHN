@@ -93,12 +93,12 @@ describe('Salesperson', () => {
     const p = projects.createProject(ctx, input({ salespersonId: sp.id }));
     expect(p.salespersonName).toBe('Nguyễn Văn Sale');
     expect(master.listMaster(ctx, 'salespersons')[0].usageCount).toBe(1);
-    expect(() => master.deleteMaster(ctx, 'salespersons', sp.id, null)).toThrow(/đang được 1 dự án/);
+    expect(() => master.deleteMaster(ctx, 'salespersons', sp.id, null)).toThrow(/đang được 1 mục/);
     master.deleteMaster(ctx, 'salespersons', sp.id, { unlink: true });
     expect(projects.getProject(ctx, p.id).salespersonId).toBeNull();
   });
   it('từ chối Salesperson không tồn tại; bỏ trống thì vẫn tạo được (gọi từ dữ liệu cũ không có trường này)', () => {
-    expect(() => projects.createProject(ctx, input({ salespersonId: 'khong-co' }))).toThrow(/Salesperson không tồn tại/);
+    expect(() => projects.createProject(ctx, input({ salespersonId: 'khong-co' }))).toThrow(/Sale không tồn tại/);
     const { salespersonId: _omit, ...legacy } = input();
     expect(projects.createProject(ctx, legacy as ProjectInput).salespersonId).toBeNull();
   });
@@ -137,7 +137,7 @@ describe('Calendar gắn với dự án', () => {
     expect(upd.eventDate).toBe(TEST_TODAY);
     expect(upd.note).toContain('Ngày tới hạn: 30/11/2026 → 05/12/2026');
     expect(upd.note).toContain(`Giai đoạn: — → ${stage.name}`);
-    expect(upd.note).toContain('Salesperson: — → Chị Lan');
+    expect(upd.note).toContain('Sale: — → Chị Lan');
     expect(upd.note).not.toContain('Ghi chú');
   });
 
@@ -216,10 +216,13 @@ describe('Kiến thức', () => {
     expect(records.listKnowledge(ctx)).toHaveLength(1);
   });
 
-  it('validate: bắt buộc tiêu đề, chặn link javascript:', () => {
+  it('validate: bắt buộc tiêu đề; link website nhập tự do (không bắt buộc https://)', () => {
     const base = { brandId: null, knowledgeDate: '2026-11-01', title: 'A', deviceModel: '', content: '', webUrl: '', images: [] };
     expect(() => records.createKnowledge(ctx, { ...base, title: ' ' })).toThrow(/Tiêu đề/);
-    expect(() => records.createKnowledge(ctx, { ...base, webUrl: 'javascript:alert(1)' })).toThrow(/http/);
+    expect(records.createKnowledge(ctx, { ...base, webUrl: 'axis.com/support', localPath: 'C:\\Tai lieu\\Axis' })).toMatchObject({
+      webUrl: 'axis.com/support',
+      localPath: 'C:\\Tai lieu\\Axis',
+    });
   });
 
   it('ảnh dán vào Kiến thức được giữ lại khi dọn ảnh mồ côi', async () => {

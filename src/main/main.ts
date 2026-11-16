@@ -150,6 +150,11 @@ async function start() {
       }
       return files.length ? { files } : null;
     },
+    async pickDirectory(title) {
+      const r = await dialog.showOpenDialog(mainWindow!, { title, properties: ['openDirectory', 'createDirectory'] });
+      return r.canceled ? null : r.filePaths[0] ?? null;
+    },
+    trashItem: (p) => shell.trashItem(p),
     async writeClipboardImage(file) {
       const img = nativeImage.createFromPath(file);
       if (img.isEmpty()) return false;

@@ -18,20 +18,20 @@ export function hasErrors(e: FieldErrors): boolean {
   return Object.values(e).some(Boolean);
 }
 
+/** Chỉ STT và Tên dự án là bắt buộc; các ngày nếu có thì phải hợp lệ. */
 export function validateProjectInput(input: ProjectInput): FieldErrors {
   const e: FieldErrors = {};
   if (!input.jobYearId) e.jobYearId = 'Chọn năm.';
   if (input.workCategory !== 'PRE_SALES' && input.workCategory !== 'POST_SALES') e.workCategory = 'Chọn nhóm công việc.';
-  if (!input.receivedDate) e.receivedDate = 'Bắt buộc nhập Ngày tiếp nhận.';
-  else if (!isValidISODate(input.receivedDate)) e.receivedDate = 'Ngày không hợp lệ (dd/mm/yyyy).';
-  if (!input.dueDate) e.dueDate = 'Bắt buộc nhập Ngày tới hạn.';
-  else if (!isValidISODate(input.dueDate)) e.dueDate = 'Ngày không hợp lệ (dd/mm/yyyy).';
-  else if (isValidISODate(input.receivedDate) && input.dueDate < input.receivedDate)
-    e.dueDate = 'Ngày tới hạn phải lớn hơn hoặc bằng Ngày tiếp nhận.';
+  if (input.stt === null) e.stt = 'Bắt buộc nhập STT.';
+  else if (input.stt !== undefined && !(Number.isInteger(input.stt) && input.stt >= 1 && input.stt <= 999999)) e.stt = 'STT phải là số nguyên dương.';
+  if (input.receivedDate && !isValidISODate(input.receivedDate)) e.receivedDate = 'Ngày không hợp lệ (dd/mm/yyyy).';
+  if (input.dueDate && !isValidISODate(input.dueDate)) e.dueDate = 'Ngày không hợp lệ (dd/mm/yyyy).';
+  else if (input.dueDate && isValidISODate(input.receivedDate) && input.dueDate < input.receivedDate)
+    e.dueDate = 'Ngày tới hạn phải lớn hơn hoặc bằng Ngày bắt đầu.';
   const name = cleanName(input.projectName ?? '');
   if (!name) e.projectName = 'Bắt buộc nhập Tên dự án.';
   else if (name.length > LIMITS.projectName) e.projectName = `Tối đa ${LIMITS.projectName} ký tự.`;
-  if (!input.clientId) e.clientId = 'Bắt buộc chọn CĐT.';
   if (!Number.isInteger(input.priorityPoint) || input.priorityPoint < 1 || input.priorityPoint > 5)
     e.priorityPoint = 'Priority Point phải từ 1 đến 5.';
   if (input.fileExtension && !['dwg', 'txt'].includes(input.fileExtension.toLowerCase()))
@@ -95,8 +95,8 @@ export function validateExperienceInput(input: ExperienceInput): FieldErrors {
   checkLen(e, 'event', input.event, LIMITS.longText);
   checkLen(e, 'deviceModel', input.deviceModel, LIMITS.shortText);
   checkLen(e, 'projectText', input.projectText ?? '', LIMITS.projectName);
-  const urlErr = validateWebUrl(input.webUrl);
-  if (urlErr) e.webUrl = urlErr;
+  checkLen(e, 'webUrl', input.webUrl, LIMITS.url);
+  checkLen(e, 'localPath', input.localPath ?? '', LIMITS.url);
   return e;
 }
 
@@ -108,8 +108,8 @@ export function validateKnowledgeInput(input: KnowledgeInput): FieldErrors {
   checkLen(e, 'title', input.title, LIMITS.projectName);
   checkLen(e, 'deviceModel', input.deviceModel, LIMITS.shortText);
   checkLen(e, 'content', input.content, LIMITS.longText);
-  const urlErr = validateWebUrl(input.webUrl);
-  if (urlErr) e.webUrl = urlErr;
+  checkLen(e, 'webUrl', input.webUrl, LIMITS.url);
+  checkLen(e, 'localPath', input.localPath ?? '', LIMITS.url);
   return e;
 }
 

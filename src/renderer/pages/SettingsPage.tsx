@@ -22,7 +22,7 @@ import {
 import { addDays, formatDate, formatDateTime } from '../../shared/dates';
 import { ACTIVE_STATUSES, DEFAULT_THRESHOLDS, computeStatus, describeRules, validateThresholds } from '../../shared/status';
 import { nameKey } from '../../shared/text';
-import { JOB_LABEL, JOB_TYPES, MASTER_KINDS, MASTER_LABEL, type AppInfo, type JobType, type MasterItem, type MasterKind, type StorageUsage, type Theme } from '../../shared/types';
+import { JOB_LABEL, JOB_TYPES, MASTER_LABEL, type AppInfo, type JobType, type MasterItem, type MasterKind, type StorageUsage, type Theme } from '../../shared/types';
 import { validateMasterName, validateYearLabel } from '../../shared/validation';
 import { api } from '../api';
 import { Field, StatusBadge, formatBytes } from '../components/common';
@@ -181,7 +181,7 @@ function StatusRules() {
 
 function DeleteMasterDialog({ kind, item, items, onClose, onDone }: { kind: MasterKind; item: MasterItem; items: MasterItem[]; onClose: () => void; onDone: () => void }) {
   const { toastError } = useUi();
-  const nullable = kind === 'designUnits' || kind === 'stages' || kind === 'salespersons';
+  const nullable = kind !== 'brands';
   const others = items.filter((i) => i.id !== item.id);
   const [mode, setMode] = useState<'replace' | 'unlink'>(others.length ? 'replace' : 'unlink');
   const [target, setTarget] = useState(others[0]?.id ?? '');
@@ -278,7 +278,7 @@ function MasterList({ kind }: { kind: MasterKind }) {
       if (kind === 'brands') {
         const ok = await confirm({
           title: 'Hãng đang được sử dụng',
-          message: `Hãng "${item.name}" đang được ${item.usageCount} bản ghi Warranty/Experience/Kiến thức tham chiếu nên không thể xóa cứng. Chuyển sang Ngừng dùng (Deactivate) để giữ dữ liệu lịch sử?`,
+          message: `Hãng "${item.name}" đang được ${item.usageCount} dự án / bản ghi Warranty / Experience / Kiến thức tham chiếu nên không thể xóa cứng. Chuyển sang Ngừng dùng (Deactivate) để giữ dữ liệu lịch sử?`,
           confirmText: 'Deactivate',
         });
         if (ok) await toggleActive(item);
@@ -336,13 +336,14 @@ function MasterList({ kind }: { kind: MasterKind }) {
               <th>Tên</th>
               <th className="num">Đang dùng</th>
               {kind === 'brands' && <th>Trạng thái</th>}
+              {kind === 'salespersons' && <th>Phòng ban</th>}
               <th style={{ width: 1 }} />
             </tr>
           </thead>
           <tbody>
             {items.length === 0 && (
               <tr>
-                <td colSpan={4} className="faint" style={{ textAlign: 'center' }}>
+                <td colSpan={5} className="faint" style={{ textAlign: 'center' }}>
                   Chưa có mục nào.
                 </td>
               </tr>
@@ -372,6 +373,31 @@ function MasterList({ kind }: { kind: MasterKind }) {
                 </td>
                 <td className="num">{it.usageCount}</td>
                 {kind === 'brands' && <td>{it.isActive ? <span className="badge accent">Đang dùng</span> : <span className="badge">Ngừng dùng</span>}</td>}
+                {kind === 'salespersons' && (
+                  <td>
+                    <select
+                      className="select"
+                      style={{ minWidth: 160, height: 30 }}
+                      value={it.departmentId ?? ''}
+                      aria-label={`Phòng ban của ${it.name}`}
+                      onChange={async (e) => {
+                        try {
+                          await api.setSalespersonDepartment(it.id, e.target.value || null);
+                          await reload();
+                        } catch (err) {
+                          toastError(err);
+                        }
+                      }}
+                    >
+                      <option value="">— Chưa có —</option>
+                      {masters.departments.map((d) => (
+                        <option key={d.id} value={d.id}>
+                          {d.name}
+                        </option>
+                      ))}
+                    </select>
+                  </td>
+                )}
                 <td>
                   <div className="row nowrap" style={{ gap: 2 }}>
                     {kind === 'stages' && (
@@ -407,22 +433,49 @@ function MasterList({ kind }: { kind: MasterKind }) {
   );
 }
 
+const MASTER_TABS: { kind: MasterKind; label: string }[] = [
+  { kind: 'clients', label: 'EU' },
+  { kind: 'siPartners', label: 'Tên SI' },
+  { kind: 'brands', label: 'Hãng' },
+  { kind: 'salespersons', label: 'Sale & Phòng ban' },
+  { kind: 'designUnits', label: 'Đơn vị thiết kế' },
+  { kind: 'stages', label: 'Giai đoạn' },
+];
+
 function MasterData() {
-  const [kind, setKind] = useSessionState<MasterKind>('settings-master-kind', 'clients');
+  const [stored, setKind] = useSessionState<MasterKind>('settings-master-kind', 'clients');
+  const kind = stored === 'departments' ? 'salespersons' : stored;
   return (
     <section className="card card-pad">
       <h2 className="card-title">Master Data</h2>
       <p className="muted small" style={{ marginTop: 0 }}>
-        Danh mục dùng chung cho form dự án (CĐT, Đơn vị thiết kế, Salesperson, Giai đoạn), Warranty, Experience và Kiến thức. Đổi tên tự cập nhật mọi nơi (liên kết theo ID). Hãng đang được dùng chỉ có thể Deactivate.
+        Danh mục dùng chung cho dự án (EU, Tên SI, Hãng, Sale), Warranty, Experience và Kiến thức. Đổi tên tự cập nhật mọi nơi (liên kết theo ID). Hãng đang được dùng chỉ có thể Deactivate.
       </p>
       <div className="tabs small">
-        {MASTER_KINDS.map((k) => (
-          <button key={k} className={kind === k ? 'on' : ''} onClick={() => setKind(k)}>
-            {MASTER_LABEL[k]}
+        {MASTER_TABS.map((t) => (
+          <button key={t.kind} className={kind === t.kind ? 'on' : ''} onClick={() => setKind(t.kind)}>
+            {t.label}
           </button>
         ))}
       </div>
-      <MasterList key={kind} kind={kind} />
+      {kind === 'salespersons' ? (
+        <div className="sales-dept">
+          <div>
+            <h3 className="card-title" style={{ fontSize: 14 }}>
+              Sale
+            </h3>
+            <MasterList key="salespersons" kind="salespersons" />
+          </div>
+          <div>
+            <h3 className="card-title" style={{ fontSize: 14 }}>
+              Phòng ban
+            </h3>
+            <MasterList key="departments" kind="departments" />
+          </div>
+        </div>
+      ) : (
+        <MasterList key={kind} kind={kind} />
+      )}
     </section>
   );
 }

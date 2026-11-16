@@ -2673,3 +2673,299 @@ table.tbl {
     grid-template-columns: 1fr;
   }
 }
+
+/* ---------- v1.4: chọn nhiều Hãng ---------- */
+.multi-input {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  min-height: 36px;
+  padding: 3px 8px;
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+  background: var(--surface);
+  cursor: text;
+}
+.multi-input:focus-within {
+  border-color: var(--focus);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--focus) 18%, transparent);
+}
+.multi-input input {
+  flex: 1;
+  min-width: 90px;
+  border: 0;
+  outline: none;
+  background: none;
+  height: 28px;
+}
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 4px 2px 9px;
+  border-radius: 999px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: 12.5px;
+  font-weight: 600;
+}
+.chip button {
+  border: 0;
+  background: none;
+  color: inherit;
+  display: inline-flex;
+  padding: 2px;
+  border-radius: 50%;
+  cursor: pointer;
+}
+.chip button:hover {
+  background: color-mix(in srgb, var(--accent) 20%, transparent);
+}
+.check-box {
+  width: 16px;
+  height: 16px;
+  border-radius: 4px;
+  border: 1px solid var(--border-strong);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.check-box.on {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-contrast);
+}
+
+/* ---------- Form dự án: STT, thư mục ---------- */
+.stt-row {
+  display: grid;
+  grid-template-columns: 110px minmax(0, 1fr);
+  gap: 12px;
+}
+.folder-pick,
+.folder-preview {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+}
+.folder-preview {
+  align-items: flex-start;
+  background: color-mix(in srgb, var(--accent) 6%, var(--surface));
+  border-style: dashed;
+}
+.folder-preview > svg {
+  margin-top: 3px;
+  color: var(--accent);
+  flex-shrink: 0;
+}
+.path-text {
+  font-weight: 600;
+  word-break: break-all;
+}
+.folder-name {
+  display: block;
+  font-family: inherit;
+  font-size: 13.5px;
+  font-weight: 650;
+  word-break: break-all;
+  margin: 2px 0;
+}
+.section-toggle {
+  border: 0;
+  background: none;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12.5px;
+  font-weight: 650;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+.rot-90 {
+  transform: rotate(-90deg);
+}
+.link-btn {
+  border: 0;
+  background: none;
+  padding: 0;
+  color: var(--accent);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  max-width: 100%;
+  text-align: left;
+  font: inherit;
+}
+.link-btn:hover {
+  text-decoration: underline;
+}
+.link-btn.strong {
+  font-weight: 650;
+  display: block;
+}
+.file-row.warn {
+  border-color: color-mix(in srgb, var(--attention) 55%, transparent);
+}
+.note-snippet {
+  max-height: 9em;
+  overflow: hidden;
+  color: var(--text-muted);
+}
+.toolbar.view-bar {
+  margin-top: -6px;
+}
+
+/* ---------- Tìm kiếm trên topbar ---------- */
+.gsearch {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.gsearch-box {
+  position: relative;
+  display: flex;
+  align-items: center;
+  width: 470px;
+  height: 36px;
+  border: 1px solid var(--border-strong);
+  border-radius: 9px;
+  background: var(--surface);
+}
+.gsearch-box:focus-within {
+  border-color: var(--focus);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--focus) 18%, transparent);
+}
+.gsearch-icon {
+  margin-left: 10px;
+  color: var(--text-faint);
+  flex-shrink: 0;
+}
+.gsearch-mode {
+  border: 0;
+  border-right: 1px solid var(--border);
+  background: none;
+  height: 24px;
+  margin: 0 6px;
+  padding: 0 4px;
+  font-size: 12.5px;
+  font-weight: 650;
+  color: var(--accent);
+  cursor: pointer;
+  outline: none;
+  max-width: 130px;
+}
+.gsearch-input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  outline: none;
+  background: none;
+  height: 100%;
+  padding-right: 28px;
+}
+.gsearch-clear {
+  position: absolute;
+  right: 6px;
+  border: 0;
+  background: none;
+  color: var(--text-faint);
+  cursor: pointer;
+  display: inline-flex;
+  padding: 3px;
+}
+.gsearch-pop {
+  min-width: 380px;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: none;
+  overflow: visible;
+}
+.gsearch-results {
+  min-width: 470px;
+  max-height: 420px;
+}
+.hl-match {
+  background: color-mix(in srgb, var(--attention) 22%, transparent);
+  border-radius: 4px;
+  padding: 0 3px;
+  color: var(--text);
+}
+
+/* ---------- Settings: Sale & Phòng ban ---------- */
+.sales-dept {
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr);
+  gap: 20px;
+  align-items: start;
+}
+
+/* ---------- Experience / Kiến thức: liên kết ---------- */
+.local-link {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding: 6px 8px;
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+  min-height: 36px;
+}
+.local-link-value {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  max-width: 100%;
+  font-size: 13px;
+}
+.local-link-value button {
+  border: 0;
+  background: none;
+  color: var(--text-faint);
+  cursor: pointer;
+  display: inline-flex;
+}
+.link-chip {
+  max-width: 100%;
+  min-width: 0;
+}
+.link-chip .ellipsis {
+  min-width: 0;
+  max-width: 300px;
+}
+.export-cols {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px 14px;
+}
+
+/* ---------- Kéo thả ảnh ---------- */
+.thumbs.droppable {
+  border-radius: 10px;
+  transition: background 0.12s, box-shadow 0.12s;
+}
+.thumbs.drop-over {
+  background: var(--accent-soft);
+  box-shadow: 0 0 0 2px var(--accent);
+}
+
+@media (max-width: 1280px) {
+  .gsearch-box {
+    width: 380px;
+  }
+  .sales-dept {
+    grid-template-columns: 1fr;
+  }
+}

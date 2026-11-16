@@ -18,24 +18,29 @@ export const STATUS_LABEL: Record<DeadlineStatus, string> = {
   COMPLETED: 'Đã hoàn thành',
 };
 
-export function remainingDays(dueDate: string, today: string): number {
-  return diffDays(dueDate, today);
+export function remainingDays(dueDate: string, today: string): number;
+export function remainingDays(dueDate: string | null, today: string): number | null;
+export function remainingDays(dueDate: string | null, today: string): number | null {
+  return dueDate ? diffDays(dueDate, today) : null;
 }
 
 /** Công thức Phụ lục A của SRS. */
 export function computeStatus(
-  p: { isCompleted: boolean; dueDate: string },
+  p: { isCompleted: boolean; dueDate: string | null },
   today: string,
   th: Thresholds,
 ): DeadlineStatus {
   if (p.isCompleted) return 'COMPLETED';
+  // Không có ngày tới hạn: chưa có áp lực thời gian → Mới tiếp nhận.
+  if (!p.dueDate) return 'NEW';
   const r = remainingDays(p.dueDate, today);
   if (r < th.urgent) return 'URGENT';
   if (r <= th.attention) return 'ATTENTION';
   return 'NEW';
 }
 
-export function describeRemaining(days: number): string {
+export function describeRemaining(days: number | null): string {
+  if (days === null) return 'Chưa có hạn';
   if (days < 0) return `Quá hạn ${-days} ngày`;
   if (days === 0) return 'Đến hạn hôm nay';
   return `Còn ${days} ngày`;

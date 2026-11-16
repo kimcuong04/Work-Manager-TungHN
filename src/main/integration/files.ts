@@ -89,3 +89,18 @@ export function readWorkbook(filePath: string, maxMb: number, maxRows: number): 
     warnings,
   };
 }
+
+/** Xuất một bảng (dòng đầu là tiêu đề) ra file .xlsx, độ rộng cột theo nội dung. */
+export function writeXlsx(target: string, sheetName: string, rows: (string | number | null)[][]): string {
+  if (!Array.isArray(rows) || !rows.length || rows.length > 200_000 || !rows.every(Array.isArray)) throw new AppError('Dữ liệu xuất không hợp lệ.');
+  const clean = rows.map((r) => r.map((v) => (v === null || v === undefined ? '' : typeof v === 'number' ? v : String(v))));
+  const ws = XLSX.utils.aoa_to_sheet(clean);
+  const widths = clean[0].map((_, c) => Math.min(60, Math.max(8, ...clean.slice(0, 500).map((r) => String(r[c] ?? '').length + 2))));
+  ws['!cols'] = widths.map((wch) => ({ wch }));
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, (sheetName || 'Sheet1').replace(/[[\]*?/\\:]/g, ' ').slice(0, 31));
+  const tmp = `${target}.tmp`;
+  fs.writeFileSync(tmp, XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' }));
+  fs.renameSync(tmp, target);
+  return target;
+}

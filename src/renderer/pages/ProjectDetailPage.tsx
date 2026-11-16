@@ -20,15 +20,19 @@ import { Breadcrumbs, EmptyState, MenuButton, PriorityBadge, StatusBadge, shorte
 import { FileStatusRow } from '../components/FileLink';
 import { ImportedContent } from '../components/ImportedContent';
 import { ProjectCalendarCard } from '../components/ProjectCalendarCard';
+import { ProjectFolderRow } from '../components/ProjectFolderRow';
 import { ProjectNotes } from '../components/ProjectNotes';
 import { ImportWizard } from '../components/ImportWizard';
-import { nodePath } from '../lib/projects';
+import { nodePath, salesLabel } from '../lib/projects';
 import { useAppData } from '../state/AppData';
 import { useProjectActions } from '../state/projectActions';
 import { usePageTitle, useUi } from '../state/ui';
 
 function toInput(p: Project): ProjectInput {
   return {
+    stt: p.stt,
+    siId: p.siId,
+    brandIds: p.brands.map((b) => b.id),
     jobYearId: p.jobYearId,
     workCategory: p.workCategory,
     receivedDate: p.receivedDate,
@@ -53,7 +57,7 @@ export function ProjectDetailPage() {
   const actions = useProjectActions();
   const { confirm, toast, toastError } = useUi();
   const p = projectById.get(id);
-  usePageTitle(p ? p.projectName : 'Chi tiết dự án');
+  usePageTitle(p ? p.label : 'Chi tiết dự án');
 
   const [imp, setImp] = useState<ProjectImport | null | undefined>(undefined);
   const [wizard, setWizard] = useState(false);
@@ -136,11 +140,11 @@ export function ProjectDetailPage() {
       <div className="page-head">
         <div style={{ minWidth: 0, flex: 1 }}>
           <Breadcrumbs items={crumbs} />
-          <h1 style={{ wordBreak: 'break-word' }}>{p.projectName}</h1>
+          <h1 style={{ wordBreak: 'break-word' }}>{p.label}</h1>
           <div className="row" style={{ marginTop: 8 }}>
             <StatusBadge status={p.status} />
             <PriorityBadge value={p.priorityPoint} />
-            {p.status !== 'COMPLETED' && <span className={`small st-${p.status}`} style={{ color: 'var(--st)', fontWeight: 600 }}>{describeRemaining(p.remaining)}</span>}
+            {p.status !== 'COMPLETED' && p.dueDate && <span className={`small st-${p.status}`} style={{ color: 'var(--st)', fontWeight: 600 }}>{describeRemaining(p.remaining)}</span>}
           </div>
         </div>
         <div className="actions">
@@ -177,16 +181,42 @@ export function ProjectDetailPage() {
         <section className="card card-pad">
           <h2 className="card-title">Thông tin chung</h2>
           <div className="info-grid">
+            <span className="k">STT</span>
+            <span style={{ fontWeight: 600 }}>{p.stt}</span>
             <span className="k">Tên dự án</span>
             <span style={{ fontWeight: 600 }}>{p.projectName}</span>
-            <span className="k">CĐT</span>
-            <span>{p.clientName}</span>
-            <span className="k">Đơn vị thiết kế</span>
-            <span>{p.designUnitName ?? <span className="faint">—</span>}</span>
-            <span className="k">Salesperson</span>
-            <span>{p.salespersonName ?? <span className="faint">—</span>}</span>
-            <span className="k">Giai đoạn</span>
-            <span>{p.stageName ?? <span className="faint">—</span>}</span>
+            <span className="k">Tên SI</span>
+            <span>{p.siName ?? <span className="faint">—</span>}</span>
+            <span className="k">Hãng</span>
+            <span>
+              {p.brands.length ? (
+                <span className="row wrap" style={{ gap: 4 }}>
+                  {p.brands.map((b) => (
+                    <span key={b.id} className="badge">
+                      {b.name}
+                    </span>
+                  ))}
+                </span>
+              ) : (
+                <span className="faint">—</span>
+              )}
+            </span>
+            <span className="k">Sale</span>
+            <span>{salesLabel(p) ?? <span className="faint">—</span>}</span>
+            <span className="k">EU</span>
+            <span>{p.clientName ?? <span className="faint">—</span>}</span>
+            {p.designUnitName && (
+              <>
+                <span className="k">Đơn vị thiết kế</span>
+                <span>{p.designUnitName}</span>
+              </>
+            )}
+            {p.stageName && (
+              <>
+                <span className="k">Giai đoạn</span>
+                <span>{p.stageName}</span>
+              </>
+            )}
             <span className="k">Vị trí</span>
             <span>{p.location}</span>
           </div>
@@ -197,11 +227,17 @@ export function ProjectDetailPage() {
         <section className="card card-pad">
           <h2 className="card-title">Thời hạn &amp; ưu tiên</h2>
           <div className="info-grid">
-            <span className="k">Ngày tiếp nhận</span>
-            <span>{formatDate(p.receivedDate)}</span>
+            <span className="k">Ngày bắt đầu</span>
+            <span>{p.receivedDate ? formatDate(p.receivedDate) : <span className="faint">—</span>}</span>
             <span className="k">Ngày tới hạn</span>
             <span>
-              {formatDate(p.dueDate)} {p.status !== 'COMPLETED' && <span className="muted">({describeRemaining(p.remaining)})</span>}
+              {p.dueDate ? (
+                <>
+                  {formatDate(p.dueDate)} {p.status !== 'COMPLETED' && <span className="muted">({describeRemaining(p.remaining)})</span>}
+                </>
+              ) : (
+                <span className="faint">—</span>
+              )}
             </span>
             <span className="k">Trạng thái</span>
             <span>
@@ -225,6 +261,7 @@ export function ProjectDetailPage() {
         <section className="card card-pad">
           <h2 className="card-title">File &amp; Attachments</h2>
           <div className="stack" style={{ gap: 10 }}>
+            <ProjectFolderRow p={p} />
             {p.filePath ? (
               <FileStatusRow
                 file={{ path: p.filePath, name: p.fileName ?? '', extension: p.fileExtension ?? '' }}
@@ -270,7 +307,7 @@ export function ProjectDetailPage() {
       <section className="card card-pad" style={{ marginTop: 16 }}>
         <div className="row" style={{ marginBottom: 12 }}>
           <h2 className="card-title grow" style={{ margin: 0 }}>
-            <FileSpreadsheet size={18} /> Imported Excel Content
+            <FileSpreadsheet size={18} /> Thiết bị (import Excel)
           </h2>
           {imp && (
             <>
@@ -293,7 +330,7 @@ export function ProjectDetailPage() {
           <EmptyState
             icon={<FileSpreadsheet size={36} />}
             title="Chưa có dữ liệu Excel"
-            text="Import workbook .xlsx để hiển thị Thông tin dự án, Nội dung yêu cầu theo từng lần và danh sách thiết bị."
+            text="Import workbook .xlsx để lấy bảng thông tin các thiết bị (Model / Hãng / Mô tả)."
             action={
               <button className="btn primary" onClick={() => setWizard(true)}>
                 <Upload size={15} /> Import .xlsx
@@ -301,7 +338,7 @@ export function ProjectDetailPage() {
             }
           />
         ) : (
-          <ImportedContent info={imp.info} requirements={imp.requirements} items={imp.items} />
+          <ImportedContent items={imp.items} />
         )}
       </section>
 

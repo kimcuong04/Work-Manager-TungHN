@@ -11,6 +11,7 @@ import { Modal, SidePanel } from '../components/Modal';
 import { useLocalState, useSessionState } from '../lib/persist';
 import { useAppData } from '../state/AppData';
 import { usePageTitle, useUi } from '../state/ui';
+import { useLocation } from 'react-router';
 
 type DateField = 'receivedDate' | 'testedDate';
 type DateMode = 'all' | 'month' | 'range' | QuickRangeKey;
@@ -18,6 +19,7 @@ type DateMode = 'all' | 'month' | 'range' | QuickRangeKey;
 interface WarrantyFilter {
   q: string;
   brands: string[];
+  sis?: string[];
   dateField: DateField;
   mode: DateMode;
   month: number;
@@ -40,6 +42,7 @@ const COLUMNS: Column[] = [
   { key: 'caseNumber', label: 'Case no', sort: 'caseNumber', render: (r) => <b>{r.caseNumber}</b>, cls: 'nowrap' },
   { key: 'model', label: 'Model', sort: 'model', render: (r) => r.model, cls: 'nowrap' },
   { key: 'brand', label: 'Hãng', sort: 'brand', render: (r) => r.brandName ?? <span className="faint">—</span>, cls: 'nowrap' },
+  { key: 'si', label: 'Tên SI', render: (r) => r.siName ?? <span className="faint">—</span>, cls: 'nowrap' },
   { key: 'ip', label: 'IP', render: (r) => r.ipAddress, cls: 'nowrap' },
   { key: 'user', label: 'User', render: (r) => r.username, cls: 'nowrap' },
   { key: 'pass', label: 'Pass', render: (r) => (r.hasPassword ? <span className="faint">••••••</span> : ''), cls: 'nowrap' },
@@ -140,6 +143,7 @@ function emptyInput(yearId: string): WarrantyInput {
     jobYearId: yearId,
     model: '',
     brandId: null,
+    siId: null,
     ipAddress: '',
     username: '',
     password: '',
@@ -161,6 +165,7 @@ function toInput(r: WarrantyRecord): WarrantyInput {
     jobYearId: r.jobYearId,
     model: r.model,
     brandId: r.brandId,
+    siId: r.siId,
     ipAddress: r.ipAddress,
     username: r.username,
     password: undefined,
@@ -198,6 +203,19 @@ export function useBrandOptions() {
 function WarrantyForm({ year, record, onClose, onSaved }: { year: JobYear; record?: WarrantyRecord; onClose: () => void; onSaved: () => void }) {
   const { confirm, toast, toastError } = useUi();
   const brands = useBrandOptions();
+  const { masters, refresh } = useAppData();
+  const siOptions = masters.siPartners.map((m) => ({ id: m.id, name: m.name, inactive: !m.isActive }));
+  const createSi = async (name: string) => {
+    try {
+      const si = await api.createMaster('siPartners', name);
+      await refresh('masters');
+      toast('success', `Đã thêm SI "${si.name}".`);
+      return si.id;
+    } catch (e) {
+      toastError(e);
+      return null;
+    }
+  };
   const [initial] = useState(() => (record ? toInput(record) : emptyInput(year.id)));
   const [form, setForm] = useState<WarrantyInput>(initial);
   const [showPwd, setShowPwd] = useState(false);
@@ -263,6 +281,9 @@ function WarrantyForm({ year, record, onClose, onSaved }: { year: JobYear; recor
             {text('model', 'Model', 'Tên/mã model thiết bị')}
             <Field label="Hãng">
               <SearchableSelect options={brands.options} value={form.brandId} onChange={(v) => set('brandId', v)} onCreate={brands.create} createLabel="Thêm Hãng" placeholder="Chọn hoặc thêm Hãng" />
+            </Field>
+            <Field label="Tên SI">
+              <SearchableSelect options={siOptions} value={form.siId ?? null} onChange={(v) => set('siId', v)} onCreate={createSi} createLabel="Thêm SI" placeholder="Không bắt buộc" />
             </Field>
             {text('serialNumber', 'Serial number')}
             {text('macAddress', 'MAC', 'AA:BB:CC:DD:EE:FF')}
@@ -443,6 +464,7 @@ function WarrantyDetail({
         rows={[
           ['Model', r.model],
           ['Hãng', r.brandName],
+          ['Tên SI', r.siName],
           ['Serial number', r.serialNumber],
           ['MAC', r.macAddress],
           ['IP', r.ipAddress],
@@ -523,7 +545,7 @@ function WarrantyInfoModal({
       <div className="view-info">
         <section className="card card-pad">
           <h3 className="card-title">Thiết bị</h3>
-          <InfoRows r={r} rows={[['Model', r.model], ['Hãng', r.brandName], ['Serial number', r.serialNumber], ['MAC', r.macAddress]]} />
+          <InfoRows r={r} rows={[['Model', r.model], ['Hãng', r.brandName], ['Tên SI', r.siName], ['Serial number', r.serialNumber], ['MAC', r.macAddress]]} />
         </section>
         <section className="card card-pad">
           <h3 className="card-title">Truy cập thiết bị</h3>
@@ -582,7 +604,8 @@ export function WarrantyPage({ year, crumbs }: { year: JobYear; crumbs: Crumb[] 
   const [sort, setSort] = useLocalState<{ key: SortKey; dir: 'asc' | 'desc' }>('warranty-sort', { key: 'receivedDate', dir: 'desc' });
   const [hidden, setHidden] = useLocalState<string[]>('warranty-hidden-cols', []);
   const [form, setForm] = useState<{ record?: WarrantyRecord } | null>(null);
-  const [detailId, setDetailId] = useState<string | null>(null);
+  const location = useLocation();
+  const [detailId, setDetailId] = useState<string | null>((location.state as { select?: string } | null)?.select ?? null);
   const [viewId, setViewId] = useState<string | null>(null);
 
   const load = useCallback(() => {
@@ -599,7 +622,7 @@ export function WarrantyPage({ year, crumbs }: { year: JobYear; crumbs: Crumb[] 
     () =>
       (records ?? []).map((r) => ({
         r,
-        hay: buildHaystack([r.model, r.brandName, r.ipAddress, r.macAddress, r.serialNumber, r.caseNumber, r.customerReport, r.inspection, r.result, r.resolution]),
+        hay: buildHaystack([r.model, r.brandName, r.siName, r.ipAddress, r.macAddress, r.serialNumber, r.caseNumber, r.customerReport, r.inspection, r.result, r.resolution]),
       })),
     [records],
   );
@@ -608,7 +631,9 @@ export function WarrantyPage({ year, crumbs }: { year: JobYear; crumbs: Crumb[] 
   const shown = useMemo(() => {
     const nq = normalizeText(f.q);
     const list = indexed
-      .filter(({ r, hay }) => (!f.brands.length || (r.brandId && f.brands.includes(r.brandId))) && inRange(r[f.dateField], range.from, range.to) && matchesQuery(nq, hay))
+      .filter(
+        ({ r, hay }) =>
+          (!f.brands.length || (r.brandId && f.brands.includes(r.brandId))) && (!f.sis?.length || (r.siId && f.sis.includes(r.siId))) && inRange(r[f.dateField], range.from, range.to) && matchesQuery(nq, hay))
       .map((x) => x.r);
     const sign = sort.dir === 'asc' ? 1 : -1;
     const val = (r: WarrantyRecord): string =>
@@ -655,7 +680,7 @@ export function WarrantyPage({ year, crumbs }: { year: JobYear; crumbs: Crumb[] 
     }
   };
 
-  const activeFilter = !!f.q || f.brands.length > 0 || f.mode !== 'all';
+  const activeFilter = !!f.q || f.brands.length > 0 || (f.sis?.length ?? 0) > 0 || f.mode !== 'all';
   const cols = COLUMNS.filter((c) => !hidden.includes(c.key));
   const brandOpts = masters.brands.map((b) => ({ id: b.id, name: b.name, inactive: !b.isActive }));
 
@@ -678,13 +703,14 @@ export function WarrantyPage({ year, crumbs }: { year: JobYear; crumbs: Crumb[] 
       <div className="toolbar">
         <SearchInput value={f.q} onChange={(q) => setF({ ...f, q })} placeholder="Tìm Model, Hãng, IP, MAC, Serial, Case no, nội dung…" width={320} />
         <MultiSelect label="Hãng" options={brandOpts} value={f.brands} onChange={(brands) => setF({ ...f, brands })} />
+        <MultiSelect label="Tên SI" options={masters.siPartners.map((m) => ({ id: m.id, name: m.name, inactive: !m.isActive }))} value={f.sis ?? []} onChange={(sis) => setF({ ...f, sis })} />
         <select className="select" style={{ width: 150 }} value={f.dateField} onChange={(e) => setF({ ...f, dateField: e.target.value as DateField })} aria-label="Trường ngày lọc">
           <option value="receivedDate">Theo Ngày nhận</option>
           <option value="testedDate">Theo Ngày test</option>
         </select>
         <DateFilterControls mode={f.mode} month={f.month} monthYear={f.monthYear} from={f.from} to={f.to} onChange={(p) => setF({ ...f, ...p })} />
         {activeFilter && (
-          <button className="btn ghost sm" onClick={() => setF({ ...f, q: '', brands: [], mode: 'all', from: null, to: null })}>
+          <button className="btn ghost sm" onClick={() => setF({ ...f, q: '', brands: [], sis: [], mode: 'all', from: null, to: null })}>
             <X size={14} /> Clear Filters
           </button>
         )}

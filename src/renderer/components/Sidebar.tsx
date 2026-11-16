@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import { NavLink, useLocation, useNavigate } from 'react-router';
+import { NavLink, useLocation } from 'react-router';
 import {
   BookMarked,
   BookOpen,
@@ -21,7 +21,6 @@ import {
   Tag,
   Trash2,
 } from 'lucide-react';
-import { STATUS_ORDER } from '../../shared/status';
 import { nameKey } from '../../shared/text';
 import { CATEGORY_LABEL, JOB_LABEL, JOB_TYPES, PROJECT_CATEGORIES, type JobType, type JobYear, type ProjectCategory } from '../../shared/types';
 import { validateYearLabel } from '../../shared/validation';
@@ -33,7 +32,6 @@ import { useProjectActions } from '../state/projectActions';
 import { useUi } from '../state/ui';
 
 const JOB_ICON = { MAIN: Briefcase, FREELANCE: Laptop };
-const MAX_PROJECTS_IN_TREE = 30;
 
 type OpenMap = Record<string, boolean>;
 
@@ -41,78 +39,29 @@ function Chevron({ open }: { open: boolean }) {
   return <ChevronRight size={14} className={`nav-chevron ${open ? 'open' : ''}`} />;
 }
 
-function CategoryNode({
-  year,
-  category,
-  projects,
-  open,
-  toggle,
-}: {
-  year: JobYear;
-  category: ProjectCategory;
-  projects: ProjectView[];
-  open: boolean;
-  toggle: () => void;
-}) {
-  const navigate = useNavigate();
+/** Pre-sales / Post-sales chỉ là link tới danh sách (không xổ danh sách dự án trong sidebar nữa). */
+function CategoryNode({ year, category, count }: { year: JobYear; category: ProjectCategory; count: number }) {
   const { openCreate } = useProjectActions();
-  const path = nodePath(year.jobType, year.id, category);
-  const sorted = useMemo(
-    () =>
-      [...projects].sort(
-        (a, b) => STATUS_ORDER.indexOf(a.status) - STATUS_ORDER.indexOf(b.status) || a.priorityPoint - b.priorityPoint || a.dueDate.localeCompare(b.dueDate),
-      ),
-    [projects],
-  );
   return (
-    <>
-      <NavLink to={path} className={({ isActive }) => `nav-row small ${isActive ? 'active' : ''}`}>
-        <span
-          role="button"
-          tabIndex={-1}
-          aria-label={open ? 'Thu gọn' : 'Mở rộng'}
+    <NavLink to={nodePath(year.jobType, year.id, category)} className={({ isActive }) => `nav-row small ${isActive ? 'active' : ''}`}>
+      <span style={{ width: 14 }} />
+      <FolderOpen size={14} />
+      <span className="nav-label">{CATEGORY_LABEL[category]}</span>
+      <span className="nav-tools">
+        <button
+          title="Thêm Project vào nhóm này"
+          aria-label={`Thêm Project vào ${CATEGORY_LABEL[category]} ${year.yearLabel}`}
           onClick={(e) => {
             e.preventDefault();
             e.stopPropagation();
-            toggle();
+            openCreate({ jobType: year.jobType, jobYearId: year.id, workCategory: category });
           }}
-          style={{ display: 'inline-flex', visibility: projects.length ? 'visible' : 'hidden' }}
         >
-          <Chevron open={open} />
-        </span>
-        <FolderOpen size={14} />
-        <span className="nav-label">{CATEGORY_LABEL[category]}</span>
-        <span className="nav-tools">
-          <button
-            title="Thêm Project vào nhóm này"
-            aria-label={`Thêm Project vào ${CATEGORY_LABEL[category]} ${year.yearLabel}`}
-            onClick={(e) => {
-              e.preventDefault();
-              e.stopPropagation();
-              openCreate({ jobType: year.jobType, jobYearId: year.id, workCategory: category });
-            }}
-          >
-            <Plus size={13} />
-          </button>
-        </span>
-        <span className="nav-count">{projects.length || ''}</span>
-      </NavLink>
-      {open && projects.length > 0 && (
-        <div className="nav-children">
-          {sorted.slice(0, MAX_PROJECTS_IN_TREE).map((p) => (
-            <NavLink key={p.id} to={`/project/${p.id}`} className={({ isActive }) => `nav-row small st-${p.status} ${isActive ? 'active' : ''}`} title={p.projectName}>
-              <span className="status-dot" />
-              <span className="nav-label">{p.projectName}</span>
-            </NavLink>
-          ))}
-          {sorted.length > MAX_PROJECTS_IN_TREE && (
-            <button className="nav-row add" onClick={() => navigate(path)}>
-              Xem tất cả {sorted.length} project…
-            </button>
-          )}
-        </div>
-      )}
-    </>
+          <Plus size={13} />
+        </button>
+      </span>
+      <span className="nav-count">{count || ''}</span>
+    </NavLink>
   );
 }
 
@@ -208,14 +157,7 @@ function YearNode({ year, openMap, toggle }: { year: JobYear; openMap: OpenMap; 
       {open && (
         <div className="nav-children">
           {PROJECT_CATEGORIES.map((c) => (
-            <CategoryNode
-              key={c}
-              year={year}
-              category={c}
-              projects={byCat[c]}
-              open={openMap[`cat:${year.id}:${c}`] ?? false}
-              toggle={() => toggle(`cat:${year.id}:${c}`, false)}
-            />
+            <CategoryNode key={c} year={year} category={c} count={byCat[c].length} />
           ))}
           <NavLink to={nodePath(year.jobType, year.id, 'WARRANTY')} className={({ isActive }) => `nav-row small ${isActive ? 'active' : ''}`}>
             <span style={{ width: 14 }} />

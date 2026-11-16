@@ -9,7 +9,7 @@ import { useUi } from '../state/ui';
 const SHOW = 8;
 
 /** Các mục trên Calendar gắn với dự án (bắt đầu, những lần "Lưu và thêm vào Calendar", sự kiện tự tạo). */
-export function ProjectCalendarCard({ projectId, dueDate, version }: { projectId: string; dueDate: string; version: string }) {
+export function ProjectCalendarCard({ projectId, dueDate, version }: { projectId: string; dueDate: string | null; version: string }) {
   const navigate = useNavigate();
   const { toastError } = useUi();
   const [events, setEvents] = useState<CalendarEvent[] | null>(null);
@@ -31,9 +31,11 @@ export function ProjectCalendarCard({ projectId, dueDate, version }: { projectId
         <h2 className="card-title grow" style={{ margin: 0 }}>
           <CalendarClock size={18} /> Calendar
         </h2>
-        <button className="btn sm" onClick={() => open(dueDate)}>
-          <Flag size={13} /> Hạn chót {formatDate(dueDate)}
-        </button>
+        {dueDate && (
+          <button className="btn sm" onClick={() => open(dueDate)}>
+            <Flag size={13} /> Hạn chót {formatDate(dueDate)}
+          </button>
+        )}
         <button className="btn sm" onClick={() => navigate('/calendar')}>
           <ExternalLink size={13} /> Mở Calendar
         </button>

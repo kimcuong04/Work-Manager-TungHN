@@ -57,10 +57,11 @@ function syncImages(ctx: Ctx, t: ImageTable, ownerId: string, images: ImageRef[]
 /* ---------------- Warranty ---------------- */
 
 const SELECT_WARRANTY = `
-SELECT w.*, y.job_type, y.year_label, b.name AS brand_name
+SELECT w.*, y.job_type, y.year_label, b.name AS brand_name, si.name AS si_name
 FROM warranty_records w
 JOIN job_years y ON y.id = w.job_year_id
-LEFT JOIN brands b ON b.id = w.brand_id`;
+LEFT JOIN brands b ON b.id = w.brand_id
+LEFT JOIN si_partners si ON si.id = w.si_id`;
 
 function mapWarranty(r: Record<string, any>, images: ImageRef[]): WarrantyRecord {
   return {
@@ -71,6 +72,8 @@ function mapWarranty(r: Record<string, any>, images: ImageRef[]): WarrantyRecord
     model: str(r.model),
     brandId: strOrNull(r.brand_id),
     brandName: strOrNull(r.brand_name),
+    siId: strOrNull(r.si_id),
+    siName: strOrNull(r.si_name),
     ipAddress: str(r.ip_address),
     username: str(r.username),
     hasPassword: !!r.password_encrypted,
@@ -107,6 +110,8 @@ function checkWarranty(ctx: Ctx, input: WarrantyInput) {
   getYear(ctx, input.jobYearId);
   if (input.brandId && !ctx.db.scalar<number>('SELECT COUNT(*) FROM brands WHERE id = ?', [input.brandId]))
     throw new AppError('Hãng không tồn tại.');
+  if (input.siId && !ctx.db.scalar<number>('SELECT COUNT(*) FROM si_partners WHERE id = ?', [input.siId]))
+    throw new AppError('Tên SI không tồn tại.');
 }
 
 const t = (s: string) => s.replace(/\r\n/g, '\n').trim();
@@ -125,6 +130,7 @@ export function createWarranty(ctx: Ctx, input: WarrantyInput): WarrantyRecord {
         t(input.serialNumber), input.receivedDate, input.testedDate, t(input.customerReport), t(input.inspection), t(input.result),
         t(input.resolution), t(input.caseNumber), stamp, stamp],
     );
+    ctx.db.run('UPDATE warranty_records SET si_id = ? WHERE id = ?', [input.siId || null, id]);
     syncImages(ctx, WARRANTY_IMG, id, input.images);
   });
   return getWarranty(ctx, id);
@@ -144,6 +150,7 @@ export function updateWarranty(ctx: Ctx, id: string, input: WarrantyInput): Warr
     );
     if (input.password !== undefined)
       ctx.db.run('UPDATE warranty_records SET password_encrypted = ? WHERE id = ?', [input.password ? ctx.platform.encrypt(input.password) : null, id]);
+    if (input.siId !== undefined) ctx.db.run('UPDATE warranty_records SET si_id = ? WHERE id = ?', [input.siId || null, id]);
     removed = syncImages(ctx, WARRANTY_IMG, id, input.images);
   });
   deleteImageFiles(ctx, removed);
@@ -188,6 +195,7 @@ function mapExperience(r: Record<string, any>, images: ImageRef[]): ExperienceRe
     deviceModel: str(r.device_model),
     event: str(r.event),
     webUrl: str(r.web_url),
+    localPath: str(r.local_path),
     images,
     createdAt: r.created_at,
     updatedAt: r.updated_at,
@@ -218,18 +226,18 @@ function prepareExperience(ctx: Ctx, input: ExperienceInput) {
     if (!p) throw new AppError('Project được liên kết không tồn tại.');
     projectText = p.project_name;
   }
-  return { projectText, webUrl: input.webUrl.trim() };
+  return { projectText, webUrl: input.webUrl.trim(), localPath: (input.localPath ?? '').trim() || null };
 }
 
 export function createExperience(ctx: Ctx, input: ExperienceInput): ExperienceRecord {
-  const { projectText, webUrl } = prepareExperience(ctx, input);
+  const { projectText, webUrl, localPath } = prepareExperience(ctx, input);
   const id = randomUUID();
   const stamp = now();
   ctx.db.tx(() => {
     ctx.db.run(
-      `INSERT INTO experience_records (id, brand_id, experience_date, project_id, project_text, device_model, event, web_url, created_at, updated_at)
-       VALUES (?,?,?,?,?,?,?,?,?,?)`,
-      [id, input.brandId, input.experienceDate, input.projectId, projectText, t(input.deviceModel), t(input.event), webUrl, stamp, stamp],
+      `INSERT INTO experience_records (id, brand_id, experience_date, project_id, project_text, device_model, event, web_url, local_path, created_at, updated_at)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?)`,
+      [id, input.brandId, input.experienceDate, input.projectId, projectText, t(input.deviceModel), t(input.event), webUrl, localPath, stamp, stamp],
     );
     syncImages(ctx, EXPERIENCE_IMG, id, input.images);
   });
@@ -238,12 +246,12 @@ export function createExperience(ctx: Ctx, input: ExperienceInput): ExperienceRe
 
 export function updateExperience(ctx: Ctx, id: string, input: ExperienceInput): ExperienceRecord {
   getExperience(ctx, id);
-  const { projectText, webUrl } = prepareExperience(ctx, input);
+  const { projectText, webUrl, localPath } = prepareExperience(ctx, input);
   let removed: string[] = [];
   ctx.db.tx(() => {
     ctx.db.run(
-      `UPDATE experience_records SET brand_id=?, experience_date=?, project_id=?, project_text=?, device_model=?, event=?, web_url=?, updated_at=? WHERE id=?`,
-      [input.brandId, input.experienceDate, input.projectId, projectText, t(input.deviceModel), t(input.event), webUrl, now(), id],
+      `UPDATE experience_records SET brand_id=?, experience_date=?, project_id=?, project_text=?, device_model=?, event=?, web_url=?, local_path=?, updated_at=? WHERE id=?`,
+      [input.brandId, input.experienceDate, input.projectId, projectText, t(input.deviceModel), t(input.event), webUrl, localPath, now(), id],
     );
     removed = syncImages(ctx, EXPERIENCE_IMG, id, input.images);
   });
@@ -274,6 +282,7 @@ function mapKnowledge(r: Record<string, any>, images: ImageRef[]): KnowledgeReco
     deviceModel: str(r.device_model),
     content: str(r.content),
     webUrl: str(r.web_url),
+    localPath: str(r.local_path),
     images,
     createdAt: r.created_at,
     updatedAt: r.updated_at,
@@ -311,9 +320,9 @@ export function createKnowledge(ctx: Ctx, input: KnowledgeInput): KnowledgeRecor
   const stamp = now();
   ctx.db.tx(() => {
     ctx.db.run(
-      `INSERT INTO knowledge_records (id, brand_id, knowledge_date, title, device_model, content, web_url, created_at, updated_at)
-       VALUES (?,?,?,?,?,?,?,?,?)`,
-      [id, input.brandId || null, input.knowledgeDate, t(input.title), t(input.deviceModel), t(input.content), input.webUrl.trim(), stamp, stamp],
+      `INSERT INTO knowledge_records (id, brand_id, knowledge_date, title, device_model, content, web_url, local_path, created_at, updated_at)
+       VALUES (?,?,?,?,?,?,?,?,?,?)`,
+      [id, input.brandId || null, input.knowledgeDate, t(input.title), t(input.deviceModel), t(input.content), input.webUrl.trim(), (input.localPath ?? '').trim() || null, stamp, stamp],
     );
     syncImages(ctx, KNOWLEDGE_IMG, id, input.images);
   });
@@ -326,8 +335,8 @@ export function updateKnowledge(ctx: Ctx, id: string, input: KnowledgeInput): Kn
   let removed: string[] = [];
   ctx.db.tx(() => {
     ctx.db.run(
-      `UPDATE knowledge_records SET brand_id=?, knowledge_date=?, title=?, device_model=?, content=?, web_url=?, updated_at=? WHERE id=?`,
-      [input.brandId || null, input.knowledgeDate, t(input.title), t(input.deviceModel), t(input.content), input.webUrl.trim(), now(), id],
+      `UPDATE knowledge_records SET brand_id=?, knowledge_date=?, title=?, device_model=?, content=?, web_url=?, local_path=?, updated_at=? WHERE id=?`,
+      [input.brandId || null, input.knowledgeDate, t(input.title), t(input.deviceModel), t(input.content), input.webUrl.trim(), (input.localPath ?? '').trim() || null, now(), id],
     );
     removed = syncImages(ctx, KNOWLEDGE_IMG, id, input.images);
   });

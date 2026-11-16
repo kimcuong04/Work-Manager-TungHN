@@ -19,6 +19,8 @@ const day = (offset) => {
   return iso(d);
 };
 
+const projectsRoot = path.join(root, 'projects');
+fs.mkdirSync(projectsRoot, { recursive: true });
 const fixtures = path.join(root, 'fixtures');
 fs.mkdirSync(fixtures, { recursive: true });
 const dwg = path.join(fixtures, 'Bản vẽ mặt bằng tầng 1.dwg');
@@ -94,6 +96,19 @@ const call = (win, method, ...args) =>
     },
     [method, args],
   );
+// Không ghi vào clipboard thật của Windows (người dùng có thể đang copy/paste): giả lập clipboard trong main
+// và bắn sự kiện paste có ảnh trong renderer.
+const fakeClipboardImage = (app, file) =>
+  app.evaluate(({ clipboard, nativeImage, ClipboardItem }, f) => {
+    const data = nativeImage.createFromPath(f).toPNG();
+    clipboard.read = async () => [new ClipboardItem({ 'image/png': new Blob([new Uint8Array(data)], { type: 'image/png' }) })];
+  }, file);
+const pasteImageEvent = (win) =>
+  win.evaluate(() => {
+    const dt = new DataTransfer();
+    dt.items.add(new File([new Uint8Array([137, 80, 78, 71])], 'clip.png', { type: 'image/png' }));
+    (document.activeElement ?? document.body).dispatchEvent(new ClipboardEvent('paste', { clipboardData: dt, bubbles: true, cancelable: true }));
+  });
 const shot = (win, name) => win.screenshot({ path: path.join(shots, `${name}.png`) });
 const go = (win, hash) => win.evaluate((h) => (window.location.hash = h), hash);
 const toastText = async (win) => (await win.locator('.toast').last().innerText().catch(() => '')).trim();
@@ -110,21 +125,44 @@ try {
   // --- Tạo dự án qua UI (FR-PROJ-004, FR-FORM-002) ---
   await win.getByRole('button', { name: 'Thêm Project đầu tiên' }).click();
   await win.locator('#pf-name').fill('Nhà máy Đông Á – Thiết kế kỹ thuật PCCC');
-  const comboClient = win.locator('.form-section').nth(1).locator('input[role="combobox"]').first();
-  await comboClient.click();
-  await comboClient.fill('Công ty Hòa Bình');
-  await win.getByRole('button', { name: /Thêm mới “Công ty Hòa Bình”/ }).click();
-  await win.waitForTimeout(300);
+  check('Form mới: STT tự gợi ý = 1', (await win.locator('#pf-stt').inputValue()) === '1');
+  const combos = win.locator('.form-section').nth(1).locator('input[role="combobox"]');
+  await combos.nth(0).click();
+  await combos.nth(0).fill('SI Alpha');
+  await win.getByRole('button', { name: /Thêm SI “SI Alpha”/ }).click();
+  await win.waitForTimeout(250);
+  await combos.nth(1).click();
+  await combos.nth(1).fill('Hikvision');
+  await win.getByRole('button', { name: /Thêm Hãng “Hikvision”/ }).click();
+  await win.waitForTimeout(250);
+  await combos.nth(1).fill('Axis');
+  await win.getByRole('button', { name: /Thêm Hãng “Axis”/ }).click();
+  await win.waitForTimeout(250);
+  await win.locator('#pf-name').click();
+  await combos.nth(3).click();
+  await combos.nth(3).fill('Công ty Hòa Bình');
+  await win.getByRole('button', { name: /Thêm EU “Công ty Hòa Bình”/ }).click();
+  await win.waitForTimeout(250);
   const dueInput = win.locator('.form-section').nth(2).locator('input.input').nth(1);
   await dueInput.fill(day(1).split('-').reverse().join('/'));
   await dueInput.press('Tab');
+  await win.getByRole('button', { name: 'Tạo dự án' }).click();
+  await win.waitForTimeout(200);
+  check('Bắt buộc chọn nơi lưu thư mục dự án', await win.getByText('Chọn nơi lưu thư mục dự án trên máy.').isVisible());
+  await stubOpen(app, [projectsRoot]);
+  await win.getByRole('button', { name: /Chọn nơi lưu/ }).click();
+  await win.waitForTimeout(250);
+  const previewName = await win.locator('.folder-name').innerText();
+  await win.locator('.section-toggle').click();
   await stubOpen(app, [dwg]);
   await win.getByRole('button', { name: /Chọn file \.dwg/ }).click();
   await win.waitForTimeout(300);
   await shot(win, '02-project-form');
   await win.getByRole('button', { name: 'Tạo dự án' }).click();
-  await win.waitForTimeout(500);
+  await win.waitForTimeout(600);
   check('Tạo dự án qua form', (await toastText(win)).includes('Đã tạo dự án'), await toastText(win));
+  const expectFolder = path.join(projectsRoot, '1.Nhà máy Đông Á – Thiết kế kỹ thuật PCCC_SI Alpha_Hikvision-Axis');
+  check('Tự tạo thư mục "STT.Tên dự án_Tên SI_Hãng"', previewName === path.basename(expectFolder) && fs.existsSync(expectFolder), previewName);
 
   // --- Seed thêm dữ liệu qua IPC ---
   const years = await call(win, 'listYears');
@@ -171,15 +209,15 @@ try {
 
   // --- Search không dấu (AC-007) ---
   await win.getByRole('button', { name: /Xóa bộ lọc/ }).click();
-  await win.getByPlaceholder(/Tìm tên dự án/).fill('thiet ke ky thuat');
+  await win.getByPlaceholder(/Tìm STT, tên dự án/).fill('thiet ke ky thuat');
   await win.waitForTimeout(300);
   const found = await win.locator('.pcard-title').allInnerTexts();
   check("Tìm không dấu 'thiet ke ky thuat' ra 'Thiết kế kỹ thuật'", found.length === 1 && found[0].includes('Thiết kế kỹ thuật'), found.join(' | '));
-  await win.getByPlaceholder(/Tìm tên dự án/).fill('thiet ke');
+  await win.getByPlaceholder(/Tìm STT, tên dự án/).fill('thiet ke');
   await win.waitForTimeout(300);
   const foundStage = await win.locator('.pcard').count();
   check("Tìm 'thiet ke' khớp cả Giai đoạn 'Thiết kế cơ sở'", foundStage === 7, `${foundStage} thẻ`);
-  await win.getByPlaceholder(/Tìm tên dự án/).fill('');
+  await win.getByPlaceholder(/Tìm STT, tên dự án/).fill('');
   await shot(win, '04-all-board');
 
   // --- Kéo thả bị khóa ở chế độ xem; bật Chỉnh sửa Board rồi kéo sang Hoàn thành (AC-005/006, FR-PROJ-010) ---
@@ -211,8 +249,27 @@ try {
   await win.getByRole('button', { name: 'Danh sách', exact: true }).click();
   await win.waitForTimeout(200);
   await win.locator('.project-table th', { hasText: 'Ngày tới hạn' }).click();
-  const firstDue = await win.locator('.project-table tbody tr').first().locator('td').nth(7).innerText();
+  const firstDue = await win.locator('.project-table tbody tr').first().locator('td').nth(8).innerText();
   check('Bấm tiêu đề cột để sắp xếp', firstDue.includes('/'), firstDue.split('\n')[0]);
+  const heads = (await win.locator('.project-table th').allInnerTexts()).map((t) => t.replace(/[▲▼]/g, '').trim()).filter(Boolean);
+  check('Danh sách có STT / Tên dự án / Tên SI / Hãng / Sale / EU', ['STT', 'Tên dự án', 'Tên SI', 'Hãng', 'Sale', 'EU'].every((h) => heads.includes(h)), heads.join(' | '));
+  await win.locator('.project-table tbody tr', { hasText: 'Nhà máy Đông Á' }).click();
+  await win.waitForTimeout(250);
+  const panel = win.locator('.side-panel');
+  check(
+    'Pre-sales: panel xem nhanh bên phải có View info / Edit',
+    (await panel.isVisible()) && (await panel.getByRole('button', { name: 'View info' }).isVisible()) && (await panel.getByRole('button', { name: 'Edit' }).isVisible()) && (await win.locator('.overlay').count()) === 0,
+  );
+  await shot(win, '04d-presales-panel');
+  await panel.getByRole('button', { name: 'Đóng panel' }).click();
+  await win.getByRole('button', { name: /^Cột/ }).click();
+  const colBox = await win.locator('.popover').first().boundingBox();
+  const sideBox = await win.locator('.sidebar').boundingBox();
+  check('Popover "Cột" không bị sidebar che', !!colBox && !!sideBox && colBox.x >= sideBox.x + sideBox.width, `popover x=${Math.round(colBox?.x ?? -1)}, sidebar đến ${Math.round((sideBox?.x ?? 0) + (sideBox?.width ?? 0))}`);
+  await shot(win, '04e-column-popover');
+  await win.keyboard.press('Escape');
+  await win.locator('h1').first().click();
+  check('Sidebar không còn xổ danh sách dự án', (await win.locator('.sidebar a[href*="#/project/"]').count()) === 0);
   await win.getByRole('button', { name: /Thêm Project vào Pre-sales/ }).click();
   await win.waitForSelector('.modal');
   const newReceived = win.locator('.form-section').nth(2).locator('input.input').nth(0);
@@ -234,10 +291,10 @@ try {
   await win.waitForTimeout(400);
   await win.getByRole('button', { name: 'Chỉnh sửa', exact: true }).click();
   await win.waitForSelector('.modal');
-  const salesCombo = win.locator('.form-section').nth(1).locator('input[role="combobox"]').nth(1);
+  const salesCombo = win.locator('.form-section').nth(1).locator('input[role="combobox"]').nth(2);
   await salesCombo.click();
   await salesCombo.fill('Anh Tuấn Sale');
-  await win.getByRole('button', { name: /Thêm Salesperson “Anh Tuấn Sale”/ }).click();
+  await win.getByRole('button', { name: /Thêm Sale “Anh Tuấn Sale”/ }).click();
   await win.waitForTimeout(400);
   const footBtns = (await win.locator('.modal-foot button').allInnerTexts()).map((t) => t.trim());
   check('Form sửa dự án có Hủy / Lưu / Lưu và thêm vào Calendar', JSON.stringify(footBtns) === JSON.stringify(['Hủy', 'Lưu', 'Lưu và thêm vào Calendar']), footBtns.join(' | '));
@@ -249,7 +306,7 @@ try {
   check('Lưu và thêm vào Calendar thành công', (await toastText(win)).includes('thêm vào Calendar'), await toastText(win));
   const timelineUpd = await win.locator('.timeline-item', { hasText: 'Cập nhật dự án' }).count();
   const timelineNote = await win.locator('.timeline-item', { hasText: 'Cập nhật dự án' }).first().innerText().catch(() => '');
-  check('Chi tiết dự án: Salesperson + lịch sử Calendar có mục Cập nhật', (await win.getByText('Anh Tuấn Sale').first().isVisible()) && timelineUpd === 1 && timelineNote.includes('Salesperson'), timelineNote.replace(/\n/g, ' / '));
+  check('Chi tiết dự án: Sale + lịch sử Calendar có mục Cập nhật', (await win.getByText('Anh Tuấn Sale').first().isVisible()) && timelineUpd === 1 && timelineNote.includes('Sale: — → Anh Tuấn Sale'), timelineNote.replace(/\n/g, ' / '));
   await shot(win, '07d-detail-calendar-card');
 
   // --- Ghi chú theo ngày: định dạng tự do + dán ảnh Ctrl+V ---
@@ -260,11 +317,9 @@ try {
   await win.keyboard.type('cần thêm 2 camera');
   await win.keyboard.press('Control+B');
   await win.keyboard.press('Enter');
-  await app.evaluate(async ({ clipboard, nativeImage, ClipboardItem }, file) => {
-    const data = nativeImage.createFromPath(file).toPNG();
-    await clipboard.write([new ClipboardItem({ 'image/png': new Blob([new Uint8Array(data)], { type: 'image/png' }) })]);
-  }, png);
-  await win.keyboard.press('Control+V');
+  fs.writeFileSync(png, await win.screenshot());
+  await fakeClipboardImage(app, png);
+  await pasteImageEvent(win);
   await win.waitForSelector('.note-editing .note-editor img', { timeout: 5000 }).catch(() => {});
   await shot(win, '07e-note-editing');
   await win.locator('.note-editing').getByRole('button', { name: 'Lưu', exact: true }).click();
@@ -300,12 +355,13 @@ try {
   await win.waitForSelector('.wizard', { timeout: 10000 });
   await win.waitForTimeout(300);
   await shot(win, '06-import-wizard');
-  await win.getByRole('button', { name: 'Dữ liệu sheet' }).click();
-  await win.waitForTimeout(200);
-  await shot(win, '06b-import-sheet-grid');
+  check(
+    'Import chỉ còn bảng Thiết bị, bỏ A/B và tab Dữ liệu sheet',
+    (await win.getByRole('button', { name: 'Dữ liệu sheet' }).count()) === 0 && (await win.getByText('A. Thông tin dự án').count()) === 0 && (await win.getByText('B. Nội dung yêu cầu').count()) === 0,
+  );
   await win.getByRole('button', { name: 'Xác nhận Import' }).click();
   await win.waitForTimeout(600);
-  check('Import XLSX thành công', (await win.locator('.req-round').count()) === 2 && (await win.getByText('COLDSTORE 2U').isVisible()));
+  check('Import XLSX thành công (3 thiết bị)', (await win.getByText('COLDSTORE 2U').isVisible()) && (await win.locator('.req-round').count()) === 0);
   await shot(win, '07-project-detail-imported');
 
   // --- Mở file DWG: không có ứng dụng .dwg thì báo lỗi có hướng xử lý (AC-010) ---
@@ -314,7 +370,7 @@ try {
   await shot(win, '08-project-detail-file');
 
   // --- Warranty ---
-  const brand = await call(win, 'createMaster', 'brands', 'Axis');
+  const brand = (await call(win, 'listMaster', 'brands')).find((b) => b.name === 'Axis') ?? (await call(win, 'createMaster', 'brands', 'Axis'));
   const brand2 = await call(win, 'createMaster', 'brands', 'Allied Telesis');
   fs.writeFileSync(png, await win.screenshot());
   const [img] = await (async () => {
@@ -374,12 +430,9 @@ try {
 
   // --- v1.3: dán ảnh (Ctrl+V) thẳng vào mục ảnh của form ---
   const thumbsBefore = await win.locator('.modal').last().locator('.thumbs .thumb').count();
-  await app.evaluate(async ({ clipboard, nativeImage, ClipboardItem }, file) => {
-    const png = nativeImage.createFromPath(file).toPNG();
-    await clipboard.write([new ClipboardItem({ 'image/png': new Blob([new Uint8Array(png)], { type: 'image/png' }) })]);
-  }, png);
+  await fakeClipboardImage(app, png);
   await win.locator('.modal').last().locator('.form-section h3', { hasText: 'Ảnh' }).click();
-  await win.keyboard.press('Control+V');
+  await pasteImageEvent(win);
   await win.waitForTimeout(800);
   const thumbsAfter = await win.locator('.modal').last().locator('.thumbs .thumb').count();
   check('Ctrl+V dán ảnh chụp màn hình vào form', thumbsAfter === thumbsBefore + 1, `${thumbsBefore} → ${thumbsAfter} ảnh`);
@@ -428,12 +481,89 @@ try {
   check('Mở kết quả → trang Kiến thức chung, panel chi tiết mở sẵn', (await win.locator('.side-panel-head h2').innerText()).includes('PoE'));
   await shot(win, '12c-knowledge-list');
 
-  // --- v1.3: Dashboard › Dự án trong tháng ---
+  // --- v1.4: Kiến thức có Hyperlink + Link website nhập tự do ---
+  const localDoc = path.join(fixtures, 'Tai lieu PoE.txt');
+  fs.writeFileSync(localDoc, 'tai lieu');
+  const k = (await call(win, 'listKnowledge', {})).find((x) => x.title.includes('PoE'));
+  await call(win, 'updateKnowledge', k.id, { ...k, webUrl: 'cong suat poe switch', localPath: localDoc });
+  await win.reload();
+  await win.waitForSelector('.sidebar');
+  await go(win, '#/knowledge/general');
+  await win.waitForTimeout(300);
+  await win.locator('.tbl tbody tr').first().click();
+  await win.waitForTimeout(250);
+  check(
+    'Kiến thức: Hyperlink file trên máy + Link website tự do (không phải link → tìm kiếm)',
+    (await win.locator('.side-panel .link-chip', { hasText: 'Tai lieu PoE.txt' }).isVisible()) &&
+      (await win.locator('.side-panel .link-chip', { hasText: 'cong suat poe switch' }).getAttribute('title'))?.startsWith('Tìm trên trình duyệt'),
+  );
+  await shot(win, '12d-knowledge-links');
+
+  // --- v1.4: Tìm kiếm toàn cục theo loại + lọc ngày ---
+  await win.locator('select[aria-label="Kiểu tìm kiếm"]').selectOption('serial');
+  await win.locator('.gsearch-input').fill('ACCC8E');
+  await win.waitForSelector('.gsearch-results .opt');
+  await shot(win, '20-search-serial');
+  await win.locator('.gsearch-results .opt').first().click();
+  await win.waitForTimeout(500);
+  check('Tìm theo Serial → mở Warranty và chọn đúng bản ghi', (await win.locator('.side-panel-head h2').innerText()).includes('RMA-2026-001'));
+  await win.locator('select[aria-label="Kiểu tìm kiếm"]').selectOption('model');
+  await win.locator('.gsearch-input').fill('coldstore');
+  await win.locator('.gsearch-input').press('Enter');
+  await win.waitForTimeout(500);
+  const modelHits = await win.locator('.tbl tbody tr').count();
+  check('Tìm theo Model/Mã thiết bị trong bảng thiết bị import → trang kết quả', modelHits === 1 && (await win.getByText('COLDSTORE 2U').first().isVisible()), `${modelHits} kết quả`);
+  await win.getByRole('button', { name: 'Bộ lọc ngày' }).click();
+  await win.locator('.gsearch-pop select[aria-label="Khoảng thời gian"]').selectOption('lastMonth');
+  await win.waitForTimeout(400);
+  check('Lọc ngày: Tháng trước không còn kết quả', (await win.locator('.tbl tbody tr').count()) === 0);
+  await shot(win, '20b-search-page');
+  await win.locator('.gsearch-pop select[aria-label="Khoảng thời gian"]').selectOption('all');
+  await win.keyboard.press('Escape');
+  await win.locator('.gsearch-input').fill('');
+  await win.locator('select[aria-label="Kiểu tìm kiếm"]').selectOption('name');
+
+  // --- v1.3: Dashboard › Dự án trong tháng (+ v1.4 xuất xlsx) ---
   await go(win, '#/');
   await win.waitForTimeout(400);
-  const monthRows = await win.locator('.card', { hasText: 'Dự án trong tháng' }).locator('tbody tr').count();
+  const monthCard = win.locator('.card', { hasText: 'Dự án trong tháng' });
+  const monthRows = await monthCard.locator('tbody tr').count();
   check('Dashboard có panel "Dự án trong tháng" dưới Dự án khẩn cấp', monthRows > 0, `${monthRows} dự án`);
+  const monthHeads = (await monthCard.locator('th').allInnerTexts()).map((t) => t.trim());
+  check('Dự án trong tháng: STT / Tên dự án / Hãng / Tên SI / Sale / Ngày bắt đầu / Trạng thái', monthHeads.join('|') === 'STT|Tên dự án|Hãng|Tên SI|Sale|Ngày bắt đầu|Trạng thái', monthHeads.join(' | '));
   await shot(win, '03b-dashboard-month');
+  const xlsxOut = path.join(root, 'du-an-thang.xlsx');
+  await stubSave(app, xlsxOut);
+  await monthCard.getByRole('button', { name: /Xuất xlsx/ }).click();
+  await win.waitForSelector('.modal .export-cols');
+  await win.locator('.modal .export-cols label', { hasText: 'Ghi chú gần nhất' }).click();
+  await shot(win, '03c-export-columns');
+  await win.getByRole('button', { name: /Xuất \.xlsx/ }).click();
+  await win.waitForTimeout(600);
+  const exported = fs.existsSync(xlsxOut) ? XLSX.utils.sheet_to_json(XLSX.read(fs.readFileSync(xlsxOut)).Sheets['Tháng ' + (new Date().getMonth() + 1) + '-' + new Date().getFullYear()] ?? {}, { header: 1 }) : [];
+  check('Xuất xlsx theo cột đã chọn', exported.length === monthRows + 1 && exported[0][0] === 'STT' && !exported[0].includes('Ghi chú gần nhất'), `${exported.length} dòng, cột: ${(exported[0] ?? []).join(', ')}`);
+
+  // --- v1.4: Xóa dự án — Hủy / Xóa / Xóa cả folder local ---
+  await app.evaluate(({ shell }) => {
+    globalThis.__trashed = [];
+    shell.trashItem = async (p) => {
+      globalThis.__trashed.push(p);
+    };
+  });
+  const temp = await call(win, 'createProject', { jobYearId: main.id, workCategory: 'POST_SALES', receivedDate: day(0), dueDate: day(30), projectName: 'Dự án tạm để xóa', clientId: null, folderParent: projectsRoot, designUnitId: null, stageId: null, note: '', filePath: null, fileName: null, fileExtension: null, priorityPoint: 3 });
+  await win.reload();
+  await win.waitForSelector('.sidebar');
+  await go(win, `#/project/${temp.id}`);
+  await win.waitForTimeout(300);
+  await win.locator('.page-head').getByRole('button', { name: 'Xóa', exact: true }).click();
+  await win.waitForSelector('.modal');
+  const delBtns = (await win.locator('.modal-foot button').allInnerTexts()).map((t) => t.trim());
+  check('Xóa dự án có 3 lựa chọn Hủy / Xóa / Xóa cả folder local', JSON.stringify(delBtns) === JSON.stringify(['Hủy', 'Xóa', 'Xóa cả folder local']), delBtns.join(' | '));
+  await shot(win, '21-delete-3-options');
+  await win.getByRole('button', { name: 'Xóa cả folder local' }).click();
+  await win.waitForTimeout(500);
+  const trashed = await app.evaluate(() => globalThis.__trashed);
+  check('Xóa cả folder local → thư mục chuyển vào Thùng rác', trashed.length === 1 && trashed[0] === temp.folderPath && !(await call(win, 'listProjects')).some((x) => x.id === temp.id), trashed.join(', '));
 
   // --- v1.3: Calendar ---
   await go(win, '#/calendar');
@@ -486,6 +616,19 @@ try {
   await win.waitForSelector('.cal-month');
   await win.waitForTimeout(300);
   await shot(win, '16b-calendar-dark');
+  const dept = await call(win, 'createMaster', 'departments', 'Kinh doanh 1');
+  const sale = (await call(win, 'listMaster', 'salespersons')).find((x) => x.name === 'Anh Tuấn Sale');
+  await call(win, 'setSalespersonDepartment', sale.id, dept.id);
+  await win.reload();
+  await win.waitForSelector('.sidebar');
+  await go(win, '#/settings');
+  await win.getByRole('button', { name: 'Danh mục (Master Data)' }).click();
+  await win.getByRole('button', { name: 'Sale & Phòng ban' }).click();
+  await win.waitForTimeout(250);
+  await shot(win, '16e-settings-sale-dept');
+  await go(win, `#/project/${created[0].id}`);
+  await win.waitForTimeout(300);
+  check('Chi tiết dự án hiển thị Sale "Tên/Phòng ban"', await win.getByText('Anh Tuấn Sale/Kinh doanh 1').isVisible());
   await go(win, `#/job/MAIN/${main.id}/warranty`);
   await win.waitForTimeout(400);
   await win.getByText('RMA-2026-001').click();
@@ -578,8 +721,9 @@ try {
     await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
     return Math.round(performance.now() - t);
   });
-  const hits = await win.locator('.pcard').count();
-  check('Tìm kiếm trên 1.108 dự án ≤ 300ms', searchMs <= 300 && hits === 1, `${searchMs} ms, ${hits} kết quả`);
+  // "1099" khớp cả tên "số 1099" lẫn dự án có STT 1099 (tìm theo STT là tính năng mới).
+  const hitTitles = await win.locator('.pcard-title').allInnerTexts();
+  check('Tìm kiếm trên 1.108 dự án ≤ 300ms', searchMs <= 300 && hitTitles.some((t) => t.includes('số 1099')) && hitTitles.length <= 2, `${searchMs} ms, ${hitTitles.length} kết quả`);
 } catch (err) {
   check('Không có lỗi ngoại lệ trong kịch bản', false, String(err?.stack ?? err));
   await shot(win, 'zz-error').catch(() => {});
