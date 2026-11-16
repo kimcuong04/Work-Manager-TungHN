@@ -24,7 +24,10 @@ App tự cập nhật trên máy user, nên mọi thay đổi phải giữ đư�
 4. **Ảnh**: bảng chứa ảnh phải có cột `storage_key` để được bảo vệ khỏi bước dọn ảnh mồ côi lúc khởi động.
 5. **Mật khẩu Warranty**: giữ định dạng `os:`/`aes:` trong `src/main/platform.ts`; đổi cách mã hóa thì phải đọc được dữ liệu cũ.
 6. Không ghi dữ liệu người dùng nhập (nhất là mật khẩu) vào log.
-7. **Thư mục dự án trên máy**: chỉ tạo/đổi tên/chuyển trong nơi người dùng đã chọn qua hộp thoại; xóa thì chuyển vào
+7. **Thư mục dữ liệu** có thể nằm ngoài `%APPDATA%`: luôn lấy từ `ctx.paths`, không tự ghép đường dẫn mặc định.
+   Vị trí ghi trong `userData/data-location.json` (xem `src/main/dataLocation.ts`); thêm file/thư mục dữ liệu mới thì
+   bổ sung vào `DATA_ENTRIES` để được chép theo khi đổi thư mục.
+8. **Thư mục dự án trên máy**: chỉ tạo/đổi tên/chuyển trong nơi người dùng đã chọn qua hộp thoại; xóa thì chuyển vào
    Thùng rác (`shell.trashItem`), không xóa vĩnh viễn. E2E không được ghi vào clipboard thật của Windows.
 
 ## Phát hành bản cập nhật

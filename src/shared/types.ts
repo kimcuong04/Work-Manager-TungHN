@@ -464,6 +464,15 @@ export interface StorageUsage {
   quotaMb: number;
 }
 
+export interface DataLocationInfo {
+  dataDir: string;
+  defaultDir: string;
+  isDefault: boolean;
+  /** Vị trí cũ còn bản dữ liệu (sau khi chuyển), null nếu đã dọn hoặc không có. */
+  previousDir: string | null;
+  sizeBytes: number;
+}
+
 export interface AppInfo {
   version: string;
   dataDir: string;

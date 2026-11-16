@@ -5,6 +5,7 @@ import { app, BrowserWindow, clipboard, ClipboardItem, dialog, ipcMain, Menu, na
 import type { ApiResult } from '../shared/api';
 import type { AppEvent, UpdateStatus } from '../shared/types';
 import { AppError, makePaths, type Ctx } from './context';
+import { resolveStartupDataDir } from './dataLocation';
 import { Db } from './db/database';
 import { createHandlers, type Desktop, type Handlers } from './handlers';
 import { cleanupOrphanImages, imagePath, thumbPath } from './integration/images';
@@ -77,8 +78,40 @@ async function startupFailed(err: unknown, updater: Updater) {
   app.quit();
 }
 
+const configDir = () => app.getPath('userData');
+const defaultDataDir = () => process.env.PPM_DATA_DIR || path.join(configDir(), 'data');
+
+/** Thư mục dữ liệu khi khởi động: hỏi người dùng nếu vị trí đã đổi (vd ổ D:) mà không thấy dữ liệu. */
+function resolveDataDir(): Promise<string | null> {
+  return resolveStartupDataDir({
+    configDir: configDir(),
+    defaultDir: defaultDataDir(),
+    async askMissing(dir) {
+      const { response } = await dialog.showMessageBox({
+        type: 'warning',
+        title: 'Personal Project Manager',
+        message: 'Không tìm thấy thư mục dữ liệu',
+        detail: `Không thấy dữ liệu ở:\n${dir}\n\nỔ đĩa có thể chưa được cắm/kết nối, hoặc thư mục đã bị đổi tên hay chuyển đi. Dữ liệu không bị thay đổi.`,
+        buttons: ['Thử lại', 'Chọn thư mục dữ liệu…', 'Dùng thư mục mặc định', 'Thoát'],
+        defaultId: 0,
+        cancelId: 3,
+        noLink: true,
+      });
+      return (['retry', 'pick', 'default', 'quit'] as const)[response] ?? 'quit';
+    },
+    async pickDir() {
+      const r = await dialog.showOpenDialog({ title: 'Chọn thư mục chứa dữ liệu (có file ppm.sqlite)', properties: ['openDirectory'] });
+      return r.canceled ? null : r.filePaths[0] ?? null;
+    },
+    async notifyNotData() {
+      await dialog.showMessageBox({ type: 'error', title: 'Personal Project Manager', message: 'Thư mục này không có dữ liệu (thiếu file ppm.sqlite).' });
+    },
+  });
+}
+
 async function start() {
-  const dataDir = process.env.PPM_DATA_DIR || path.join(app.getPath('userData'), 'data');
+  const dataDir = await resolveDataDir();
+  if (!dataDir) return app.quit();
   const paths = makePaths(dataDir);
   let updateEnabled = true;
   const updater = createUpdater((status: UpdateStatus) => emit({ type: 'update', status }));
@@ -155,6 +188,15 @@ async function start() {
       return r.canceled ? null : r.filePaths[0] ?? null;
     },
     trashItem: (p) => shell.trashItem(p),
+    async ask(o) {
+      const r = await dialog.showMessageBox(mainWindow!, { type: 'question', title: o.title, message: o.message, detail: o.detail, buttons: o.buttons, cancelId: o.cancelId, defaultId: o.cancelId, noLink: true });
+      return r.response;
+    },
+    relaunch() {
+      app.relaunch();
+      app.exit(0);
+    },
+    dataLocation: { configDir: configDir(), defaultDir: defaultDataDir() },
     async writeClipboardImage(file) {
       const img = nativeImage.createFromPath(file);
       if (img.isEmpty()) return false;

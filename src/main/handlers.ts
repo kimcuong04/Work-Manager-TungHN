@@ -3,8 +3,10 @@ import path from 'node:path';
 import type { Api } from '../shared/api';
 import { IMAGE_EXTENSIONS, LINK_FILE_EXTENSIONS } from '../shared/types';
 import { fileExtension } from '../shared/validation';
+import { formatDateTime } from '../shared/dates';
 import { resolveWebLink } from '../shared/webLink';
 import { AppError, type Ctx } from './context';
+import { assertMovable, copyDataTo, dirSize, hasPpmData, readLocation, resolveTarget, samePath, setAsideExisting, trashOldData, writeLocation } from './dataLocation';
 import { checkFile, readWorkbook, writeXlsx } from './integration/files';
 import { imagePath, importImageBuffer, importImages, storageUsage } from './integration/images';
 import { inspectBackup, restoreBackup, writeBackup } from './services/backup';
@@ -35,6 +37,11 @@ export interface Desktop {
   pickDirectory(title: string): Promise<string | null>;
   /** Chuyển file/thư mục vào Thùng rác (khôi phục được). */
   trashItem(p: string): Promise<void>;
+  /** Hỏi người dùng bằng hộp thoại hệ thống; trả về chỉ số nút được bấm. */
+  ask(o: { title: string; message: string; detail?: string; buttons: string[]; cancelId: number }): Promise<number>;
+  /** Khởi động lại app (sau khi đổi thư mục dữ liệu). */
+  relaunch(): void;
+  dataLocation: { configDir: string; defaultDir: string };
   updater: Pick<Updater, 'getStatus' | 'check' | 'install'>;
 }
 
@@ -284,6 +291,65 @@ export function createHandlers(ctx: Ctx, desktop: Desktop): Handlers {
     },
     openDataFolder: async () => {
       await desktop.openPath(ctx.paths.dataDir);
+    },
+
+    getDataLocation: () => {
+      const { configDir, defaultDir } = desktop.dataLocation;
+      const prev = readLocation(configDir)?.previousDataDir ?? null;
+      return {
+        dataDir: ctx.paths.dataDir,
+        defaultDir,
+        isDefault: samePath(ctx.paths.dataDir, defaultDir),
+        previousDir: prev && !samePath(prev, ctx.paths.dataDir) && hasPpmData(prev) ? prev : null,
+        sizeBytes: dirSize(ctx.paths.dataDir),
+      };
+    },
+    changeDataDir: async (to) => {
+      const { configDir, defaultDir } = desktop.dataLocation;
+      const current = ctx.paths.dataDir;
+      let target: string;
+      if (to === 'default') target = defaultDir;
+      else {
+        const picked = await desktop.pickDirectory('Chọn thư mục mới để lưu dữ liệu (ví dụ trên ổ D:)');
+        if (!picked) return null;
+        target = resolveTarget(picked);
+      }
+      assertMovable(current, target);
+      let useExisting = false;
+      if (hasPpmData(target)) {
+        const modified = fs.statSync(path.join(target, 'ppm.sqlite')).mtime.toISOString();
+        const choice = await desktop.ask({
+          title: 'Thư mục đã có dữ liệu',
+          message: 'Thư mục này đã có dữ liệu Personal Project Manager',
+          detail:
+            `${target}\nSửa lần cuối: ${formatDateTime(modified)}\n\n` +
+            '• Dùng dữ liệu có sẵn: mở dữ liệu ở thư mục đó, không chép dữ liệu hiện tại sang.\n' +
+            '• Thay bằng dữ liệu hiện tại: dữ liệu cũ ở đó được chuyển vào thư mục con "PPM cu …" (không bị xóa), rồi chép dữ liệu hiện tại sang.',
+          buttons: ['Dùng dữ liệu có sẵn', 'Thay bằng dữ liệu hiện tại', 'Hủy'],
+          cancelId: 2,
+        });
+        if (choice === 2) return null;
+        if (choice === 0) useExisting = true;
+        else setAsideExisting(target);
+      }
+      if (!useExisting) await copyDataTo(ctx.db, current, target);
+      writeLocation(configDir, { dataDir: target, previousDataDir: current });
+      // Trả kết quả về giao diện trước rồi mới khởi động lại để mở dữ liệu ở vị trí mới.
+      setTimeout(() => desktop.relaunch(), 600);
+      return { dataDir: target };
+    },
+    openPreviousDataFolder: async () => {
+      const prev = readLocation(desktop.dataLocation.configDir)?.previousDataDir;
+      if (!prev || !fs.existsSync(prev)) throw new AppError('Không còn dữ liệu ở vị trí cũ.');
+      await desktop.openPath(prev);
+    },
+    trashPreviousData: async () => {
+      const { configDir } = desktop.dataLocation;
+      const loc = readLocation(configDir);
+      const prev = loc?.previousDataDir;
+      if (!loc || !prev || samePath(prev, ctx.paths.dataDir)) throw new AppError('Không còn dữ liệu ở vị trí cũ.');
+      await trashOldData(prev, (p) => desktop.trashItem(p));
+      writeLocation(configDir, { dataDir: loc.dataDir, previousDataDir: null });
     },
 
     getUpdateStatus: () => desktop.updater.getStatus(),

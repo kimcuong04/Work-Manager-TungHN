@@ -693,13 +693,50 @@ try {
   const after = await call(win, 'listProjects');
   check('Restore khôi phục dự án đã xóa', after.some((p) => p.id === fl.id), `${after.length} dự án`);
 
+  // --- v1.4.2: đổi thư mục dữ liệu sang "ổ khác" → chép, kiểm tra, khởi động lại ---
+  const newDataDir = path.join(root, 'o-D', 'PPM-Data');
+  await win.reload();
+  await win.waitForSelector('.sidebar');
+  await go(win, '#/settings');
+  await win.getByRole('button', { name: 'Dữ liệu & Backup' }).click();
+  await win.waitForSelector('text=Đang lưu tại');
+  const locCard = win.locator('.card', { has: win.locator('h2', { hasText: 'Thư mục dữ liệu' }) });
+  check('Settings hiện thư mục dữ liệu hiện tại (Mặc định)', await locCard.getByText('Mặc định', { exact: true }).isVisible());
+  await shot(win, '22-data-location');
+  await app.evaluate(({ app: a }) => {
+    globalThis.__relaunch = 0;
+    a.relaunch = () => {
+      globalThis.__relaunch++;
+    };
+    a.exit = () => {};
+  });
+  await stubOpen(app, [newDataDir]);
+  await win.getByRole('button', { name: /Đổi thư mục dữ liệu/ }).click();
+  await win.getByRole('button', { name: 'Chọn thư mục…' }).click();
+  await win.waitForSelector('text=Đã chuyển dữ liệu', { timeout: 20000 });
+  await win.waitForTimeout(900);
+  await shot(win, '22b-data-moving');
+  const relaunched = await app.evaluate(() => globalThis.__relaunch);
+  const pointer = JSON.parse(fs.readFileSync(path.join(dataDir, 'electron-profile', 'data-location.json'), 'utf8'));
+  check(
+    'Đổi thư mục dữ liệu: chép đủ sang thư mục mới, ghi vị trí, khởi động lại',
+    relaunched === 1 && pointer.dataDir === newDataDir && fs.existsSync(path.join(newDataDir, 'ppm.sqlite')) && fs.readdirSync(path.join(newDataDir, 'images')).length > 0,
+    `relaunch=${relaunched}, dataDir=${pointer.dataDir}`,
+  );
+
   await app.close();
 
-  // --- Mở lại: dữ liệu + settings còn (AC-001, AC-011, TC-014) ---
+  // --- Mở lại: dữ liệu + settings còn (AC-001, AC-011, TC-014) — giờ đọc từ thư mục dữ liệu mới ---
   ({ app, win } = await launch());
   const theme = await win.evaluate(() => document.documentElement.dataset.theme);
   const n = (await call(win, 'listProjects')).length;
+  const loc = await call(win, 'getDataLocation');
   check('Mở lại app: dữ liệu và theme được giữ', theme === 'dark' && n === 8, `theme=${theme}, projects=${n}`);
+  check('Mở lại app dùng thư mục dữ liệu mới, còn nhắc bản cũ', loc.dataDir === newDataDir && !loc.isDefault && loc.previousDir === dataDir, `${loc.dataDir} | cũ: ${loc.previousDir}`);
+  await go(win, '#/settings');
+  await win.getByRole('button', { name: 'Dữ liệu & Backup' }).click();
+  await win.waitForSelector('text=Dữ liệu ở vị trí cũ vẫn còn');
+  await shot(win, '22c-data-location-after');
 
   // --- NFR-001: 1.100 dự án — board/dashboard <= 2s, search <= 300ms ---
   const ys = await call(win, 'listYears');

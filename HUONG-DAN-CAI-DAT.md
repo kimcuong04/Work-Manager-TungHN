@@ -32,8 +32,14 @@ Kiểm tra thủ công hoặc bật/tắt tự kiểm tra: **Settings › Dữ l
 
 ## 3. Dữ liệu của bạn
 
-- Dữ liệu lưu trên máy tại `%APPDATA%\Personal Project Manager\data` (dán đường dẫn này vào thanh địa chỉ của File Explorer
-  để mở). Ứng dụng không gửi dữ liệu dự án hay file đi đâu.
+- Dữ liệu lưu trên máy, mặc định tại `%APPDATA%\Personal Project Manager\data` (dán đường dẫn này vào thanh địa chỉ của
+  File Explorer để mở). Ứng dụng không gửi dữ liệu dự án hay file đi đâu.
+- **Chuyển dữ liệu sang ổ khác** (ví dụ ổ D: cho đỡ chật ổ C): **Settings › Dữ liệu & Backup › Thư mục dữ liệu ›
+  Đổi thư mục dữ liệu…** → chọn thư mục mới. Ứng dụng chép toàn bộ database, ảnh, backup sang đó, kiểm tra đủ rồi tự khởi
+  động lại và dùng thư mục mới. Bản cũ ở vị trí cũ được giữ lại; khi đã kiểm tra dữ liệu ở vị trí mới đầy đủ, bấm
+  **Chuyển vào Thùng rác** để dọn. Muốn quay lại thì bấm **Về thư mục mặc định**.
+- Nếu thư mục dữ liệu nằm trên ổ ngoài/USB mà lúc mở app chưa cắm, ứng dụng sẽ hỏi: **Thử lại** (sau khi cắm ổ),
+  **Chọn thư mục dữ liệu…**, **Dùng thư mục mặc định** hoặc **Thoát** — không tự tạo dữ liệu trống.
 - **Cập nhật, gỡ cài đặt hay cài lại đều không làm mất dữ liệu.**
 - Ứng dụng tự giữ bản sao database của 10 lần mở gần nhất và trước mỗi lần nâng cấp, trong thư mục `backups`.
 - Nên **Xuất backup** định kỳ ra USB/ổ khác: **Settings › Dữ liệu & Backup › Xuất backup…** (file `.zip` gồm database và ảnh).
@@ -54,7 +60,8 @@ Sau đó có thể xóa file portable.
 ## 4. Gỡ cài đặt
 
 **Settings của Windows › Apps › Installed apps › Personal Project Manager › Uninstall.**
-Dữ liệu vẫn được giữ trong `%APPDATA%\Personal Project Manager`; xóa thư mục này nếu muốn xóa hẳn dữ liệu.
+Dữ liệu vẫn được giữ trong `%APPDATA%\Personal Project Manager` (hoặc thư mục bạn đã chọn ở Settings › Thư mục dữ liệu);
+xóa thư mục đó nếu muốn xóa hẳn dữ liệu.
 
 ## 5. Sự cố thường gặp
 
@@ -64,6 +71,7 @@ Dữ liệu vẫn được giữ trong `%APPDATA%\Personal Project Manager`; xó
 | File liên kết báo “không tồn tại” | File đã bị di chuyển/đổi tên — vào chi tiết dự án bấm **Chọn lại**. |
 | Không thấy thông báo cập nhật | Kiểm tra Internet; vào Settings › Dữ liệu & Backup bấm **Kiểm tra cập nhật**; đảm bảo đang dùng bản Setup, không phải portable. |
 | Windows chặn khi cài | Bấm **More info › Run anyway** (ứng dụng chưa ký số). |
+| Mở app báo “Không tìm thấy thư mục dữ liệu” | Thư mục dữ liệu đã chuyển sang ổ khác/USB chưa được cắm hoặc bị đổi tên: cắm ổ rồi bấm **Thử lại**, hoặc **Chọn thư mục dữ liệu…** (thư mục có file `ppm.sqlite`). |
 | Ứng dụng báo không khởi động được sau khi cập nhật | Chọn **Tải bản sửa lỗi & cài đặt** trong hộp thoại; dữ liệu gốc không bị thay đổi. |
 
 ## 6. Dành cho người phát triển: chạy từ mã nguồn

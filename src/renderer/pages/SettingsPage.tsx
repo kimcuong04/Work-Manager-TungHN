@@ -26,6 +26,7 @@ import { JOB_LABEL, JOB_TYPES, MASTER_LABEL, type AppInfo, type JobType, type Ma
 import { validateMasterName, validateYearLabel } from '../../shared/validation';
 import { api } from '../api';
 import { Field, StatusBadge, formatBytes } from '../components/common';
+import { DataLocationSection } from '../components/DataLocationSection';
 import { Modal } from '../components/Modal';
 import { UpdateDialog, useUpdateStatus } from '../components/UpdateNotice';
 import { useSessionState } from '../lib/persist';
@@ -720,6 +721,7 @@ function DataManagement() {
   return (
     <div className="stack">
       <UpdateSection />
+      <DataLocationSection />
       <section className="card card-pad">
         <h2 className="card-title">Backup &amp; Restore</h2>
         <p className="muted small" style={{ marginTop: 0 }}>

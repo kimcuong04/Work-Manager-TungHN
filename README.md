@@ -62,7 +62,9 @@ cho phép tải ngay bản sửa lỗi từ GitHub thay vì kẹt lại.
 
 ## Dữ liệu lưu ở đâu
 
-Mặc định: `%APPDATA%\Personal Project Manager\data\` (theo `productName` trong `package.json`)
+Mặc định: `%APPDATA%\Personal Project Manager\data\` (theo `productName` trong `package.json`). Đổi sang ổ khác trong
+**Settings › Dữ liệu & Backup › Thư mục dữ liệu** (chép → kiểm tra → khởi động lại; vị trí được ghi trong
+`%APPDATA%\Personal Project Manager\data-location.json`, bản cũ giữ lại tới khi người dùng dọn).
 
 | Mục | Nội dung |
 |-----|----------|

@@ -2,6 +2,7 @@ import type {
   AppInfo,
   AppSettings,
   BackupInfo,
+  DataLocationInfo,
   CalendarEvent,
   CalendarEventInput,
   CalendarQuery,
@@ -131,6 +132,16 @@ export interface Api {
   pickBackup(): Promise<BackupInfo | null>;
   restoreBackup(path: string): Promise<void>;
   openDataFolder(): Promise<void>;
+
+  getDataLocation(): Promise<DataLocationInfo>;
+  /**
+   * Chép dữ liệu sang thư mục khác (chọn qua hộp thoại) hoặc về thư mục mặc định, kiểm tra, ghi lại vị trí rồi
+   * khởi động lại app. Trả về null nếu người dùng hủy.
+   */
+  changeDataDir(to: 'pick' | 'default'): Promise<{ dataDir: string } | null>;
+  openPreviousDataFolder(): Promise<void>;
+  /** Chuyển bản dữ liệu ở vị trí cũ vào Thùng rác. */
+  trashPreviousData(): Promise<void>;
 
   getUpdateStatus(): Promise<UpdateStatus>;
   checkForUpdates(): Promise<UpdateStatus>;
