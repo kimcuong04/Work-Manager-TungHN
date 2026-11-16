@@ -64,12 +64,10 @@ export const PROJECT_COLUMNS: Col[] = [
   { key: 'received', label: 'Ngày bắt đầu', sort: 'received', cls: 'nowrap', render: (p) => (p.receivedDate ? formatDate(p.receivedDate) : dash) },
   { key: 'due', label: 'Ngày tới hạn', sort: 'due', cls: 'nowrap', render: (p) => <DueCell p={p} /> },
   { key: 'priority', label: 'Priority', sort: 'priority', render: (p) => <PriorityBadge value={p.priorityPoint} /> },
-  { key: 'designUnit', label: 'Đơn vị thiết kế', cls: 'pt-text', render: (p) => p.designUnitName ?? dash },
-  { key: 'stage', label: 'Giai đoạn', cls: 'pt-text', render: (p) => p.stageName ?? dash },
   { key: 'note', label: 'Ghi chú', cls: 'clamp', render: (p) => <div>{latestNote(p)}</div> },
 ];
 
-export const DEFAULT_HIDDEN_PROJECT_COLS = ['note', 'designUnit', 'stage'];
+export const DEFAULT_HIDDEN_PROJECT_COLS = ['note'];
 
 export function useProjectMenu() {
   const navigate = useNavigate();

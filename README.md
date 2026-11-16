@@ -80,7 +80,7 @@ Backup/Restore trong **Settings › Dữ liệu & Backup** xuất một file `.z
 
 - **Dashboard**: KPI theo trạng thái, ring chart 3 trạng thái hoạt động, danh sách khẩn cấp (mở chi tiết/mở file),
   **Dự án trong tháng** (STT / Tên / Hãng / Tên SI / Sale / Ngày bắt đầu / Trạng thái; chuyển tháng; **xuất .xlsx** chọn
-  cột), lọc theo Job/Năm/Nhóm; bấm KPI/biểu đồ để mở
+  cột; cột ngày ghi thành ô ngày Excel dạng mm/dd/yyyy), lọc theo Job/Năm/Nhóm; bấm KPI/biểu đồ để mở
   *Tất cả mục* với bộ lọc tương ứng.
 - **Calendar** (kiểu Google Calendar): xem Ngày / Tuần / Tháng / Lịch trình. Dự án mới tự có mục *Bắt đầu dự án* ở ngày
   tiếp nhận; khi sửa dự án, nút xanh **Lưu và thêm vào Calendar** ghi mục *Cập nhật dự án* kèm tóm tắt thay đổi.
@@ -90,8 +90,8 @@ Backup/Restore trong **Settings › Dữ liệu & Backup** xuất một file `.z
 - **Pre-sales / Post-sales** mặc định xem dạng **Danh sách** (bảng sắp xếp theo cột, ẩn/hiện cột; bấm một dòng mở panel
   xem nhanh bên phải với View info / Edit); chuyển sang **Tiến độ** để xem board.
 - **Thông tin dự án**: **STT** (tự +1, không trùng) và **Tên dự án** là bắt buộc; Tên SI, Hãng (chọn nhiều), Sale
-  (kèm Phòng ban), EU, Ngày bắt đầu, Ngày tới hạn, Priority không bắt buộc. Đơn vị thiết kế / Giai đoạn / File DWG nằm
-  trong "Thông tin bổ sung".
+  (kèm Phòng ban), EU, Ngày bắt đầu, Ngày tới hạn, Priority không bắt buộc. File DWG/TXT nằm trong mục thu gọn
+  "File liên kết".
 - **Thư mục dự án trên máy**: khi tạo dự án phải chọn nơi lưu (lần sau mặc định nơi đã chọn); app tự tạo thư mục
   `STT.Tên dự án_Tên SI_Hãng` và đổi tên theo khi sửa các trường đó. Xóa dự án có 3 lựa chọn: Hủy / Xóa / Xóa cả
   folder local (thư mục được chuyển vào Thùng rác).
@@ -99,7 +99,7 @@ Backup/Restore trong **Settings › Dữ liệu & Backup** xuất một file `.z
   Enter mở trang kết quả đầy đủ.
 - **Board 4 cột** Khẩn cấp / Cần chú ý / Mới tiếp nhận / Đã hoàn thành — trạng thái luôn tính tự động từ ngày tới hạn
   và ngưỡng. Kéo thả chỉ bật khi bấm *Chỉnh sửa Board* và chỉ dùng để hoàn thành / bỏ hoàn thành (có xác nhận).
-- **Tìm kiếm không dấu** (`thiet ke` ↔ `Thiết kế`), lọc nhiều CĐT/Đơn vị thiết kế, sắp xếp; bộ lọc giữ trong phiên.
+- **Tìm kiếm không dấu** (`thiet ke` ↔ `Thiết kế`), lọc nhiều EU/Tên SI/Hãng/Sale, sắp xếp; bộ lọc giữ trong phiên.
 - **Project Detail**: thông tin, thời hạn & ưu tiên, file DWG/TXT liên kết (mở bằng ứng dụng mặc định của Windows,
   cảnh báo khi mất liên kết, chọn lại/gỡ), **Ghi chú theo ngày** (mỗi ngày một mục, định dạng tự do: đậm/nghiêng/màu/
   danh sách/bảng, dán ảnh Ctrl+V; sửa được ghi chú ngày cũ), **Import .xlsx** chỉ lấy bảng **Thông tin các thiết bị**
@@ -113,7 +113,7 @@ Backup/Restore trong **Settings › Dữ liệu & Backup** xuất một file `.z
   không dấu trong toàn bộ nội dung.
 - **Ảnh**: ngoài nút *Thêm ảnh*, **kéo thả** file ảnh từ thư mục, hoặc chụp màn hình (Win+Shift+S) / copy ảnh rồi **Ctrl+V**;
   trong trình xem ảnh có *Sao chép ảnh* (Ctrl+C).
-- **Settings**: Light/Dark, ngưỡng trạng thái có preview, danh mục EU / Tên SI / Hãng / Sale & Phòng ban / Đơn vị thiết kế / Giai đoạn
+- **Settings**: Light/Dark, ngưỡng trạng thái có preview, danh mục EU / Tên SI / Hãng / Sale & Phòng ban
   (chống trùng, chặn xóa khi đang dùng — gán lại hoặc gỡ liên kết; Hãng chỉ Deactivate), quản lý năm, backup/restore,
   dung lượng ảnh, giới hạn XLSX.
 
@@ -143,7 +143,7 @@ Hợp đồng IPC nằm ở `src/shared/api.ts`; main process chỉ chấp nhậ
 
 | ID | Áp dụng |
 |----|---------|
-| Q-01, Q-02 | Đơn vị thiết kế, Giai đoạn: **không bắt buộc** |
+| Q-01, Q-02 | Đơn vị thiết kế, Giai đoạn: **đã bỏ** (cột cũ trong database giữ nguyên, không còn hiển thị/sửa) |
 | Q-03 | Priority mặc định **3** |
 | Q-04 | Ngày tới hạn phải ≥ Ngày tiếp nhận; **dự án mới** có hạn < hôm nay (nhập bù) được lưu ở trạng thái Đã hoàn thành — chỉ dự án có hạn trong tương lai mới chuyển Khẩn cấp/quá hạn khi tới hạn |
 | Q-05 | Tính theo **ngày lịch** |

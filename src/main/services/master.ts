@@ -20,8 +20,6 @@ const SPECS: Record<MasterKind, MasterSpec> = {
     ],
   },
   departments: { table: 'departments', usage: [{ table: 'salespersons', column: 'department_id', nullable: true }] },
-  designUnits: { table: 'design_units', usage: [{ table: 'projects', column: 'design_unit_id', nullable: true }] },
-  stages: { table: 'project_stages', usage: [{ table: 'projects', column: 'stage_id', nullable: true }] },
   salespersons: { table: 'salespersons', usage: [{ table: 'projects', column: 'salesperson_id', nullable: true }] },
   brands: {
     table: 'brands',
@@ -52,12 +50,11 @@ export function listMaster(ctx: Ctx, kind: MasterKind): MasterItem[] {
   const usageSql = s.usage
     .map((u) => `(SELECT COUNT(*) FROM ${u.table} WHERE ${u.table}.${u.column} = m.id)`)
     .join(' + ');
-  const order = kind === 'stages' ? 'm.sort_order, m.name' : 'm.name COLLATE NOCASE';
   const dept = kind === 'salespersons';
   return ctx.db
     .all<Record<string, any>>(
       `SELECT m.*, ${usageSql} AS usage_count${dept ? ', d.name AS department_name' : ''} FROM ${s.table} m
-       ${dept ? 'LEFT JOIN departments d ON d.id = m.department_id' : ''} ORDER BY ${order}`,
+       ${dept ? 'LEFT JOIN departments d ON d.id = m.department_id' : ''} ORDER BY m.name COLLATE NOCASE`,
     )
     .map((r) => ({
       id: r.id,
@@ -120,16 +117,6 @@ export function setSalespersonDepartment(ctx: Ctx, id: string, departmentId: str
 export function setMasterActive(ctx: Ctx, kind: MasterKind, id: string, active: boolean): void {
   getMaster(ctx, kind, id);
   ctx.db.tx(() => ctx.db.run(`UPDATE ${spec(kind).table} SET is_active = ?, updated_at = ? WHERE id = ?`, [active, now(), id]));
-}
-
-export function moveMaster(ctx: Ctx, kind: MasterKind, id: string, direction: -1 | 1): void {
-  const items = listMaster(ctx, kind);
-  const i = items.findIndex((m) => m.id === id);
-  const j = i + direction;
-  if (i < 0 || j < 0 || j >= items.length) return;
-  [items[i], items[j]] = [items[j], items[i]];
-  const table = spec(kind).table;
-  ctx.db.tx(() => items.forEach((m, idx) => ctx.db.run(`UPDATE ${table} SET sort_order = ? WHERE id = ?`, [idx, m.id])));
 }
 
 export function deleteMaster(ctx: Ctx, kind: MasterKind, id: string, strategy: MasterDeleteStrategy): void {

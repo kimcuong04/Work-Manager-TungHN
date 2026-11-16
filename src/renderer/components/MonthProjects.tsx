@@ -10,6 +10,11 @@ import { useAppData } from '../state/AppData';
 import { EmptyState, StatusBadge } from './common';
 import { XlsxExportDialog, type ExportColumn } from './XlsxExportDialog';
 
+/** Ghi chú tổng hợp mở đầu bằng "dd/mm/yyyy: …" (xem notes.ts); file xuất dùng mm/dd/yyyy cho đồng nhất với cột ngày. */
+function toUsDatePrefix(note: string): string {
+  return note.replace(/^(\d{2})\/(\d{2})\/(\d{4}):/, '$2/$1/$3:');
+}
+
 type Basis = 'any' | 'received' | 'due';
 const BASIS_LABEL: Record<Basis, string> = { any: 'Bắt đầu hoặc tới hạn', received: 'Theo ngày bắt đầu', due: 'Theo ngày tới hạn' };
 
@@ -29,13 +34,13 @@ const EXPORT_COLUMNS: ExportColumn<ProjectView>[] = [
   { key: 'sale', label: 'Sale', value: (p) => p.salespersonName },
   { key: 'department', label: 'Phòng ban', value: (p) => p.salespersonDepartment },
   { key: 'eu', label: 'EU', value: (p) => p.clientName },
-  { key: 'received', label: 'Ngày bắt đầu', value: (p) => formatDate(p.receivedDate) },
-  { key: 'due', label: 'Ngày tới hạn', value: (p) => formatDate(p.dueDate) },
+  { key: 'received', label: 'Ngày bắt đầu', type: 'date', value: (p) => p.receivedDate },
+  { key: 'due', label: 'Ngày tới hạn', type: 'date', value: (p) => p.dueDate },
   { key: 'status', label: 'Trạng thái', value: (p) => STATUS_LABEL[p.status] },
   { key: 'remaining', label: 'Còn lại', value: (p) => (p.isCompleted ? '' : describeRemaining(p.remaining)) },
   { key: 'priority', label: 'Priority', value: (p) => p.priorityPoint },
   { key: 'folder', label: 'Thư mục', value: (p) => p.folderPath },
-  { key: 'note', label: 'Ghi chú gần nhất', value: (p) => latestNote(p) },
+  { key: 'note', label: 'Ghi chú gần nhất', value: (p) => toUsDatePrefix(latestNote(p)) },
 ];
 
 /** Dashboard: tóm tắt các dự án có ngày bắt đầu và/hoặc ngày tới hạn rơi vào tháng đang xem; xuất được ra .xlsx. */

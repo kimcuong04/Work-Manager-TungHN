@@ -153,6 +153,8 @@ try {
   await win.getByRole('button', { name: /Chọn nơi lưu/ }).click();
   await win.waitForTimeout(250);
   const previewName = await win.locator('.folder-name').innerText();
+  const formText = await win.locator('.modal').innerText();
+  check('Form dự án không còn Đơn vị thiết kế / Giai đoạn', !/Đơn vị thiết kế|Giai đoạn/.test(formText));
   await win.locator('.section-toggle').click();
   await stubOpen(app, [dwg]);
   await win.getByRole('button', { name: /Chọn file \.dwg/ }).click();
@@ -170,24 +172,21 @@ try {
   const free = years.find((y) => y.jobType === 'FREELANCE');
   const cl2 = await call(win, 'createMaster', 'clients', 'Tập đoàn Vingroup');
   const cl3 = await call(win, 'createMaster', 'clients', 'Sở Xây dựng HN');
-  const du1 = await call(win, 'createMaster', 'designUnits', 'Thiết kế Kiến Việt');
-  const du2 = await call(win, 'createMaster', 'designUnits', 'Tư vấn ACC');
-  const stages = await call(win, 'listMaster', 'stages');
   const base = { jobYearId: main.id, workCategory: 'PRE_SALES', receivedDate: day(-10), note: '', filePath: null, fileName: null, fileExtension: null };
   const specs = [
-    ['Trường THCS Ngô Quyền – camera', cl2, du1, -2, 1, 'PRE_SALES'],
-    ['Bệnh viện Đa khoa tỉnh – hệ thống mạng', cl3, du2, 0, 2, 'POST_SALES'],
-    ['Khu đô thị Ocean Park – thiết kế cơ sở', cl2, du1, 3, 1, 'PRE_SALES'],
-    ['Văn phòng ABC – nâng cấp wifi', cl3, null, 5, 4, 'POST_SALES'],
-    ['Nhà xưởng KCN Bắc Ninh', cl2, du2, 9, 3, 'PRE_SALES'],
-    ['Showroom Ô tô Thành Công', cl3, du1, 20, 5, 'POST_SALES'],
+    ['Trường THCS Ngô Quyền – camera', cl2, -2, 1, 'PRE_SALES'],
+    ['Bệnh viện Đa khoa tỉnh – hệ thống mạng', cl3, 0, 2, 'POST_SALES'],
+    ['Khu đô thị Ocean Park – thiết kế cơ sở', cl2, 3, 1, 'PRE_SALES'],
+    ['Văn phòng ABC – nâng cấp wifi', cl3, 5, 4, 'POST_SALES'],
+    ['Nhà xưởng KCN Bắc Ninh', cl2, 9, 3, 'PRE_SALES'],
+    ['Showroom Ô tô Thành Công', cl3, 20, 5, 'POST_SALES'],
   ];
   const created = [];
-  for (const [name, c, d, due, prio, cat] of specs)
-    created.push(
-      await call(win, 'createProject', { ...base, projectName: name, clientId: c.id, designUnitId: d?.id ?? null, stageId: stages[1].id, dueDate: day(due), priorityPoint: prio, workCategory: cat }),
-    );
-  const fl = await call(win, 'createProject', { ...base, jobYearId: free.id, projectName: 'Freelance – bản vẽ shopdrawing', clientId: cl2.id, designUnitId: null, stageId: null, dueDate: day(12), priorityPoint: 2 });
+  for (const [name, c, due, prio, cat] of specs)
+    created.push(await call(win, 'createProject', { ...base, projectName: name, clientId: c.id, dueDate: day(due), priorityPoint: prio, workCategory: cat }));
+  const fl = await call(win, 'createProject', { ...base, jobYearId: free.id, projectName: 'Freelance – bản vẽ shopdrawing', clientId: cl2.id, dueDate: day(12), priorityPoint: 2 });
+  const legacyKind = await call(win, 'listMaster', 'stages').then(() => 'còn', (e) => String(e.message ?? e));
+  check('API không còn danh mục Giai đoạn', /không hợp lệ/.test(legacyKind), legacyKind);
   await call(win, 'setProjectCompleted', created[5].id, true);
   check('Dự án mới nhập với ngày tới hạn đã qua → Đã hoàn thành', created[0].isCompleted === true && created.slice(1).every((x) => !x.isCompleted));
   // Đưa lại về hoạt động để có một dự án quá hạn (Khẩn cấp) cho các bước sau.
@@ -215,8 +214,8 @@ try {
   check("Tìm không dấu 'thiet ke ky thuat' ra 'Thiết kế kỹ thuật'", found.length === 1 && found[0].includes('Thiết kế kỹ thuật'), found.join(' | '));
   await win.getByPlaceholder(/Tìm STT, tên dự án/).fill('thiet ke');
   await win.waitForTimeout(300);
-  const foundStage = await win.locator('.pcard').count();
-  check("Tìm 'thiet ke' khớp cả Giai đoạn 'Thiết kế cơ sở'", foundStage === 7, `${foundStage} thẻ`);
+  const foundTk = await win.locator('.pcard').count();
+  check("Tìm 'thiet ke' khớp tên 2 dự án có 'thiết kế'", foundTk === 2, `${foundTk} thẻ`);
   await win.getByPlaceholder(/Tìm STT, tên dự án/).fill('');
   await shot(win, '04-all-board');
 
@@ -542,6 +541,24 @@ try {
   await win.waitForTimeout(600);
   const exported = fs.existsSync(xlsxOut) ? XLSX.utils.sheet_to_json(XLSX.read(fs.readFileSync(xlsxOut)).Sheets['Tháng ' + (new Date().getMonth() + 1) + '-' + new Date().getFullYear()] ?? {}, { header: 1 }) : [];
   check('Xuất xlsx theo cột đã chọn', exported.length === monthRows + 1 && exported[0][0] === 'STT' && !exported[0].includes('Ghi chú gần nhất'), `${exported.length} dòng, cột: ${(exported[0] ?? []).join(', ')}`);
+  {
+    const ws = Object.values(XLSX.read(fs.readFileSync(xlsxOut)).Sheets)[0];
+    const us = (d) => (d ? `${d.slice(5, 7)}/${d.slice(8, 10)}/${d.slice(0, 4)}` : null);
+    const known = new Set((await call(win, 'listProjects')).flatMap((x) => [us(x.receivedDate), us(x.dueDate)]).filter(Boolean));
+    const dateCells = [];
+    for (const label of ['Ngày bắt đầu', 'Ngày tới hạn']) {
+      const c = exported[0].indexOf(label);
+      for (let r = 1; c >= 0 && r < exported.length; r++) {
+        const cell = ws[XLSX.utils.encode_cell({ r, c })];
+        if (cell && cell.v !== '') dateCells.push(cell);
+      }
+    }
+    check(
+      'Xuất xlsx: Ngày bắt đầu / Ngày tới hạn là ô ngày Excel dạng mm/dd/yyyy',
+      dateCells.length >= monthRows && dateCells.every((x) => x.t === 'n' && /^\d{2}\/\d{2}\/\d{4}$/.test(x.w) && known.has(x.w)),
+      dateCells.slice(0, 4).map((x) => x.w).join(', '),
+    );
+  }
 
   // --- v1.4: Xóa dự án — Hủy / Xóa / Xóa cả folder local ---
   await app.evaluate(({ shell }) => {
@@ -550,7 +567,7 @@ try {
       globalThis.__trashed.push(p);
     };
   });
-  const temp = await call(win, 'createProject', { jobYearId: main.id, workCategory: 'POST_SALES', receivedDate: day(0), dueDate: day(30), projectName: 'Dự án tạm để xóa', clientId: null, folderParent: projectsRoot, designUnitId: null, stageId: null, note: '', filePath: null, fileName: null, fileExtension: null, priorityPoint: 3 });
+  const temp = await call(win, 'createProject', { jobYearId: main.id, workCategory: 'POST_SALES', receivedDate: day(0), dueDate: day(30), projectName: 'Dự án tạm để xóa', clientId: null, folderParent: projectsRoot, note: '', filePath: null, fileName: null, fileExtension: null, priorityPoint: 3 });
   await win.reload();
   await win.waitForSelector('.sidebar');
   await go(win, `#/project/${temp.id}`);
@@ -623,6 +640,8 @@ try {
   await win.waitForSelector('.sidebar');
   await go(win, '#/settings');
   await win.getByRole('button', { name: 'Danh mục (Master Data)' }).click();
+  const masterTabs = await win.locator('.tabs.small button').allInnerTexts();
+  check('Settings › Master Data không còn tab Đơn vị thiết kế / Giai đoạn', masterTabs.join('|') === 'EU|Tên SI|Hãng|Sale & Phòng ban', masterTabs.join(' | '));
   await win.getByRole('button', { name: 'Sale & Phòng ban' }).click();
   await win.waitForTimeout(250);
   await shot(win, '16e-settings-sale-dept');
@@ -748,7 +767,7 @@ try {
         const due = new Date(d.getTime() + ((i % 40) - 5) * 86400000);
         const isoDue = `${due.getFullYear()}-${String(due.getMonth() + 1).padStart(2, '0')}-${String(due.getDate()).padStart(2, '0')}`;
         await window.ppm.call('createProject', [
-          { jobYearId: yearId, workCategory: i % 2 ? 'PRE_SALES' : 'POST_SALES', receivedDate: '2026-01-01', dueDate: isoDue, projectName: `Dự án hiệu năng số ${i} – thiết kế`, clientId, designUnitId: null, stageId: null, note: 'ghi chú '.repeat(10), filePath: null, fileName: null, fileExtension: null, priorityPoint: (i % 5) + 1 },
+          { jobYearId: yearId, workCategory: i % 2 ? 'PRE_SALES' : 'POST_SALES', receivedDate: '2026-01-01', dueDate: isoDue, projectName: `Dự án hiệu năng số ${i} – thiết kế`, clientId, note: 'ghi chú '.repeat(10), filePath: null, fileName: null, fileExtension: null, priorityPoint: (i % 5) + 1 },
         ]);
       }
     },

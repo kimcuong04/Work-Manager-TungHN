@@ -4,11 +4,12 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import type { Ctx } from '../src/main/context';
 import { importImages } from '../src/main/integration/images';
 import { inspectBackup, restoreBackup, writeBackup } from '../src/main/services/backup';
+import * as calendar from '../src/main/services/calendar';
 import * as master from '../src/main/services/master';
 import * as projects from '../src/main/services/projects';
 import * as records from '../src/main/services/records';
 import { getSettings, updateSettings } from '../src/main/services/settings';
-import type { ProjectInput } from '../src/shared/types';
+import type { MasterKind, ProjectInput } from '../src/shared/types';
 import { Db } from '../src/main/db/database';
 import { makeCtx, tmpDir } from './helpers';
 
@@ -24,8 +25,6 @@ function input(over: Partial<ProjectInput> = {}): ProjectInput {
     dueDate: '2026-11-20',
     projectName: 'Dự án ABC',
     clientId,
-    designUnitId: null,
-    stageId: null,
     salespersonId: null,
     note: '',
     filePath: null,
@@ -43,11 +42,10 @@ beforeEach(async () => {
 });
 
 describe('Khởi tạo & persistence', () => {
-  it('seed: hai Job có năm hiện tại, 4 giai đoạn, settings mặc định 2/5', () => {
+  it('seed: hai Job có năm hiện tại, settings mặc định 2/5', () => {
     const years = master.listYears(ctx);
     expect(years.filter((y) => y.jobType === 'MAIN')).toHaveLength(1);
     expect(years.filter((y) => y.jobType === 'FREELANCE')).toHaveLength(1);
-    expect(master.listMaster(ctx, 'stages').map((s) => s.name)).toContain('Thiết kế cơ sở');
     expect(getSettings(ctx)).toMatchObject({ urgentThresholdDays: 2, attentionThresholdDays: 5, theme: 'light' });
   });
   it('TC-014/AC-001/AC-011: dữ liệu và settings còn sau khi đóng/mở lại', async () => {
@@ -77,11 +75,18 @@ describe('Danh mục (FR-FORM-003, FR-SET-004..006, TC-012)', () => {
     master.deleteMaster(ctx, 'clients', other.id, { unlink: true });
     expect(projects.getProject(ctx, p.id).clientId).toBeNull();
   });
-  it('gỡ liên kết đơn vị thiết kế khi xóa', () => {
-    const du = master.createMaster(ctx, 'designUnits', 'TK X');
-    const p = projects.createProject(ctx, input({ designUnitId: du.id }));
-    master.deleteMaster(ctx, 'designUnits', du.id, { unlink: true });
-    expect(projects.getProject(ctx, p.id).designUnitId).toBeNull();
+  it('Đơn vị thiết kế / Giai đoạn đã bỏ: không còn là danh mục, sửa dự án không xóa giá trị cũ trong DB', () => {
+    const p = projects.createProject(ctx, input());
+    const stage = ctx.db.scalar<string>('SELECT id FROM project_stages ORDER BY sort_order LIMIT 1');
+    ctx.db.run('INSERT INTO design_units (id, name, sort_order, is_active, created_at, updated_at) VALUES (?,?,?,?,?,?)', ['du-old', 'TK cũ', 0, 1, 'x', 'x']);
+    ctx.db.run('UPDATE projects SET design_unit_id = ?, stage_id = ? WHERE id = ?', ['du-old', stage, p.id]);
+    expect(() => master.listMaster(ctx, 'stages' as MasterKind)).toThrow(/không hợp lệ/);
+    expect(() => master.createMaster(ctx, 'designUnits' as MasterKind, 'TK X')).toThrow(/không hợp lệ/);
+    const saved = projects.updateProject(ctx, p.id, input({ projectName: 'Dự án đổi tên' }), { addToCalendar: true });
+    expect(saved).not.toHaveProperty('stageName');
+    expect(ctx.db.get('SELECT design_unit_id, stage_id FROM projects WHERE id = ?', [p.id])).toEqual({ design_unit_id: 'du-old', stage_id: stage });
+    const upd = calendar.listCalendarEvents(ctx, { projectId: p.id }).find((e) => e.kind === 'PROJECT_UPDATE')!;
+    expect(upd.note).not.toMatch(/Giai đoạn|Đơn vị thiết kế/);
   });
   it('TC-WAR-007/FR-BRAND-004: Hãng đang dùng không xóa cứng, chỉ deactivate', () => {
     const b = master.createMaster(ctx, 'brands', 'Axis');

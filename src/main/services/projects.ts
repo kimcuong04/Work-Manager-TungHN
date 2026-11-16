@@ -22,15 +22,13 @@ import { deleteUnreferencedImages, noteCalendarLine, projectNoteImageKeys, write
 
 const SELECT_PROJECT = `
 SELECT p.*, y.job_type, y.year_label,
-  c.name AS client_name, si.name AS si_name, d.name AS design_unit_name, s.name AS stage_name,
+  c.name AS client_name, si.name AS si_name,
   sp.name AS salesperson_name, dep.name AS department_name,
   EXISTS (SELECT 1 FROM project_imports i WHERE i.project_id = p.id) AS has_import
 FROM projects p
 JOIN job_years y ON y.id = p.job_year_id
 LEFT JOIN clients c ON c.id = p.client_id
 LEFT JOIN si_partners si ON si.id = p.si_id
-LEFT JOIN design_units d ON d.id = p.design_unit_id
-LEFT JOIN project_stages s ON s.id = p.stage_id
 LEFT JOIN salespersons sp ON sp.id = p.salesperson_id
 LEFT JOIN departments dep ON dep.id = sp.department_id`;
 
@@ -65,10 +63,6 @@ function mapProject(r: Record<string, any>, brands: NamedRef[]): Project {
     siId: strOrNull(r.si_id),
     siName: strOrNull(r.si_name),
     brands,
-    designUnitId: strOrNull(r.design_unit_id),
-    designUnitName: strOrNull(r.design_unit_name),
-    stageId: strOrNull(r.stage_id),
-    stageName: strOrNull(r.stage_name),
     salespersonId: strOrNull(r.salesperson_id),
     salespersonName: strOrNull(r.salesperson_name),
     salespersonDepartment: strOrNull(r.department_name),
@@ -115,8 +109,6 @@ interface Normalized {
   clientId: string | null;
   siId: string | null;
   brandIds: string[];
-  designUnitId: string | null;
-  stageId: string | null;
   salespersonId: string | null;
   note: string;
   filePath: string | null;
@@ -136,8 +128,6 @@ function normalizeInput(ctx: Ctx, input: ProjectInput, currentId?: string): Norm
   const salespersonId = strOrNull(input.salespersonId);
   if (!exists(ctx, 'clients', clientId)) throw new AppError('EU không tồn tại.');
   if (!exists(ctx, 'si_partners', siId)) throw new AppError('Tên SI không tồn tại.');
-  if (!exists(ctx, 'design_units', strOrNull(input.designUnitId))) throw new AppError('Đơn vị thiết kế không tồn tại.');
-  if (!exists(ctx, 'project_stages', strOrNull(input.stageId))) throw new AppError('Giai đoạn không tồn tại.');
   if (!exists(ctx, 'salespersons', salespersonId)) throw new AppError('Sale không tồn tại.');
   const brandIds = [...new Set((Array.isArray(input.brandIds) ? input.brandIds : []).filter(Boolean))];
   for (const b of brandIds) if (!exists(ctx, 'brands', b)) throw new AppError('Hãng không tồn tại.');
@@ -168,8 +158,6 @@ function normalizeInput(ctx: Ctx, input: ProjectInput, currentId?: string): Norm
     clientId,
     siId,
     brandIds,
-    designUnitId: strOrNull(input.designUnitId),
-    stageId: strOrNull(input.stageId),
     salespersonId,
     note: (input.note ?? '').replace(/\r\n/g, '\n'),
     filePath,
@@ -225,10 +213,10 @@ export function createProject(ctx: Ctx, raw: ProjectInput, opts: ProjectSaveOpti
     ctx.db.tx(() => {
       ctx.db.run(
         `INSERT INTO projects (id, stt, job_year_id, work_category, received_date, due_date, project_name, client_id, si_id,
-          design_unit_id, stage_id, salesperson_id, note, file_path, file_name, file_extension, folder_path, priority_point,
-          is_completed, completed_at, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,'',?,?,?,?,?,?,?,?,?)`,
-        [id, p.stt, p.jobYearId, p.workCategory, p.receivedDate, p.dueDate, p.projectName, p.clientId, p.siId, p.designUnitId,
-          p.stageId, p.salespersonId, p.filePath, p.fileName, p.fileExtension, folder?.path ?? null, p.priorityPoint,
+          salesperson_id, note, file_path, file_name, file_extension, folder_path, priority_point,
+          is_completed, completed_at, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,'',?,?,?,?,?,?,?,?,?)`,
+        [id, p.stt, p.jobYearId, p.workCategory, p.receivedDate, p.dueDate, p.projectName, p.clientId, p.siId,
+          p.salespersonId, p.filePath, p.fileName, p.fileExtension, folder?.path ?? null, p.priorityPoint,
           completed, completed ? stamp : null, stamp, stamp],
       );
       writeBrands(ctx, id, p.brandIds);
@@ -275,10 +263,10 @@ export function updateProject(ctx: Ctx, id: string, raw: ProjectInput, opts: Pro
     ctx.db.tx(() => {
       ctx.db.run(
         `UPDATE projects SET stt=?, job_year_id=?, work_category=?, received_date=?, due_date=?, project_name=?, client_id=?, si_id=?,
-          design_unit_id=?, stage_id=?, salesperson_id=?, file_path=?, file_name=?, file_extension=?, folder_path=?, priority_point=?, updated_at=?
+          salesperson_id=?, file_path=?, file_name=?, file_extension=?, folder_path=?, priority_point=?, updated_at=?
          WHERE id=?`,
-        [p.stt, p.jobYearId, p.workCategory, p.receivedDate, p.dueDate, p.projectName, p.clientId, p.siId, p.designUnitId,
-          p.stageId, p.salespersonId, p.filePath, p.fileName, p.fileExtension, folderPath, p.priorityPoint, now(), id],
+        [p.stt, p.jobYearId, p.workCategory, p.receivedDate, p.dueDate, p.projectName, p.clientId, p.siId,
+          p.salespersonId, p.filePath, p.fileName, p.fileExtension, folderPath, p.priorityPoint, now(), id],
       );
       writeBrands(ctx, id, p.brandIds);
       syncProjectStartEvent(ctx, before, p);

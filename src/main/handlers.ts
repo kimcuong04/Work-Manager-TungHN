@@ -90,7 +90,6 @@ export function createHandlers(ctx: Ctx, desktop: Desktop): Handlers {
     deleteMaster: (kind, id, strategy) => master.deleteMaster(ctx, kind, id, strategy),
     setMasterActive: (kind, id, active) => master.setMasterActive(ctx, kind, id, active),
     setSalespersonDepartment: (id, dept) => master.setSalespersonDepartment(ctx, id, dept),
-    moveMaster: (kind, id, dir) => master.moveMaster(ctx, kind, id, dir),
 
     listYears: () => master.listYears(ctx),
     createYear: (jobType, label) => master.createYear(ctx, jobType, label),
@@ -255,7 +254,7 @@ export function createHandlers(ctx: Ctx, desktop: Desktop): Handlers {
         defaultName: name.toLowerCase().endsWith('.xlsx') ? name : `${name}.xlsx`,
         filters: [{ name: 'Excel Workbook (*.xlsx)', extensions: ['xlsx'] }],
       });
-      return target ? writeXlsx(target, spec.sheetName, spec.rows) : null;
+      return target ? writeXlsx(target, spec.sheetName, spec.rows, spec.dateColumns) : null;
     },
 
     listKnowledge: (scope) => records.listKnowledge(ctx, scope && 'brandId' in scope ? scope.brandId ?? null : undefined),

@@ -32,8 +32,6 @@ function input(over: Partial<ProjectInput> = {}): ProjectInput {
     dueDate: '2026-11-30',
     projectName: 'Trung tâm thương mại A',
     clientId: client,
-    designUnitId: null,
-    stageId: null,
     salespersonId: null,
     note: '',
     filePath: null,
@@ -129,14 +127,14 @@ describe('Calendar gắn với dự án', () => {
   });
 
   it('"Lưu và thêm vào Calendar" ghi một mục cập nhật hôm nay kèm tóm tắt thay đổi', () => {
-    const stage = master.listMaster(ctx, 'stages')[2];
+    const si = master.createMaster(ctx, 'siPartners', 'SI Một');
     const sp = master.createMaster(ctx, 'salespersons', 'Chị Lan');
     const p = projects.createProject(ctx, input());
-    projects.updateProject(ctx, p.id, input({ dueDate: '2026-12-05', stageId: stage.id, salespersonId: sp.id, note: 'Đã gửi báo giá lần 2' }), { addToCalendar: true });
+    projects.updateProject(ctx, p.id, input({ dueDate: '2026-12-05', siId: si.id, salespersonId: sp.id, note: 'Đã gửi báo giá lần 2' }), { addToCalendar: true });
     const upd = calendar.listCalendarEvents(ctx, { projectId: p.id }).find((e) => e.kind === 'PROJECT_UPDATE')!;
     expect(upd.eventDate).toBe(TEST_TODAY);
     expect(upd.note).toContain('Ngày tới hạn: 30/11/2026 → 05/12/2026');
-    expect(upd.note).toContain(`Giai đoạn: — → ${stage.name}`);
+    expect(upd.note).toContain('Tên SI: — → SI Một');
     expect(upd.note).toContain('Sale: — → Chị Lan');
     expect(upd.note).not.toContain('Ghi chú');
   });

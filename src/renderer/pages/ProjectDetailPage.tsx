@@ -39,8 +39,6 @@ function toInput(p: Project): ProjectInput {
     dueDate: p.dueDate,
     projectName: p.projectName,
     clientId: p.clientId,
-    designUnitId: p.designUnitId,
-    stageId: p.stageId,
     salespersonId: p.salespersonId,
     note: p.note,
     filePath: p.filePath,
@@ -205,18 +203,6 @@ export function ProjectDetailPage() {
             <span>{salesLabel(p) ?? <span className="faint">—</span>}</span>
             <span className="k">EU</span>
             <span>{p.clientName ?? <span className="faint">—</span>}</span>
-            {p.designUnitName && (
-              <>
-                <span className="k">Đơn vị thiết kế</span>
-                <span>{p.designUnitName}</span>
-              </>
-            )}
-            {p.stageName && (
-              <>
-                <span className="k">Giai đoạn</span>
-                <span>{p.stageName}</span>
-              </>
-            )}
             <span className="k">Vị trí</span>
             <span>{p.location}</span>
           </div>

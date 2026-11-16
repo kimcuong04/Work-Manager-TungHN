@@ -4,8 +4,8 @@ export type WorkCategory = ProjectCategory | 'WARRANTY';
 export type DeadlineStatus = 'URGENT' | 'ATTENTION' | 'NEW' | 'COMPLETED';
 export type ActiveStatus = Exclude<DeadlineStatus, 'COMPLETED'>;
 export type Theme = 'light' | 'dark';
-export type MasterKind = 'clients' | 'designUnits' | 'stages' | 'brands' | 'salespersons' | 'siPartners' | 'departments';
-export const MASTER_KINDS: MasterKind[] = ['clients', 'siPartners', 'brands', 'salespersons', 'departments', 'designUnits', 'stages'];
+export type MasterKind = 'clients' | 'brands' | 'salespersons' | 'siPartners' | 'departments';
+export const MASTER_KINDS: MasterKind[] = ['clients', 'siPartners', 'brands', 'salespersons', 'departments'];
 
 export const JOB_TYPES: JobType[] = ['MAIN', 'FREELANCE'];
 export const JOB_LABEL: Record<JobType, string> = { MAIN: 'Job Chính', FREELANCE: 'Job Freelance' };
@@ -18,8 +18,6 @@ export const CATEGORY_LABEL: Record<WorkCategory, string> = {
 };
 export const MASTER_LABEL: Record<MasterKind, string> = {
   clients: 'EU',
-  designUnits: 'Đơn vị thiết kế',
-  stages: 'Giai đoạn',
   brands: 'Hãng',
   salespersons: 'Sale',
   siPartners: 'Tên SI',
@@ -111,10 +109,6 @@ export interface Project {
   salespersonDepartment: string | null;
   /** Thư mục của dự án trên máy (tự tạo/đổi tên theo STT, tên, SI, Hãng). */
   folderPath: string | null;
-  designUnitId: string | null;
-  designUnitName: string | null;
-  stageId: string | null;
-  stageName: string | null;
   salespersonId: string | null;
   salespersonName: string | null;
   note: string;
@@ -142,8 +136,6 @@ export interface ProjectInput {
   brandIds?: string[];
   /** Thư mục cha chứa thư mục dự án; undefined = giữ nguyên (khi sửa) / không tạo thư mục. */
   folderParent?: string | null;
-  designUnitId: string | null;
-  stageId: string | null;
   salespersonId: string | null;
   note: string;
   filePath: string | null;
@@ -448,6 +440,8 @@ export interface XlsxExport {
   defaultName: string;
   sheetName: string;
   rows: (string | number | null)[][];
+  /** Chỉ số các cột chứa ngày ISO (YYYY-MM-DD): ghi thành ô ngày của Excel, hiển thị mm/dd/yyyy. */
+  dateColumns?: number[];
 }
 
 export interface BackupInfo {

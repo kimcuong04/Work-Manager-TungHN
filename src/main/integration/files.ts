@@ -91,11 +91,32 @@ export function readWorkbook(filePath: string, maxMb: number, maxRows: number): 
 }
 
 /** Xuất một bảng (dòng đầu là tiêu đề) ra file .xlsx, độ rộng cột theo nội dung. */
-export function writeXlsx(target: string, sheetName: string, rows: (string | number | null)[][]): string {
+/** Dấu "/" trong định dạng Excel bị thay bằng dấu ngăn cách ngày của máy (vd "." ở máy Đức) nên phải escape. */
+export const XLSX_DATE_FORMAT = 'mm\\/dd\\/yyyy';
+const ISO_DATE = /^(\d{4})-(\d{2})-(\d{2})$/;
+
+/** Số ngày kiểu Excel (gốc 30/12/1899), tính theo UTC để không lệch ngày theo múi giờ. */
+function excelSerial(iso: string): number | null {
+  const m = ISO_DATE.exec(iso);
+  if (!m) return null;
+  return Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3])) / 86_400_000 + 25_569;
+}
+
+export function writeXlsx(target: string, sheetName: string, rows: (string | number | null)[][], dateColumns: number[] = []): string {
   if (!Array.isArray(rows) || !rows.length || rows.length > 200_000 || !rows.every(Array.isArray)) throw new AppError('Dữ liệu xuất không hợp lệ.');
   const clean = rows.map((r) => r.map((v) => (v === null || v === undefined ? '' : typeof v === 'number' ? v : String(v))));
+  const dates = new Set(Array.isArray(dateColumns) ? dateColumns.filter((c) => Number.isInteger(c) && c >= 0) : []);
   const ws = XLSX.utils.aoa_to_sheet(clean);
-  const widths = clean[0].map((_, c) => Math.min(60, Math.max(8, ...clean.slice(0, 500).map((r) => String(r[c] ?? '').length + 2))));
+  for (let r = 1; r < clean.length; r++) {
+    for (const c of dates) {
+      const v = clean[r][c];
+      const serial = typeof v === 'string' ? excelSerial(v) : null;
+      if (serial !== null) ws[XLSX.utils.encode_cell({ r, c })] = { t: 'n', v: serial, z: XLSX_DATE_FORMAT };
+    }
+  }
+  const widths = clean[0].map((_, c) =>
+    dates.has(c) ? Math.max(12, String(clean[0][c]).length + 2) : Math.min(60, Math.max(8, ...clean.slice(0, 500).map((r) => String(r[c] ?? '').length + 2))),
+  );
   ws['!cols'] = widths.map((wch) => ({ wch }));
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, (sheetName || 'Sheet1').replace(/[[\]*?/\\:]/g, ' ').slice(0, 31));

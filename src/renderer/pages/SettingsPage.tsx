@@ -4,8 +4,6 @@ import {
   ArchiveRestore,
   ArrowUpCircle,
   RefreshCw,
-  ArrowDown,
-  ArrowUp,
   Check,
   Download,
   FolderOpen,
@@ -306,14 +304,6 @@ function MasterList({ kind }: { kind: MasterKind }) {
       toastError(e);
     }
   };
-  const move = async (item: MasterItem, dir: -1 | 1) => {
-    try {
-      await api.moveMaster(kind, item.id, dir);
-      await reload();
-    } catch (e) {
-      toastError(e);
-    }
-  };
 
   return (
     <div className="stack">
@@ -349,7 +339,7 @@ function MasterList({ kind }: { kind: MasterKind }) {
                 </td>
               </tr>
             )}
-            {items.map((it, idx) => (
+            {items.map((it) => (
               <tr key={it.id}>
                 <td>
                   {editing?.id === it.id ? (
@@ -401,16 +391,6 @@ function MasterList({ kind }: { kind: MasterKind }) {
                 )}
                 <td>
                   <div className="row nowrap" style={{ gap: 2 }}>
-                    {kind === 'stages' && (
-                      <>
-                        <button className="btn sm icon ghost" disabled={idx === 0} aria-label="Lên" title="Lên" onClick={() => move(it, -1)}>
-                          <ArrowUp size={14} />
-                        </button>
-                        <button className="btn sm icon ghost" disabled={idx === items.length - 1} aria-label="Xuống" title="Xuống" onClick={() => move(it, 1)}>
-                          <ArrowDown size={14} />
-                        </button>
-                      </>
-                    )}
                     <button className="btn sm icon ghost" aria-label="Sửa tên" title="Sửa tên" onClick={() => setEditing({ id: it.id, name: it.name })}>
                       <Pencil size={14} />
                     </button>
@@ -439,13 +419,12 @@ const MASTER_TABS: { kind: MasterKind; label: string }[] = [
   { kind: 'siPartners', label: 'Tên SI' },
   { kind: 'brands', label: 'Hãng' },
   { kind: 'salespersons', label: 'Sale & Phòng ban' },
-  { kind: 'designUnits', label: 'Đơn vị thiết kế' },
-  { kind: 'stages', label: 'Giai đoạn' },
 ];
 
 function MasterData() {
   const [stored, setKind] = useSessionState<MasterKind>('settings-master-kind', 'clients');
-  const kind = stored === 'departments' ? 'salespersons' : stored;
+  // Tab đã lưu có thể là danh mục đã bỏ (Đơn vị thiết kế, Giai đoạn) → quay về tab đầu.
+  const kind: MasterKind = stored === 'departments' ? 'salespersons' : MASTER_TABS.some((t) => t.kind === stored) ? stored : 'clients';
   return (
     <section className="card card-pad">
       <h2 className="card-title">Master Data</h2>

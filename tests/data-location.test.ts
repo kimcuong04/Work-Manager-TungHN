@@ -27,7 +27,7 @@ async function seeded(dir = tmpDir('ppm-data-')): Promise<Ctx> {
   const year = master.listYears(ctx)[0].id;
   projects.createProject(ctx, {
     jobYearId: year, workCategory: 'PRE_SALES', receivedDate: '2026-11-10', dueDate: '2026-11-30', projectName: 'Dự án thật', clientId: null,
-    designUnitId: null, stageId: null, salespersonId: null, note: '', filePath: null, fileName: null, fileExtension: null, priorityPoint: 3,
+    salespersonId: null, note: '', filePath: null, fileName: null, fileExtension: null, priorityPoint: 3,
   });
   importImageBuffer(ctx, PNG, 'a.png');
   fs.mkdirSync(ctx.paths.backupsDir, { recursive: true });

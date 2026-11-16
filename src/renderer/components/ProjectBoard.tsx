@@ -104,7 +104,6 @@ function ProjectCard({
       {meta && <div className="pcard-meta">{meta}</div>}
       <div className="pcard-foot">
         <PriorityBadge value={p.priorityPoint} />
-        {p.stageName && <span className="badge">{p.stageName}</span>}
         {p.salespersonName && (
           <span className="icon-chip" title="Sale">
             <UserRound size={12} />

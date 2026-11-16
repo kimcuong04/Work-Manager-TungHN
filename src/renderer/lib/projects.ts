@@ -20,7 +20,7 @@ export function buildViews(projects: Project[], today: string, th: Thresholds): 
       ...p,
       status: computeStatus(p, today, th),
       remaining: remainingDays(p.dueDate, today),
-      haystack: buildHaystack([String(p.stt), p.projectName, p.clientName, p.siName, brandNames, p.designUnitName, p.stageName, p.salespersonName, p.note]),
+      haystack: buildHaystack([String(p.stt), p.projectName, p.clientName, p.siName, brandNames, p.salespersonName, p.note]),
       location: `${JOB_LABEL[p.jobType]} › ${p.yearLabel} › ${CATEGORY_LABEL[p.workCategory]}`,
       label: `${p.stt}. ${p.projectName}`,
       brandNames,
@@ -42,7 +42,6 @@ export function latestNote(p: Pick<Project, 'note'>): string {
 export interface ProjectFilter {
   q: string;
   clients: string[];
-  designUnits: string[];
   salespersons: string[];
   sis?: string[];
   brands?: string[];
@@ -52,12 +51,12 @@ export interface ProjectFilter {
   statuses: DeadlineStatus[];
 }
 
-export const EMPTY_FILTER: ProjectFilter = { q: '', clients: [], designUnits: [], salespersons: [], sis: [], brands: [], jobs: [], years: [], categories: [], statuses: [] };
+export const EMPTY_FILTER: ProjectFilter = { q: '', clients: [], salespersons: [], sis: [], brands: [], jobs: [], years: [], categories: [], statuses: [] };
 
 export function isFilterActive(f: ProjectFilter): boolean {
   return (
     !!f.q.trim() ||
-    f.clients.length + f.designUnits.length + (f.salespersons?.length ?? 0) + (f.sis?.length ?? 0) + (f.brands?.length ?? 0) + f.jobs.length + f.years.length + f.categories.length + f.statuses.length > 0
+    f.clients.length + (f.salespersons?.length ?? 0) + (f.sis?.length ?? 0) + (f.brands?.length ?? 0) + f.jobs.length + f.years.length + f.categories.length + f.statuses.length > 0
   );
 }
 
@@ -70,7 +69,6 @@ export function applyFilter(list: ProjectView[], f: ProjectFilter): ProjectView[
       (!f.clients.length || (p.clientId !== null && f.clients.includes(p.clientId))) &&
       (!f.sis?.length || (p.siId !== null && f.sis.includes(p.siId))) &&
       (!f.brands?.length || p.brands.some((b) => f.brands!.includes(b.id))) &&
-      (!f.designUnits.length || (p.designUnitId !== null && f.designUnits.includes(p.designUnitId))) &&
       (!f.salespersons?.length || (p.salespersonId !== null && f.salespersons.includes(p.salespersonId))) &&
       (!f.jobs.length || f.jobs.includes(p.jobType)) &&
       (!yearKeys.size || yearKeys.has(p.yearLabel.toLowerCase())) &&

@@ -17,7 +17,7 @@ async function seededDbFile() {
   const client = master.createMaster(ctx, 'clients', 'CĐT A');
   projects.createProject(ctx, {
     jobYearId: year, workCategory: 'PRE_SALES', receivedDate: '2026-11-16', dueDate: '2026-11-20', projectName: 'Dự án thật',
-    clientId: client.id, designUnitId: null, stageId: null, salespersonId: null, note: '', filePath: null, fileName: null, fileExtension: null, priorityPoint: 3,
+    clientId: client.id, salespersonId: null, note: '', filePath: null, fileName: null, fileExtension: null, priorityPoint: 3,
   });
   ctx.db.close();
   return ctx.paths;

@@ -44,8 +44,6 @@ function initialInput(project: Project | undefined, defaults: ProjectDefaults | 
       clientId: project.clientId,
       siId: project.siId,
       brandIds: project.brands.map((b) => b.id),
-      designUnitId: project.designUnitId,
-      stageId: project.stageId,
       salespersonId: project.salespersonId,
       note: project.note,
       filePath: project.filePath,
@@ -64,8 +62,6 @@ function initialInput(project: Project | undefined, defaults: ProjectDefaults | 
     clientId: null,
     siId: null,
     brandIds: [],
-    designUnitId: null,
-    stageId: null,
     salespersonId: null,
     note: '',
     filePath: null,
@@ -106,7 +102,7 @@ export function ProjectForm({
   const [touched, setTouched] = useState<Record<string, boolean>>({});
   const [submitted, setSubmitted] = useState(false);
   const [saving, setSaving] = useState<false | 'save' | 'calendar'>(false);
-  const [moreOpen, setMoreOpen] = useState(() => !!(project?.designUnitId || project?.stageId || project?.filePath));
+  const [moreOpen, setMoreOpen] = useState(() => !!project?.filePath);
 
   // Dự án mới: gợi ý STT lớn nhất + 1 và nơi lưu thư mục dùng lần trước.
   useEffect(() => {
@@ -445,24 +441,14 @@ export function ProjectForm({
 
         <section className="form-section">
           <button type="button" className="section-toggle" onClick={() => setMoreOpen((o) => !o)} aria-expanded={moreOpen}>
-            <ChevronDown size={15} className={moreOpen ? '' : 'rot-90'} /> Thông tin bổ sung (Đơn vị thiết kế, Giai đoạn, File DWG/TXT)
+            <ChevronDown size={15} className={moreOpen ? '' : 'rot-90'} /> File liên kết (DWG/TXT)
           </button>
           {moreOpen && (
             <div className="stack" style={{ marginTop: 12 }}>
-              <div className="grid-2">
-                <Field label="Đơn vị thiết kế">
-                  <SearchableSelect options={opts('designUnits')} value={form.designUnitId} onChange={(id) => set('designUnitId', id)} onCreate={createMaster('designUnits')} placeholder="Không bắt buộc" />
-                </Field>
-                <Field label="Giai đoạn">
-                  <SearchableSelect options={opts('stages')} value={form.stageId} onChange={(id) => set('stageId', id)} onCreate={createMaster('stages')} placeholder="Không bắt buộc" />
-                </Field>
-              </div>
-              <Field label="File liên kết (DWG/TXT)">
-                <FileLinkField
-                  value={linked}
-                  onChange={(f) => setForm((x) => ({ ...x, filePath: f?.path ?? null, fileName: f?.name ?? null, fileExtension: f?.extension ?? null }))}
-                />
-              </Field>
+              <FileLinkField
+                value={linked}
+                onChange={(f) => setForm((x) => ({ ...x, filePath: f?.path ?? null, fileName: f?.name ?? null, fileExtension: f?.extension ?? null }))}
+              />
               {errors.file && <div className="field-error">{errors.file}</div>}
             </div>
           )}

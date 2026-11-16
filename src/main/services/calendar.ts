@@ -170,9 +170,7 @@ export interface ChangedProject {
   clientId: string | null;
   siId: string | null;
   brandIds: string[];
-  designUnitId: string | null;
   salespersonId: string | null;
-  stageId: string | null;
   receivedDate: string | null;
   dueDate: string | null;
   priorityPoint: number;
@@ -191,8 +189,6 @@ export function describeProjectChanges(before: Project, after: ChangedProject, l
   cmp('Hãng', before.brands.map((b) => b.name).join(', '), after.brandIds.map((b) => lookup('brands', b)).join(', '));
   cmp('Sale', before.salespersonName ?? '', lookup('salespersons', after.salespersonId));
   cmp('EU', before.clientName ?? '', lookup('clients', after.clientId));
-  cmp('Đơn vị thiết kế', before.designUnitName ?? '', lookup('design_units', after.designUnitId));
-  cmp('Giai đoạn', before.stageName ?? '', lookup('project_stages', after.stageId));
   cmp('Ngày bắt đầu', formatDate(before.receivedDate), formatDate(after.receivedDate));
   cmp('Ngày tới hạn', formatDate(before.dueDate), formatDate(after.dueDate));
   if (before.priorityPoint !== after.priorityPoint) lines.push(`Priority: ${before.priorityPoint} → ${after.priorityPoint}`);

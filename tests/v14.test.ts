@@ -33,8 +33,6 @@ function input(over: Partial<ProjectInput> = {}): ProjectInput {
     clientId: null,
     siId: null,
     brandIds: [],
-    designUnitId: null,
-    stageId: null,
     salespersonId: null,
     note: '',
     filePath: null,
@@ -300,6 +298,26 @@ describe('Xuất xlsx và ảnh kéo thả', () => {
     expect(saved).toBe(target);
     const wb = XLSX.read(fs.readFileSync(target));
     expect(XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { header: 1 })).toEqual([['STT', 'Tên'], [1, 'Dự án A'], [2, '']]);
+  });
+
+  it('cột ngày xuất thành ô ngày Excel hiển thị mm/dd/yyyy; ô trống / không phải ngày giữ nguyên', async () => {
+    const target = path.join(tmpDir(), 'ngay.xlsx');
+    const h = createHandlers(ctx, fakeDesktop({ saveFile: async () => target }).desktop);
+    await h.exportXlsx({
+      defaultName: 'Ngay',
+      sheetName: 'T11',
+      rows: [['Tên', 'Ngày bắt đầu', 'Ngày tới hạn'], ['A', '2026-11-16', '2026-02-03'], ['B', null, '2026-12-31'], ['C', 'không rõ', '1999-01-09']],
+      dateColumns: [1, 2],
+    });
+    const ws = XLSX.read(fs.readFileSync(target), { cellNF: true }).Sheets.T11;
+    expect(ws.B2).toMatchObject({ t: 'n', w: '11/16/2026' });
+    expect(ws.C2.w).toBe('02/03/2026');
+    expect(ws.C3.w).toBe('12/31/2026');
+    expect(ws.C4.w).toBe('01/09/1999');
+    expect(String(ws.B2.z)).toMatch(/^mm.+dd.+yyyy$/);
+    expect(ws.B3).toMatchObject({ t: 's', v: '' });
+    expect(ws.B4).toMatchObject({ t: 's', v: 'không rõ' });
+    expect(XLSX.SSF.parse_date_code(ws.B2.v)).toMatchObject({ y: 2026, m: 11, d: 16 });
   });
 
   it('ảnh kéo thả từ thư mục được copy vào kho ảnh; file không phải ảnh bị từ chối', async () => {

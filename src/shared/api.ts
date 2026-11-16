@@ -50,7 +50,6 @@ export interface Api {
   deleteMaster(kind: MasterKind, id: string, strategy: MasterDeleteStrategy): Promise<void>;
   setMasterActive(kind: MasterKind, id: string, active: boolean): Promise<void>;
   setSalespersonDepartment(id: string, departmentId: string | null): Promise<MasterItem>;
-  moveMaster(kind: MasterKind, id: string, direction: -1 | 1): Promise<void>;
 
   listYears(): Promise<JobYear[]>;
   createYear(jobType: JobType, label: string): Promise<JobYear>;

@@ -56,8 +56,6 @@ function input(over: Partial<ProjectInput> = {}): ProjectInput {
     dueDate: '2026-11-30',
     projectName: 'Tòa nhà B',
     clientId: client,
-    designUnitId: null,
-    stageId: null,
     salespersonId: null,
     note: '',
     filePath: null,

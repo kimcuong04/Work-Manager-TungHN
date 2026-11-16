@@ -102,8 +102,6 @@ describe('Validate form (FR-FORM-001)', () => {
     dueDate: '2026-11-20',
     projectName: 'A',
     clientId: 'c',
-    designUnitId: null,
-    stageId: null,
     note: '',
     filePath: null,
     fileName: null,
