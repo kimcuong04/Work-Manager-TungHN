@@ -50,7 +50,6 @@ function Shell() {
           </button>
           <div className="topbar-title">{title}</div>
           <div className="topbar-spacer" />
-          <UpdateNotice />
           <GlobalSearch />
           <button
             className="btn ghost icon"
@@ -63,6 +62,7 @@ function Shell() {
           <a className="btn ghost icon" href="#/settings" aria-label="Settings" title="Settings">
             <Settings size={18} />
           </a>
+          <UpdateNotice />
         </header>
         <main className={`content ${fillPage ? 'fill' : ''}`}>
           <Routes>

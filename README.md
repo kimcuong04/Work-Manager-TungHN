@@ -24,8 +24,9 @@ bản portable **không** tự cập nhật).
 
 ## Tự cập nhật qua GitHub
 
-App cài bằng bản Setup sẽ tự kiểm tra GitHub Releases khi mở và mỗi 4 giờ, tải ngầm bản mới rồi hiện hộp thoại
-“Có phiên bản mới” kèm ghi chú thay đổi và nút **Cập nhật & khởi động lại**. Bấm “Để sau” thì bản mới tự cài khi đóng app.
+App cài bằng bản Setup sẽ tự kiểm tra GitHub Releases khi mở và mỗi 4 giờ, tải ngầm bản mới rồi hiện chấm đỏ trên
+**chuông thông báo** ở góc phải topbar (không tự bật hộp thoại). Bấm chuông để xem ghi chú thay đổi và nút
+**Cập nhật & khởi động lại**; chưa cập nhật thì bản mới tự cài khi đóng app.
 Có thể tắt trong Settings › Dữ liệu & Backup. App chỉ tải thông tin phiên bản/bộ cài, không gửi dữ liệu đi.
 
 **Thiết lập một lần**

@@ -643,6 +643,7 @@ try {
   await win.getByRole('button', { name: 'Dữ liệu & Backup' }).click();
   await win.waitForTimeout(200);
   check('Settings hiển thị lý do không tự cập nhật ở bản dev', await win.getByText(/chỉ có ở bản cài đặt/).isVisible());
+  check('Chưa có bản mới: chuông thông báo không có chấm đỏ', (await win.locator('.notif-btn').isVisible()) && (await win.locator('.notif-dot').count()) === 0);
   await app.evaluate(({ BrowserWindow }) => {
     BrowserWindow.getAllWindows()[0].webContents.send('ppm:event', {
       type: 'update',
@@ -655,12 +656,30 @@ try {
       },
     });
   });
+  await win.waitForSelector('.notif-dot');
+  await win.waitForTimeout(400);
+  const bellBox = await win.locator('.notif-btn').boundingBox();
+  check(
+    'Có bản mới: chỉ hiện chuông + chấm đỏ ở góc phải, không tự bật hộp thoại',
+    (await win.locator('.modal').count()) === 0 && !!bellBox && bellBox.x > 1300,
+    `chuông ở x=${Math.round(bellBox?.x ?? -1)}`,
+  );
+  await shot(win, '18-update-bell');
+  await win.locator('.notif-btn').click();
+  await win.waitForSelector('.notif-pop');
+  check(
+    'Bấm chuông: thấy bản mới, ghi chú và nút cập nhật',
+    (await win.locator('.notif-pop').getByText('Có phiên bản mới 1.2.1').isVisible()) &&
+      (await win.locator('.notif-pop').getByText('Thêm cột Ghi chú vào board').isVisible()) &&
+      (await win.locator('.notif-pop').getByRole('button', { name: /Cập nhật & khởi động lại/ }).isVisible()),
+  );
+  await shot(win, '18b-update-bell-open');
+  await win.locator('.notif-pop').getByRole('button', { name: 'Xem chi tiết' }).click();
   await win.waitForSelector('.modal');
-  check('Tự mở hộp thoại "Có phiên bản mới" kèm ghi chú', await win.getByText('Thêm cột Ghi chú vào board').isVisible());
+  check('"Xem chi tiết" mở hộp thoại cập nhật đầy đủ', await win.locator('.modal').getByText('Thêm cột Ghi chú vào board').isVisible());
   await shot(win, '17-update-dialog');
   await win.getByRole('button', { name: 'Để sau' }).click();
-  check('Sau "Để sau" vẫn còn nút Cập nhật trên topbar', await win.getByRole('button', { name: /Cập nhật 1\.2\.1/ }).isVisible());
-  await shot(win, '18-update-topbar');
+  check('Sau "Để sau" chấm đỏ vẫn còn trên chuông', (await win.locator('.notif-dot').count()) === 1);
 
   // --- Backup / restore (AC-012) ---
   const bk = path.join(root, 'backup-test.zip');

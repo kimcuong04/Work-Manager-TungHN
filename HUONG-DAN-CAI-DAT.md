@@ -19,11 +19,12 @@ Yêu cầu: Windows 10/11 64-bit. Không cần Internet để sử dụng; chỉ
 
 ## 2. Cập nhật phiên bản mới
 
-Không cần tải lại thủ công. Khi có bản mới, ứng dụng tự tải ngầm và hiện hộp thoại **“Có phiên bản mới”** kèm danh sách
-thay đổi:
+Không cần tải lại thủ công. Khi có bản mới, ứng dụng tự tải ngầm rồi hiện **chấm đỏ trên biểu tượng chuông** ở góc phải
+thanh trên cùng (không tự bật hộp thoại). Bấm vào chuông để xem bản mới và danh sách thay đổi:
 
 - Bấm **Cập nhật & khởi động lại** → ứng dụng tự cài và mở lại (khoảng 10–30 giây).
-- Bấm **Để sau** → bản mới tự được cài khi bạn đóng ứng dụng. Nút **Cập nhật x.y.z** vẫn hiện ở thanh trên cùng.
+- Bấm **Xem chi tiết** để đọc đầy đủ ghi chú thay đổi.
+- Chưa cập nhật ngay → bản mới tự được cài khi bạn đóng ứng dụng; chấm đỏ vẫn còn cho tới lúc đó.
 
 Kiểm tra thủ công hoặc bật/tắt tự kiểm tra: **Settings › Dữ liệu & Backup › Cập nhật phần mềm**.
 

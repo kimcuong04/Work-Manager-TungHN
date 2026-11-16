@@ -2969,3 +2969,74 @@ table.tbl {
     grid-template-columns: 1fr;
   }
 }
+
+/* ---------- Chuông thông báo cập nhật (góc phải topbar) ---------- */
+.notif-btn {
+  position: relative;
+}
+.notif-dot {
+  position: absolute;
+  top: 6px;
+  right: 7px;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: #e5341d;
+  box-shadow: 0 0 0 2px var(--topbar-bg);
+  animation: notif-pulse 2s ease-out infinite;
+}
+@keyframes notif-pulse {
+  0% {
+    box-shadow: 0 0 0 2px var(--topbar-bg), 0 0 0 2px rgba(229, 52, 29, 0.55);
+  }
+  70% {
+    box-shadow: 0 0 0 2px var(--topbar-bg), 0 0 0 8px rgba(229, 52, 29, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 2px var(--topbar-bg), 0 0 0 2px rgba(229, 52, 29, 0);
+  }
+}
+.notif-pop {
+  width: 360px;
+  padding: 0;
+  max-height: none;
+  overflow: hidden;
+}
+.notif-head {
+  padding: 10px 14px;
+  font-weight: 650;
+  border-bottom: 1px solid var(--border);
+}
+.notif-item {
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.notif-notes {
+  max-height: 160px;
+  overflow: auto;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+}
+.notif-progress {
+  height: 6px;
+  border-radius: 3px;
+  background: var(--surface-2);
+  overflow: hidden;
+}
+.notif-progress span {
+  display: block;
+  height: 100%;
+  background: var(--accent);
+}
+.notif-empty {
+  padding: 22px 14px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-muted);
+}
