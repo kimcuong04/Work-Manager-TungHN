@@ -1,0 +1,71 @@
+{
+  "name": "personal-project-manager",
+  "productName": "Personal Project Manager",
+  "version": "1.2.0",
+  "description": "Ứng dụng quản lý công việc và dự án cá nhân chạy local (PPM-SRS-001 v1.2)",
+  "private": true,
+  "main": "dist-electron/main.js",
+  "scripts": {
+    "dev": "node scripts/dev.mjs",
+    "build:main": "node scripts/build-main.mjs",
+    "build:renderer": "vite build",
+    "build": "npm run typecheck && npm run build:renderer && npm run build:main",
+    "start": "electron .",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "test": "vitest run",
+    "e2e": "node scripts/e2e-smoke.mjs",
+    "dist": "npm run build && node scripts/dist.mjs",
+    "dist:portable": "npm run build && node scripts/dist.mjs --portable"
+  },
+  "build": {
+    "appId": "local.personal-project-manager",
+    "productName": "Personal Project Manager",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**",
+      "dist-electron/**",
+      "package.json"
+    ],
+    "win": {
+      "target": [
+        "nsis"
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "artifactName": "PersonalProjectManager-Setup-${version}.${ext}"
+    },
+    "portable": {
+      "artifactName": "PersonalProjectManager-Portable-${version}.${ext}"
+    }
+  },
+  "dependencies": {
+    "adm-zip": "^0.6.1",
+    "electron-updater": "^6.8.11",
+    "lucide-react": "^1.73.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "react-router": "^7.18.5",
+    "sql.js": "^1.16.0",
+    "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz"
+  },
+  "devDependencies": {
+    "@types/adm-zip": "^0.5.8",
+    "@types/node": "^26.6.6",
+    "@types/react": "^18.3.31",
+    "@types/react-dom": "^18.3.7",
+    "@types/sql.js": "^1.4.11",
+    "@vitejs/plugin-react": "^6.3.0",
+    "electron": "^45.3.3",
+    "electron-builder": "^26.18.0",
+    "esbuild": "^0.28.2",
+    "playwright-core": "^1.65.1",
+    "typescript": "^5.9.3",
+    "vite": "^8.3.8",
+    "vitest": "^5.1.0"
+  }
+}

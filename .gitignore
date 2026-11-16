@@ -1,0 +1,9 @@
+node_modules/
+dist/
+dist-electron/
+release/
+.e2e-data/
+*.log
+.dev-data/
+.build-test/
+release-notes.md

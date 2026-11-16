@@ -1,0 +1,64 @@
+# Push một tag dạng v1.2.3 → test, build bộ cài Windows và đăng GitHub Release.
+# App đã cài sẽ tự phát hiện Release mới, tải ngầm và hiện nút "Cập nhật & khởi động lại".
+#
+# Mặc định đăng Release vào chính repo này (repo cần để Public để app tải được bản cập nhật).
+# Muốn giữ code private: tạo một repo Public riêng để chứa bản phát hành, rồi trong repo code đặt
+#   - Variable  RELEASE_REPO   = <user>/<repo-phát-hành>
+#   - Secret    RELEASES_TOKEN = fine-grained token có quyền Contents: Read & write trên repo phát hành
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: windows-latest
+    env:
+      RELEASE_REPO: ${{ vars.RELEASE_REPO || github.repository }}
+      GH_TOKEN: ${{ secrets.RELEASES_TOKEN || secrets.GITHUB_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Kiểm tra version trong package.json khớp tag
+        shell: bash
+        run: |
+          v="v$(node -p "require('./package.json').version")"
+          if [ "$v" != "$GITHUB_REF_NAME" ]; then
+            echo "::error::package.json là $v nhưng tag là $GITHUB_REF_NAME. Hãy dùng 'npm version patch|minor|major' để tạo tag."
+            exit 1
+          fi
+
+      - run: npm ci
+
+      - name: Test
+        run: npm test
+
+      - name: Build
+        run: npm run build
+
+      - name: Soạn ghi chú phát hành
+        shell: bash
+        run: |
+          git fetch --tags --force
+          node scripts/release-notes.mjs "$GITHUB_REF_NAME" > release-notes.md
+          cat release-notes.md
+
+      - name: Đóng gói & đăng GitHub Release
+        run: node scripts/dist.mjs --publish
+        env:
+          RELEASE_NOTES_FILE: release-notes.md

@@ -1,0 +1,646 @@
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { ArrowDown, ArrowUp, Columns3, Copy, Eye, EyeOff, Image as ImageIcon, KeyRound, Pencil, Plus, ShieldCheck, Trash2, X } from 'lucide-react';
+import { QUICK_RANGE_LABEL, formatDate, formatDateTime, inRange, monthRange, quickRange, todayISO, type QuickRangeKey } from '../../shared/dates';
+import { buildHaystack, compareVi, matchesQuery, normalizeText } from '../../shared/text';
+import type { ImageRef, JobYear, WarrantyInput, WarrantyRecord } from '../../shared/types';
+import { hasErrors, validateWarrantyInput } from '../../shared/validation';
+import { api } from '../api';
+import { Breadcrumbs, DateInput, EmptyState, Field, MultiSelect, SearchInput, SearchableSelect, useClickOutside, type Crumb } from '../components/common';
+import { ImageGallery } from '../components/ImageGallery';
+import { Drawer, Modal } from '../components/Modal';
+import { useLocalState, useSessionState } from '../lib/persist';
+import { useAppData } from '../state/AppData';
+import { usePageTitle, useUi } from '../state/ui';
+
+type DateField = 'receivedDate' | 'testedDate';
+type DateMode = 'all' | 'month' | 'range' | QuickRangeKey;
+
+interface WarrantyFilter {
+  q: string;
+  brands: string[];
+  dateField: DateField;
+  mode: DateMode;
+  month: number;
+  monthYear: number;
+  from: string | null;
+  to: string | null;
+}
+
+type SortKey = 'receivedDate' | 'testedDate' | 'brand' | 'model' | 'caseNumber';
+
+interface Column {
+  key: string;
+  label: string;
+  sort?: SortKey;
+  render: (r: WarrantyRecord) => React.ReactNode;
+  cls?: string;
+}
+
+const COLUMNS: Column[] = [
+  { key: 'caseNumber', label: 'Case no', sort: 'caseNumber', render: (r) => <b>{r.caseNumber}</b>, cls: 'nowrap' },
+  { key: 'model', label: 'Model', sort: 'model', render: (r) => r.model, cls: 'nowrap' },
+  { key: 'brand', label: 'Hãng', sort: 'brand', render: (r) => r.brandName ?? <span className="faint">—</span>, cls: 'nowrap' },
+  { key: 'ip', label: 'IP', render: (r) => r.ipAddress, cls: 'nowrap' },
+  { key: 'user', label: 'User', render: (r) => r.username, cls: 'nowrap' },
+  { key: 'pass', label: 'Pass', render: (r) => (r.hasPassword ? <span className="faint">••••••</span> : ''), cls: 'nowrap' },
+  { key: 'mac', label: 'MAC', render: (r) => r.macAddress, cls: 'nowrap' },
+  { key: 'serial', label: 'Serial number', render: (r) => r.serialNumber, cls: 'nowrap' },
+  { key: 'received', label: 'Ngày nhận', sort: 'receivedDate', render: (r) => formatDate(r.receivedDate), cls: 'nowrap' },
+  { key: 'tested', label: 'Ngày test', sort: 'testedDate', render: (r) => formatDate(r.testedDate), cls: 'nowrap' },
+  { key: 'customerReport', label: 'Khách hàng báo', render: (r) => <div>{r.customerReport}</div>, cls: 'clamp' },
+  { key: 'inspection', label: 'Kiểm tra', render: (r) => <div>{r.inspection}</div>, cls: 'clamp' },
+  { key: 'result', label: 'Kết quả', render: (r) => <div>{r.result}</div>, cls: 'clamp' },
+  { key: 'resolution', label: 'Xử lý', render: (r) => <div>{r.resolution}</div>, cls: 'clamp' },
+  {
+    key: 'images',
+    label: 'Ảnh',
+    render: (r) =>
+      r.images.length ? (
+        <span className="icon-chip">
+          <ImageIcon size={13} /> {r.images.length}
+        </span>
+      ) : (
+        ''
+      ),
+  },
+];
+
+export function resolveDateRange(mode: DateMode, f: { month: number; monthYear: number; from: string | null; to: string | null }, today: string) {
+  if (mode === 'all') return { from: null, to: null };
+  if (mode === 'month') return monthRange(f.monthYear, f.month);
+  if (mode === 'range') return { from: f.from, to: f.to };
+  return quickRange(mode, today);
+}
+
+export function DateFilterControls({
+  mode,
+  month,
+  monthYear,
+  from,
+  to,
+  onChange,
+}: {
+  mode: DateMode;
+  month: number;
+  monthYear: number;
+  from: string | null;
+  to: string | null;
+  onChange: (patch: Partial<{ mode: DateMode; month: number; monthYear: number; from: string | null; to: string | null }>) => void;
+}) {
+  const thisYear = Number(todayISO().slice(0, 4));
+  return (
+    <>
+      <select className="select" style={{ width: 170 }} value={mode} onChange={(e) => onChange({ mode: e.target.value as DateMode })} aria-label="Khoảng thời gian">
+        <option value="all">Mọi thời gian</option>
+        {(Object.keys(QUICK_RANGE_LABEL) as QuickRangeKey[]).map((k) => (
+          <option key={k} value={k}>
+            {QUICK_RANGE_LABEL[k]}
+          </option>
+        ))}
+        <option value="month">Theo tháng/năm…</option>
+        <option value="range">Tùy chọn khoảng ngày…</option>
+      </select>
+      {mode === 'month' && (
+        <>
+          <select className="select" style={{ width: 110 }} value={month} onChange={(e) => onChange({ month: Number(e.target.value) })} aria-label="Tháng">
+            {Array.from({ length: 12 }, (_, i) => (
+              <option key={i + 1} value={i + 1}>
+                Tháng {i + 1}
+              </option>
+            ))}
+          </select>
+          <input
+            className="input"
+            style={{ width: 90 }}
+            type="number"
+            value={monthYear}
+            min={2000}
+            max={thisYear + 5}
+            onChange={(e) => onChange({ monthYear: Number(e.target.value) || thisYear })}
+            aria-label="Năm"
+          />
+        </>
+      )}
+      {mode === 'range' && (
+        <>
+          <div style={{ width: 150 }}>
+            <DateInput value={from} onChange={(v) => onChange({ from: v })} placeholder="Từ ngày" clearable />
+          </div>
+          <div style={{ width: 150 }}>
+            <DateInput value={to} onChange={(v) => onChange({ to: v })} placeholder="Đến ngày" clearable />
+          </div>
+        </>
+      )}
+    </>
+  );
+}
+
+function emptyInput(yearId: string): WarrantyInput {
+  return {
+    jobYearId: yearId,
+    model: '',
+    brandId: null,
+    ipAddress: '',
+    username: '',
+    password: '',
+    macAddress: '',
+    serialNumber: '',
+    receivedDate: todayISO(),
+    testedDate: null,
+    customerReport: '',
+    inspection: '',
+    result: '',
+    resolution: '',
+    caseNumber: '',
+    images: [],
+  };
+}
+
+function toInput(r: WarrantyRecord): WarrantyInput {
+  return {
+    jobYearId: r.jobYearId,
+    model: r.model,
+    brandId: r.brandId,
+    ipAddress: r.ipAddress,
+    username: r.username,
+    password: undefined,
+    macAddress: r.macAddress,
+    serialNumber: r.serialNumber,
+    receivedDate: r.receivedDate,
+    testedDate: r.testedDate,
+    customerReport: r.customerReport,
+    inspection: r.inspection,
+    result: r.result,
+    resolution: r.resolution,
+    caseNumber: r.caseNumber,
+    images: r.images,
+  };
+}
+
+export function useBrandOptions() {
+  const { masters, refresh } = useAppData();
+  const { toast, toastError } = useUi();
+  const options = masters.brands.map((b) => ({ id: b.id, name: b.name, inactive: !b.isActive }));
+  const create = async (name: string) => {
+    try {
+      const b = await api.createMaster('brands', name);
+      await refresh('masters');
+      toast('success', `Đã thêm Hãng "${b.name}" vào danh mục dùng chung.`);
+      return b.id;
+    } catch (e) {
+      toastError(e);
+      return null;
+    }
+  };
+  return { options, create };
+}
+
+function WarrantyForm({ year, record, onClose, onSaved }: { year: JobYear; record?: WarrantyRecord; onClose: () => void; onSaved: () => void }) {
+  const { confirm, toast, toastError } = useUi();
+  const brands = useBrandOptions();
+  const [initial] = useState(() => (record ? toInput(record) : emptyInput(year.id)));
+  const [form, setForm] = useState<WarrantyInput>(initial);
+  const [showPwd, setShowPwd] = useState(false);
+  const [submitted, setSubmitted] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const errors = validateWarrantyInput(form);
+  const err = (k: string) => (submitted ? errors[k] : undefined);
+  const set = <K extends keyof WarrantyInput>(k: K, v: WarrantyInput[K]) => setForm((f) => ({ ...f, [k]: v }));
+  const dirty = JSON.stringify(form) !== JSON.stringify(initial);
+
+  const close = async () => {
+    if (dirty && !(await confirm({ title: 'Bỏ thay đổi?', message: 'Form có thay đổi chưa lưu. Đóng và bỏ thay đổi?', confirmText: 'Bỏ thay đổi', danger: true }))) return;
+    onClose();
+  };
+  const save = async () => {
+    setSubmitted(true);
+    if (hasErrors(errors)) return toast('error', 'Vui lòng kiểm tra các trường được đánh dấu.');
+    setSaving(true);
+    try {
+      if (record) await api.updateWarranty(record.id, form);
+      else await api.createWarranty(form);
+      toast('success', record ? 'Đã cập nhật Warranty Record.' : 'Đã tạo Warranty Record.');
+      onSaved();
+      onClose();
+    } catch (e) {
+      toastError(e);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const text = (k: 'model' | 'ipAddress' | 'username' | 'macAddress' | 'serialNumber' | 'caseNumber', label: string, placeholder?: string) => (
+    <Field label={label} error={err(k)}>
+      <input className={`input ${err(k) ? 'invalid' : ''}`} value={form[k]} placeholder={placeholder} onChange={(e) => set(k, e.target.value)} />
+    </Field>
+  );
+  const area = (k: 'customerReport' | 'inspection' | 'result' | 'resolution', label: string) => (
+    <Field label={label} error={err(k)}>
+      <textarea className="textarea" rows={3} value={form[k]} onChange={(e) => set(k, e.target.value)} />
+    </Field>
+  );
+
+  return (
+    <Modal
+      size="lg"
+      title={record ? 'Sửa Warranty Record' : `Thêm Warranty Record — ${year.yearLabel}`}
+      onClose={close}
+      footer={() => (
+        <>
+          <button className="btn" onClick={close}>
+            Hủy
+          </button>
+          <button className="btn primary" onClick={save} disabled={saving}>
+            {saving ? 'Đang lưu…' : 'Lưu'}
+          </button>
+        </>
+      )}
+    >
+      <div className="stack">
+        <section className="form-section">
+          <h3>Thiết bị</h3>
+          <div className="grid-2">
+            {text('model', 'Model', 'Tên/mã model thiết bị')}
+            <Field label="Hãng">
+              <SearchableSelect options={brands.options} value={form.brandId} onChange={(v) => set('brandId', v)} onCreate={brands.create} createLabel="Thêm Hãng" placeholder="Chọn hoặc thêm Hãng" />
+            </Field>
+            {text('serialNumber', 'Serial number')}
+            {text('macAddress', 'MAC', 'AA:BB:CC:DD:EE:FF')}
+          </div>
+        </section>
+        <section className="form-section">
+          <h3>Truy cập thiết bị</h3>
+          <div className="grid-3">
+            {text('ipAddress', 'IP', 'IPv4 / IPv6')}
+            {text('username', 'User')}
+            <Field label="Pass" error={err('password')} hint="Được mã hóa khi lưu, che mặc định.">
+              {record && form.password === undefined ? (
+                <div className="row">
+                  <span className="muted small grow">{record.hasPassword ? '•••••••• (đã lưu)' : 'Chưa có'}</span>
+                  <button type="button" className="btn sm" onClick={() => set('password', '')}>
+                    <KeyRound size={13} /> {record.hasPassword ? 'Đổi' : 'Đặt'}
+                  </button>
+                </div>
+              ) : (
+                <div className="combo-input">
+                  <input
+                    className="input"
+                    type={showPwd ? 'text' : 'password'}
+                    autoComplete="new-password"
+                    value={form.password ?? ''}
+                    placeholder={record?.hasPassword ? 'Để trống = xóa mật khẩu' : ''}
+                    onChange={(e) => set('password', e.target.value)}
+                  />
+                  <div className="combo-icons">
+                    {record && (
+                      <button type="button" title="Giữ mật khẩu cũ" aria-label="Giữ mật khẩu cũ" onClick={() => set('password', undefined)}>
+                        <X size={14} />
+                      </button>
+                    )}
+                    <button type="button" aria-label={showPwd ? 'Ẩn mật khẩu' : 'Hiện mật khẩu'} onClick={() => setShowPwd((s) => !s)}>
+                      {showPwd ? <EyeOff size={15} /> : <Eye size={15} />}
+                    </button>
+                  </div>
+                </div>
+              )}
+            </Field>
+          </div>
+        </section>
+        <section className="form-section">
+          <h3>Thời gian &amp; case</h3>
+          <div className="grid-3">
+            <Field label="Ngày nhận" error={err('receivedDate')}>
+              <DateInput value={form.receivedDate} onChange={(v) => set('receivedDate', v)} clearable />
+            </Field>
+            <Field label="Ngày test" error={err('testedDate')}>
+              <DateInput value={form.testedDate} onChange={(v) => set('testedDate', v)} clearable />
+            </Field>
+            {text('caseNumber', 'Case no')}
+          </div>
+        </section>
+        <section className="form-section">
+          <h3>Nội dung xử lý</h3>
+          <div className="grid-2">
+            {area('customerReport', 'Khách hàng báo')}
+            {area('inspection', 'Kiểm tra')}
+            {area('result', 'Kết quả')}
+            {area('resolution', 'Xử lý')}
+          </div>
+        </section>
+        <section className="form-section">
+          <h3>Ảnh</h3>
+          <ImageGallery images={form.images} editable onChange={(v: ImageRef[]) => set('images', v)} />
+        </section>
+      </div>
+    </Modal>
+  );
+}
+
+function PasswordReveal({ id }: { id: string }) {
+  const [value, setValue] = useState<string | null>(null);
+  const { toast, toastError } = useUi();
+  useEffect(() => {
+    if (value === null) return;
+    const t = setTimeout(() => setValue(null), 20_000);
+    return () => clearTimeout(t);
+  }, [value]);
+  return (
+    <span className="row">
+      <code>{value ?? '••••••••'}</code>
+      <button
+        className="btn sm icon"
+        aria-label={value === null ? 'Hiện mật khẩu' : 'Ẩn mật khẩu'}
+        title={value === null ? 'Hiện mật khẩu (tự ẩn sau 20 giây)' : 'Ẩn'}
+        onClick={async () => {
+          if (value !== null) return setValue(null);
+          try {
+            setValue(await api.revealWarrantyPassword(id));
+          } catch (e) {
+            toastError(e);
+          }
+        }}
+      >
+        {value === null ? <Eye size={14} /> : <EyeOff size={14} />}
+      </button>
+      {value !== null && (
+        <button
+          className="btn sm icon"
+          aria-label="Sao chép mật khẩu"
+          title="Sao chép"
+          onClick={() => navigator.clipboard.writeText(value).then(() => toast('info', 'Đã sao chép mật khẩu.'))}
+        >
+          <Copy size={14} />
+        </button>
+      )}
+    </span>
+  );
+}
+
+function WarrantyDetail({ r, onClose, onEdit, onDelete }: { r: WarrantyRecord; onClose: () => void; onEdit: () => void; onDelete: () => void }) {
+  const row = (k: string, v: React.ReactNode) => (
+    <>
+      <span className="k">{k}</span>
+      <span className="pre">{v || <span className="faint">—</span>}</span>
+    </>
+  );
+  return (
+    <Drawer
+      title={`${r.model || 'Warranty'}${r.caseNumber ? ` · ${r.caseNumber}` : ''}`}
+      onClose={onClose}
+      footer={
+        <>
+          <button className="btn danger left" onClick={onDelete}>
+            <Trash2 size={15} /> Xóa
+          </button>
+          <button className="btn primary" onClick={onEdit}>
+            <Pencil size={15} /> Sửa
+          </button>
+        </>
+      }
+    >
+      <div className="info-grid" style={{ gridTemplateColumns: '130px 1fr' }}>
+        {row('Model', r.model)}
+        {row('Hãng', r.brandName)}
+        {row('Serial number', r.serialNumber)}
+        {row('MAC', r.macAddress)}
+        {row('IP', r.ipAddress)}
+        {row('User', r.username)}
+        <span className="k">Pass</span>
+        <span>{r.hasPassword ? <PasswordReveal id={r.id} /> : <span className="faint">—</span>}</span>
+        {row('Ngày nhận', formatDate(r.receivedDate))}
+        {row('Ngày test', formatDate(r.testedDate))}
+        {row('Case no', r.caseNumber)}
+        {row('Khách hàng báo', r.customerReport)}
+        {row('Kiểm tra', r.inspection)}
+        {row('Kết quả', r.result)}
+        {row('Xử lý', r.resolution)}
+      </div>
+      <h3 className="card-title" style={{ marginTop: 18, fontSize: 14 }}>
+        Ảnh ({r.images.length})
+      </h3>
+      <ImageGallery images={r.images} />
+      <div className="small faint" style={{ marginTop: 16 }}>
+        Tạo {formatDateTime(r.createdAt)} · Cập nhật {formatDateTime(r.updatedAt)}
+      </div>
+    </Drawer>
+  );
+}
+
+function ColumnToggle({ hidden, onChange }: { hidden: string[]; onChange: (v: string[]) => void }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  useClickOutside(ref, () => setOpen(false), open);
+  return (
+    <div className="pop-anchor" ref={ref}>
+      <button className="btn" onClick={() => setOpen((o) => !o)} aria-expanded={open}>
+        <Columns3 size={15} /> Cột {hidden.length > 0 && `(${COLUMNS.length - hidden.length}/${COLUMNS.length})`}
+      </button>
+      {open && (
+        <div className="popover right" style={{ minWidth: 200 }}>
+          {COLUMNS.map((c) => (
+            <label key={c.key} className="opt" style={{ cursor: 'pointer' }}>
+              <input type="checkbox" checked={!hidden.includes(c.key)} onChange={() => onChange(hidden.includes(c.key) ? hidden.filter((h) => h !== c.key) : [...hidden, c.key])} />
+              {c.label}
+            </label>
+          ))}
+          {hidden.length > 0 && (
+            <button className="opt" onClick={() => onChange([])}>
+              Hiện tất cả cột
+            </button>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+export function WarrantyPage({ year, crumbs }: { year: JobYear; crumbs: Crumb[] }) {
+  usePageTitle(`Warranty ${year.yearLabel}`);
+  const { masters, refresh, today } = useAppData();
+  const { confirm, toast, toastError } = useUi();
+  const [records, setRecords] = useState<WarrantyRecord[] | null>(null);
+  const thisMonth = Number(today.slice(5, 7));
+  const thisYear = Number(today.slice(0, 4));
+  const [f, setF] = useSessionState<WarrantyFilter>(`warranty:${year.id}`, {
+    q: '',
+    brands: [],
+    dateField: 'receivedDate',
+    mode: 'all',
+    month: thisMonth,
+    monthYear: thisYear,
+    from: null,
+    to: null,
+  });
+  const [sort, setSort] = useLocalState<{ key: SortKey; dir: 'asc' | 'desc' }>('warranty-sort', { key: 'receivedDate', dir: 'desc' });
+  const [hidden, setHidden] = useLocalState<string[]>('warranty-hidden-cols', []);
+  const [form, setForm] = useState<{ record?: WarrantyRecord } | null>(null);
+  const [detailId, setDetailId] = useState<string | null>(null);
+
+  const load = useCallback(() => {
+    api.listWarranty(year.id).then(setRecords).catch(toastError);
+  }, [year.id, toastError]);
+  useEffect(load, [load]);
+
+  const afterChange = () => {
+    load();
+    void refresh('years', 'masters');
+  };
+
+  const indexed = useMemo(
+    () =>
+      (records ?? []).map((r) => ({
+        r,
+        hay: buildHaystack([r.model, r.brandName, r.ipAddress, r.macAddress, r.serialNumber, r.caseNumber, r.customerReport, r.inspection, r.result, r.resolution]),
+      })),
+    [records],
+  );
+
+  const range = resolveDateRange(f.mode, f, today);
+  const shown = useMemo(() => {
+    const nq = normalizeText(f.q);
+    const list = indexed
+      .filter(({ r, hay }) => (!f.brands.length || (r.brandId && f.brands.includes(r.brandId))) && inRange(r[f.dateField], range.from, range.to) && matchesQuery(nq, hay))
+      .map((x) => x.r);
+    const sign = sort.dir === 'asc' ? 1 : -1;
+    const val = (r: WarrantyRecord): string =>
+      sort.key === 'brand' ? r.brandName ?? '' : sort.key === 'receivedDate' ? r.receivedDate ?? '' : sort.key === 'testedDate' ? r.testedDate ?? '' : r[sort.key];
+    return list.sort((a, b) => {
+      const va = val(a);
+      const vb = val(b);
+      if (!va && vb) return 1;
+      if (va && !vb) return -1;
+      return sign * compareVi(va, vb);
+    });
+  }, [indexed, f, range.from, range.to, sort]);
+
+  const detail = records?.find((r) => r.id === detailId) ?? null;
+  const remove = async (r: WarrantyRecord) => {
+    const ok = await confirm({
+      title: 'Xóa Warranty Record',
+      message: (
+        <>
+          Xóa bản ghi <b>Model: {r.model || '—'}</b> · <b>Case no: {r.caseNumber || '—'}</b>? Ảnh đính kèm cũng bị xóa.
+        </>
+      ),
+      confirmText: 'Xóa',
+      danger: true,
+    });
+    if (!ok) return;
+    try {
+      await api.deleteWarranty(r.id);
+      setDetailId(null);
+      toast('success', 'Đã xóa Warranty Record.');
+      afterChange();
+    } catch (e) {
+      toastError(e);
+    }
+  };
+
+  const activeFilter = !!f.q || f.brands.length > 0 || f.mode !== 'all';
+  const cols = COLUMNS.filter((c) => !hidden.includes(c.key));
+  const brandOpts = masters.brands.map((b) => ({ id: b.id, name: b.name, inactive: !b.isActive }));
+
+  return (
+    <>
+      <div className="page-head">
+        <div>
+          <Breadcrumbs items={crumbs} />
+          <h1 className="row">
+            <ShieldCheck size={22} style={{ color: 'var(--accent)' }} /> Warranty · {year.yearLabel}
+          </h1>
+        </div>
+        <div className="actions">
+          <ColumnToggle hidden={hidden} onChange={setHidden} />
+          <button className="btn primary" onClick={() => setForm({})}>
+            <Plus size={16} /> Add Record
+          </button>
+        </div>
+      </div>
+      <div className="toolbar">
+        <SearchInput value={f.q} onChange={(q) => setF({ ...f, q })} placeholder="Tìm Model, Hãng, IP, MAC, Serial, Case no, nội dung…" width={320} />
+        <MultiSelect label="Hãng" options={brandOpts} value={f.brands} onChange={(brands) => setF({ ...f, brands })} />
+        <select className="select" style={{ width: 150 }} value={f.dateField} onChange={(e) => setF({ ...f, dateField: e.target.value as DateField })} aria-label="Trường ngày lọc">
+          <option value="receivedDate">Theo Ngày nhận</option>
+          <option value="testedDate">Theo Ngày test</option>
+        </select>
+        <DateFilterControls mode={f.mode} month={f.month} monthYear={f.monthYear} from={f.from} to={f.to} onChange={(p) => setF({ ...f, ...p })} />
+        {activeFilter && (
+          <button className="btn ghost sm" onClick={() => setF({ ...f, q: '', brands: [], mode: 'all', from: null, to: null })}>
+            <X size={14} /> Clear Filters
+          </button>
+        )}
+        <span className="small muted">
+          {shown.length}/{records?.length ?? 0} bản ghi
+          {range.from || range.to ? ` · ${formatDate(range.from) || '…'} → ${formatDate(range.to) || '…'}` : ''}
+        </span>
+      </div>
+
+      {records === null ? (
+        <div className="faint">Đang tải…</div>
+      ) : records.length === 0 ? (
+        <div className="card">
+          <EmptyState
+            icon={<ShieldCheck size={36} />}
+            title={`Chưa có Warranty Record trong ${year.yearLabel}`}
+            text="Ghi nhận case bảo hành/kiểm tra thiết bị với đầy đủ Model, Hãng, IP, Serial, kết quả xử lý và ảnh."
+            action={
+              <button className="btn primary" onClick={() => setForm({})}>
+                <Plus size={16} /> Add Record
+              </button>
+            }
+          />
+        </div>
+      ) : (
+        <div className="table-wrap" style={{ flex: 1 }}>
+          <table className="tbl">
+            <thead>
+              <tr>
+                {cols.map((c) => (
+                  <th
+                    key={c.key}
+                    className={c.sort ? 'sortable' : ''}
+                    onClick={() => c.sort && setSort({ key: c.sort, dir: sort.key === c.sort && sort.dir === 'asc' ? 'desc' : 'asc' })}
+                    aria-sort={c.sort && sort.key === c.sort ? (sort.dir === 'asc' ? 'ascending' : 'descending') : undefined}
+                  >
+                    <span className="row" style={{ gap: 4 }}>
+                      {c.label}
+                      {c.sort && sort.key === c.sort && (sort.dir === 'asc' ? <ArrowUp size={12} /> : <ArrowDown size={12} />)}
+                    </span>
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {shown.length === 0 && (
+                <tr>
+                  <td colSpan={cols.length} className="faint" style={{ textAlign: 'center', padding: 24 }}>
+                    Không có bản ghi phù hợp bộ lọc.
+                  </td>
+                </tr>
+              )}
+              {shown.map((r) => (
+                <tr key={r.id} className="clickable" tabIndex={0} onClick={() => setDetailId(r.id)} onKeyDown={(e) => e.key === 'Enter' && setDetailId(r.id)}>
+                  {cols.map((c) => (
+                    <td key={c.key} className={c.cls}>
+                      {c.render(r)}
+                    </td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {detail && (
+        <WarrantyDetail
+          r={detail}
+          onClose={() => setDetailId(null)}
+          onEdit={() => setForm({ record: detail })}
+          onDelete={() => void remove(detail)}
+        />
+      )}
+      {form && <WarrantyForm year={year} record={form.record} onClose={() => setForm(null)} onSaved={afterChange} />}
+    </>
+  );
+}
