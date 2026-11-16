@@ -58,6 +58,7 @@ jobs:
           node scripts/release-notes.mjs "$GITHUB_REF_NAME" > release-notes.md
           cat release-notes.md
 
+      # Tạo release nháp → upload → kiểm tra đủ file → mới công khai (xem scripts/dist.mjs).
       - name: Đóng gói & đăng GitHub Release
         run: node scripts/dist.mjs --publish
         env:

@@ -4,6 +4,9 @@
 `PPM-SRS-001 v1.2` (gồm Change Request 01 – Job/Năm/Import XLSX và Change Request 02 – Warranty,
 Hãng, Experience, quản lý năm). Không cần tài khoản, không gửi dữ liệu ra ngoài máy.
 
+**Tải về và cài đặt:** xem [HUONG-DAN-CAI-DAT.md](HUONG-DAN-CAI-DAT.md) — file cài đặt ở trang
+[Releases](https://github.com/kimcuong04/Work-Manager-TungHN/releases/latest), không nằm trong mã nguồn.
+
 ## Chạy ứng dụng
 
 Yêu cầu: Windows 10/11, Node.js 20+.
