@@ -33,7 +33,7 @@ interface WarrantyRow {
 
 /**
  * Tìm toàn bộ dữ liệu theo một loại: Tên dự án, Tên SI, Serial (Warranty), Hãng, Model/Mã thiết bị (bảng thiết bị
- * import của dự án). Lọc theo Ngày bắt đầu (dự án) / Ngày nhận (Warranty) nếu có khoảng ngày.
+ * import của dự án). Tên dự án tìm cả bảng Job Freelance. Lọc theo Ngày bắt đầu (dự án, Freelance) / Ngày nhận (Warranty).
  */
 export function globalSearch(ctx: Ctx, q: SearchQuery): SearchHit[] {
   if (!MODES.has(q.mode)) throw new AppError('Kiểu tìm kiếm không hợp lệ.');
@@ -113,6 +113,27 @@ export function globalSearch(ctx: Ctx, q: SearchQuery): SearchHit[] {
       if (!inDate(r.received_date)) continue;
       const value = q.mode === 'si' ? r.si_name : q.mode === 'serial' ? r.serial_number : r.brand_name;
       if (value && hit([value])) out.push(warrantyHit(r, value));
+    }
+  }
+
+  if (q.mode === 'name') {
+    const jobs = ctx.db.all<{ id: string; stt: number; project_name: string; hirer: string | null; start_date: string | null; status_name: string | null }>(
+      'SELECT f.id, f.stt, f.project_name, f.hirer, f.start_date, s.name AS status_name FROM freelance_jobs f LEFT JOIN freelance_statuses s ON s.id = f.status_id',
+    );
+    for (const r of jobs) {
+      if (!inDate(r.start_date) || !hit([String(r.stt), r.project_name])) continue;
+      out.push({
+        kind: 'freelance',
+        id: r.id,
+        title: `${r.stt}. ${r.project_name}`,
+        subtitle: `Job Freelance${r.hirer ? ` · Bên thuê ${r.hirer}` : ''}${r.status_name ? ` · ${r.status_name}` : ''}`,
+        matched: r.project_name,
+        date: r.start_date,
+        jobType: 'FREELANCE',
+        jobYearId: '',
+        yearLabel: r.start_date?.slice(0, 4) ?? '',
+        workCategory: null,
+      });
     }
   }
 

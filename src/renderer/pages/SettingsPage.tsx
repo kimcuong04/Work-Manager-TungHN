@@ -2,6 +2,8 @@ import { useEffect, useMemo, useState } from 'react';
 import {
   AlertTriangle,
   ArchiveRestore,
+  ArrowDown,
+  ArrowUp,
   ArrowUpCircle,
   RefreshCw,
   Check,
@@ -20,7 +22,19 @@ import {
 import { addDays, formatDate, formatDateTime } from '../../shared/dates';
 import { ACTIVE_STATUSES, DEFAULT_THRESHOLDS, computeStatus, describeRules, validateThresholds } from '../../shared/status';
 import { nameKey } from '../../shared/text';
-import { JOB_LABEL, JOB_TYPES, MASTER_LABEL, type AppInfo, type JobType, type MasterItem, type MasterKind, type StorageUsage, type Theme } from '../../shared/types';
+import {
+  JOB_LABEL,
+  JOB_TYPES,
+  MASTER_LABEL,
+  ORDERED_MASTER_KINDS,
+  type AppInfo,
+  type JobType,
+  type MasterGroup,
+  type MasterItem,
+  type MasterKind,
+  type StorageUsage,
+  type Theme,
+} from '../../shared/types';
 import { validateMasterName, validateYearLabel } from '../../shared/validation';
 import { api } from '../api';
 import { Field, StatusBadge, formatBytes } from '../components/common';
@@ -244,7 +258,16 @@ function MasterList({ kind }: { kind: MasterKind }) {
   const [editing, setEditing] = useState<{ id: string; name: string } | null>(null);
   const [deleting, setDeleting] = useState<MasterItem | null>(null);
   const dup = newName.trim() ? items.find((i) => nameKey(i.name) === nameKey(newName)) : undefined;
-  const reload = () => refresh('masters', 'projects');
+  const reload = () => refresh('masters', 'projects', 'freelance');
+  const ordered = ORDERED_MASTER_KINDS.includes(kind);
+  const move = async (item: MasterItem, dir: -1 | 1) => {
+    try {
+      await api.moveMaster(kind, item.id, dir);
+      await reload();
+    } catch (e) {
+      toastError(e);
+    }
+  };
 
   const add = async () => {
     const err = validateMasterName(newName);
@@ -339,7 +362,7 @@ function MasterList({ kind }: { kind: MasterKind }) {
                 </td>
               </tr>
             )}
-            {items.map((it) => (
+            {items.map((it, idx) => (
               <tr key={it.id}>
                 <td>
                   {editing?.id === it.id ? (
@@ -391,6 +414,22 @@ function MasterList({ kind }: { kind: MasterKind }) {
                 )}
                 <td>
                   <div className="row nowrap" style={{ gap: 2 }}>
+                    {ordered && (
+                      <>
+                        <button className="btn sm icon ghost" disabled={idx === 0} aria-label={`Đưa ${it.name} lên`} title="Lên" onClick={() => void move(it, -1)}>
+                          <ArrowUp size={14} />
+                        </button>
+                        <button
+                          className="btn sm icon ghost"
+                          disabled={idx === items.length - 1}
+                          aria-label={`Đưa ${it.name} xuống`}
+                          title="Xuống"
+                          onClick={() => void move(it, 1)}
+                        >
+                          <ArrowDown size={14} />
+                        </button>
+                      </>
+                    )}
                     <button className="btn sm icon ghost" aria-label="Sửa tên" title="Sửa tên" onClick={() => setEditing({ id: it.id, name: it.name })}>
                       <Pencil size={14} />
                     </button>
@@ -414,25 +453,47 @@ function MasterList({ kind }: { kind: MasterKind }) {
   );
 }
 
-const MASTER_TABS: { kind: MasterKind; label: string }[] = [
-  { kind: 'clients', label: 'EU' },
-  { kind: 'siPartners', label: 'Tên SI' },
-  { kind: 'brands', label: 'Hãng' },
-  { kind: 'salespersons', label: 'Sale & Phòng ban' },
-];
+const MASTER_TABS: Record<MasterGroup, { kind: MasterKind; label: string }[]> = {
+  MAIN: [
+    { kind: 'clients', label: 'EU' },
+    { kind: 'siPartners', label: 'Tên SI' },
+    { kind: 'brands', label: 'Hãng' },
+    { kind: 'salespersons', label: 'Sale & Phòng ban' },
+  ],
+  FREELANCE: [{ kind: 'freelanceStatuses', label: 'Tình trạng' }],
+};
+
+const MASTER_GROUP_NOTE: Record<MasterGroup, string> = {
+  MAIN: 'Danh mục của Job Chính: dự án Pre-sales / Post-sales (EU, Tên SI, Hãng, Sale), Warranty, Experience và Kiến thức. Đổi tên tự cập nhật mọi nơi (liên kết theo ID). Hãng đang được dùng chỉ có thể Deactivate.',
+  FREELANCE: 'Danh mục riêng của Job Freelance, không dùng chung với Job Chính dù trùng tên. Tình trạng hiển thị theo thứ tự ở đây — dùng nút lên/xuống để sắp xếp.',
+};
 
 function MasterData() {
+  const [group, setGroup] = useSessionState<MasterGroup>('settings-master-group', 'MAIN');
   const [stored, setKind] = useSessionState<MasterKind>('settings-master-kind', 'clients');
-  // Tab đã lưu có thể là danh mục đã bỏ (Đơn vị thiết kế, Giai đoạn) → quay về tab đầu.
-  const kind: MasterKind = stored === 'departments' ? 'salespersons' : MASTER_TABS.some((t) => t.kind === stored) ? stored : 'clients';
+  const tabs = MASTER_TABS[group] ?? MASTER_TABS.MAIN;
+  // Tab đã lưu có thể là danh mục đã bỏ (Đơn vị thiết kế, Giai đoạn) hoặc thuộc phân loại khác → về tab đầu.
+  const kind: MasterKind = group === 'MAIN' && stored === 'departments' ? 'salespersons' : tabs.some((t) => t.kind === stored) ? stored : tabs[0].kind;
   return (
     <section className="card card-pad">
-      <h2 className="card-title">Master Data</h2>
+      <div className="row" style={{ marginBottom: 6, gap: 12 }}>
+        <h2 className="card-title grow" style={{ margin: 0 }}>
+          Master Data
+        </h2>
+        <span className="small muted">Phân loại</span>
+        <div className="seg" role="group" aria-label="Phân loại danh mục">
+          {(['MAIN', 'FREELANCE'] as MasterGroup[]).map((g) => (
+            <button key={g} className={group === g ? 'on' : ''} aria-pressed={group === g} onClick={() => setGroup(g)}>
+              {JOB_LABEL[g]}
+            </button>
+          ))}
+        </div>
+      </div>
       <p className="muted small" style={{ marginTop: 0 }}>
-        Danh mục dùng chung cho dự án (EU, Tên SI, Hãng, Sale), Warranty, Experience và Kiến thức. Đổi tên tự cập nhật mọi nơi (liên kết theo ID). Hãng đang được dùng chỉ có thể Deactivate.
+        {MASTER_GROUP_NOTE[group] ?? MASTER_GROUP_NOTE.MAIN}
       </p>
       <div className="tabs small">
-        {MASTER_TABS.map((t) => (
+        {tabs.map((t) => (
           <button key={t.kind} className={kind === t.kind ? 'on' : ''} onClick={() => setKind(t.kind)}>
             {t.label}
           </button>
@@ -564,6 +625,12 @@ function Years() {
           </div>
         </section>
       ))}
+      <section className="card card-pad">
+        <h2 className="card-title">{JOB_LABEL.FREELANCE}</h2>
+        <p className="muted small" style={{ margin: 0 }}>
+          Job Freelance là một bảng chung, không chia theo năm — lọc theo năm của Ngày bắt đầu ngay trong bảng Job Freelance.
+        </p>
+      </section>
     </div>
   );
 }

@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { CalendarCheck, CalendarPlus, NotebookPen, Pencil, Plus, Trash2 } from 'lucide-react';
 import { addDays, formatDate, formatDateTime, parseDisplayDate } from '../../shared/dates';
 import { noteImageKeys, sanitizeNoteHtml } from '../../shared/noteHtml';
-import type { ImageRef, ProjectNote } from '../../shared/types';
+import type { DayNote, ImageRef } from '../../shared/types';
 import { api } from '../api';
 import { WEEKDAY_LONG, weekdayIndex } from '../lib/calendar';
 import { useAppData } from '../state/AppData';
@@ -49,21 +49,44 @@ export function NoteContent({ html }: { html: string }) {
   );
 }
 
-/**
- * Ghi chú của dự án theo ngày: mỗi ngày một mục (mới nhất ở trên), sửa được mục của ngày cũ.
- * Lưu kèm "Lưu và thêm vào Calendar" như form dự án.
- */
+/** Nơi đọc/ghi ghi chú theo ngày của một đối tượng (dự án Job Chính, job Freelance). */
+export interface NoteSource {
+  list(): Promise<DayNote[]>;
+  save(noteDate: string, html: string, addToCalendar: boolean): Promise<DayNote | null>;
+  remove(id: string): Promise<void>;
+  /** Có nút "Lưu và thêm vào Calendar" (chỉ dự án Job Chính). */
+  calendar: boolean;
+  onChanged(): Promise<void>;
+}
+
+/** Ghi chú của dự án theo ngày, kèm "Lưu và thêm vào Calendar" như form dự án. */
 export function ProjectNotes({ projectId, version }: { projectId: string; version: string }) {
-  const { today, refresh } = useAppData();
+  const { refresh } = useAppData();
+  const source = useMemo<NoteSource>(
+    () => ({
+      list: () => api.listProjectNotes(projectId),
+      save: (noteDate, html, addToCalendar) => api.saveProjectNote(projectId, { noteDate, html }, { addToCalendar }),
+      remove: (id) => api.deleteProjectNote(id),
+      calendar: true,
+      onChanged: () => refresh('projects'),
+    }),
+    [projectId, refresh],
+  );
+  return <DayNotes source={source} version={version} />;
+}
+
+/** Ghi chú theo ngày: mỗi ngày một mục (mới nhất ở trên), sửa được mục của ngày cũ, định dạng tự do + dán ảnh. */
+export function DayNotes({ source, version }: { source: NoteSource; version: string }) {
+  const { today } = useAppData();
   const { confirm, prompt, toast, toastError } = useUi();
-  const [notes, setNotes] = useState<ProjectNote[] | null>(null);
+  const [notes, setNotes] = useState<DayNote[] | null>(null);
   const [editing, setEditing] = useState<{ date: string; initial: string } | null>(null);
   const [draft, setDraft] = useState('');
   const [saving, setSaving] = useState<false | 'save' | 'calendar'>(false);
 
   const load = useCallback(() => {
-    api.listProjectNotes(projectId).then(setNotes).catch(toastError);
-  }, [projectId, toastError]);
+    source.list().then(setNotes).catch(toastError);
+  }, [source, toastError]);
   useEffect(load, [load, version]);
 
   const dirty = !!editing && sanitizeNoteHtml(draft) !== sanitizeNoteHtml(editing.initial);
@@ -98,14 +121,14 @@ export function ProjectNotes({ projectId, version }: { projectId: string; versio
     if (!editing) return;
     setSaving(addToCalendar ? 'calendar' : 'save');
     try {
-      const res = await api.saveProjectNote(projectId, { noteDate: editing.date, html: draft }, { addToCalendar });
+      const res = await source.save(editing.date, draft, addToCalendar);
       toast(
         'success',
         !res ? `Đã xóa ghi chú trống ngày ${formatDate(editing.date)}.` : addToCalendar ? 'Đã lưu ghi chú và thêm vào Calendar hôm nay.' : `Đã lưu ghi chú ngày ${formatDate(editing.date)}.`,
       );
       setEditing(null);
       load();
-      await refresh('projects');
+      await source.onChanged();
     } catch (e) {
       toastError(e);
     } finally {
@@ -113,14 +136,14 @@ export function ProjectNotes({ projectId, version }: { projectId: string; versio
     }
   };
 
-  const remove = async (n: ProjectNote) => {
+  const remove = async (n: DayNote) => {
     if (!(await confirm({ title: 'Xóa ghi chú', message: `Xóa ghi chú ngày ${formatDate(n.noteDate)}? Ảnh trong ghi chú cũng bị xóa.`, confirmText: 'Xóa', danger: true })))
       return;
     try {
-      await api.deleteProjectNote(n.id);
+      await source.remove(n.id);
       toast('success', 'Đã xóa ghi chú.');
       load();
-      await refresh('projects');
+      await source.onChanged();
     } catch (e) {
       toastError(e);
     }
@@ -147,9 +170,11 @@ export function ProjectNotes({ projectId, version }: { projectId: string; versio
         <button className="btn primary" disabled={!!saving} onClick={() => void save(false)}>
           {saving === 'save' ? 'Đang lưu…' : 'Lưu'}
         </button>
-        <button className="btn success" disabled={!!saving} onClick={() => void save(true)} title="Lưu và ghi một mục “Cập nhật dự án” kèm tóm tắt ghi chú vào Calendar hôm nay">
-          <CalendarCheck size={15} /> {saving === 'calendar' ? 'Đang lưu…' : 'Lưu và thêm vào Calendar'}
-        </button>
+        {source.calendar && (
+          <button className="btn success" disabled={!!saving} onClick={() => void save(true)} title="Lưu và ghi một mục “Cập nhật dự án” kèm tóm tắt ghi chú vào Calendar hôm nay">
+            <CalendarCheck size={15} /> {saving === 'calendar' ? 'Đang lưu…' : 'Lưu và thêm vào Calendar'}
+          </button>
+        )}
       </div>
     </div>
   );

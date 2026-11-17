@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { cleanName, nameKey } from '../../shared/text';
 import type { JobType, JobYear, MasterDeleteStrategy, MasterItem, MasterKind } from '../../shared/types';
-import { MASTER_LABEL } from '../../shared/types';
+import { MASTER_LABEL, ORDERED_MASTER_KINDS } from '../../shared/types';
 import { validateMasterName, validateYearLabel } from '../../shared/validation';
 import { AppError, now, type Ctx } from '../context';
 
@@ -21,6 +21,7 @@ const SPECS: Record<MasterKind, MasterSpec> = {
   },
   departments: { table: 'departments', usage: [{ table: 'salespersons', column: 'department_id', nullable: true }] },
   salespersons: { table: 'salespersons', usage: [{ table: 'projects', column: 'salesperson_id', nullable: true }] },
+  freelanceStatuses: { table: 'freelance_statuses', usage: [{ table: 'freelance_jobs', column: 'status_id', nullable: true }] },
   brands: {
     table: 'brands',
     usage: [
@@ -54,7 +55,7 @@ export function listMaster(ctx: Ctx, kind: MasterKind): MasterItem[] {
   return ctx.db
     .all<Record<string, any>>(
       `SELECT m.*, ${usageSql} AS usage_count${dept ? ', d.name AS department_name' : ''} FROM ${s.table} m
-       ${dept ? 'LEFT JOIN departments d ON d.id = m.department_id' : ''} ORDER BY m.name COLLATE NOCASE`,
+       ${dept ? 'LEFT JOIN departments d ON d.id = m.department_id' : ''} ORDER BY ${ORDERED_MASTER_KINDS.includes(kind) ? 'm.sort_order, m.name' : 'm.name COLLATE NOCASE'}`,
     )
     .map((r) => ({
       id: r.id,
@@ -117,6 +118,18 @@ export function setSalespersonDepartment(ctx: Ctx, id: string, departmentId: str
 export function setMasterActive(ctx: Ctx, kind: MasterKind, id: string, active: boolean): void {
   getMaster(ctx, kind, id);
   ctx.db.tx(() => ctx.db.run(`UPDATE ${spec(kind).table} SET is_active = ?, updated_at = ? WHERE id = ?`, [active, now(), id]));
+}
+
+/** Đổi thứ tự (lên/xuống) cho danh mục sắp theo thứ tự người dùng chọn, vd Tình trạng của Job Freelance. */
+export function moveMaster(ctx: Ctx, kind: MasterKind, id: string, direction: -1 | 1): void {
+  if (!ORDERED_MASTER_KINDS.includes(kind)) throw new AppError(`${MASTER_LABEL[kind]} được sắp xếp theo tên.`);
+  const items = listMaster(ctx, kind);
+  const i = items.findIndex((m) => m.id === id);
+  const j = i + direction;
+  if (i < 0 || j < 0 || j >= items.length) return;
+  [items[i], items[j]] = [items[j], items[i]];
+  const table = spec(kind).table;
+  ctx.db.tx(() => items.forEach((m, idx) => ctx.db.run(`UPDATE ${table} SET sort_order = ? WHERE id = ?`, [idx, m.id])));
 }
 
 export function deleteMaster(ctx: Ctx, kind: MasterKind, id: string, strategy: MasterDeleteStrategy): void {
@@ -187,7 +200,8 @@ function assertYearUnique(ctx: Ctx, jobType: JobType, label: string, exceptId?: 
 }
 
 export function createYear(ctx: Ctx, jobType: JobType, rawLabel: string): JobYear {
-  if (jobType !== 'MAIN' && jobType !== 'FREELANCE') throw new AppError('Job không hợp lệ.');
+  if (jobType === 'FREELANCE') throw new AppError('Job Freelance là một bảng chung, không chia theo năm.');
+  if (jobType !== 'MAIN') throw new AppError('Job không hợp lệ.');
   const err = validateYearLabel(rawLabel);
   if (err) throw new AppError(err);
   const label = cleanName(rawLabel);

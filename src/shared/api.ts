@@ -6,7 +6,17 @@ import type {
   CalendarEvent,
   CalendarEventInput,
   CalendarQuery,
+  BulkImportResult,
+  BulkImportSpec,
   ExperienceInput,
+  FreelanceInput,
+  FreelanceJob,
+  FreelanceNote,
+  FreelanceSaveOptions,
+  OnlineTool,
+  OnlineToolInput,
+  PasswordEntry,
+  PasswordInput,
   ExperienceRecord,
   FileCheck,
   ImageRef,
@@ -50,6 +60,8 @@ export interface Api {
   deleteMaster(kind: MasterKind, id: string, strategy: MasterDeleteStrategy): Promise<void>;
   setMasterActive(kind: MasterKind, id: string, active: boolean): Promise<void>;
   setSalespersonDepartment(id: string, departmentId: string | null): Promise<MasterItem>;
+  /** Chỉ cho danh mục sắp theo thứ tự (Tình trạng Freelance). */
+  moveMaster(kind: MasterKind, id: string, direction: -1 | 1): Promise<void>;
 
   listYears(): Promise<JobYear[]>;
   createYear(jobType: JobType, label: string): Promise<JobYear>;
@@ -61,6 +73,11 @@ export interface Api {
   updateProject(id: string, input: ProjectInput, opts?: ProjectSaveOptions): Promise<ProjectSaved>;
   /** `deleteFolder`: chuyển thư mục dự án vào Thùng rác trước khi xóa dự án. */
   deleteProject(id: string, opts?: { deleteFolder?: boolean }): Promise<void>;
+  /**
+   * Xóa nhiều dự án. `deleteFolder`: chuyển thư mục của từng dự án vào Thùng rác trước; dự án nào không chuyển được
+   * thư mục thì giữ lại và trả về trong `failed`.
+   */
+  deleteProjects(ids: string[], opts?: { deleteFolder?: boolean }): Promise<{ deleted: number; failed: string[] }>;
   nextProjectStt(): Promise<number>;
   /** Chọn thư mục qua hộp thoại; thư mục được chọn mới dùng làm nơi lưu thư mục dự án. */
   pickFolder(title?: string): Promise<string | null>;
@@ -75,6 +92,32 @@ export interface Api {
   /** Lưu (tạo/sửa) ghi chú của một ngày; nội dung rỗng thì xóa mục của ngày đó và trả về null. */
   saveProjectNote(projectId: string, input: ProjectNoteInput, opts?: { addToCalendar?: boolean }): Promise<ProjectNote | null>;
   deleteProjectNote(id: string): Promise<void>;
+
+  listFreelance(): Promise<FreelanceJob[]>;
+  nextFreelanceStt(): Promise<number>;
+  createFreelance(input: FreelanceInput, opts?: FreelanceSaveOptions): Promise<FreelanceJob>;
+  updateFreelance(id: string, input: FreelanceInput, opts?: FreelanceSaveOptions): Promise<FreelanceJob>;
+  setFreelanceStatus(id: string, statusId: string | null): Promise<FreelanceJob>;
+  deleteFreelance(id: string): Promise<void>;
+  deleteFreelances(ids: string[]): Promise<number>;
+  listFreelanceNotes(jobId: string): Promise<FreelanceNote[]>;
+  /** Nội dung rỗng thì xóa mục của ngày đó và trả về null. */
+  saveFreelanceNote(jobId: string, input: ProjectNoteInput): Promise<FreelanceNote | null>;
+  deleteFreelanceNote(id: string): Promise<void>;
+
+  /** Import nhiều dòng từ .xlsx (đã map cột) vào Pre-sales / Post-sales / Warranty / Job Freelance. */
+  bulkImport(spec: BulkImportSpec): Promise<BulkImportResult>;
+
+  listPasswords(): Promise<PasswordEntry[]>;
+  createPassword(input: PasswordInput): Promise<PasswordEntry>;
+  updatePassword(id: string, input: PasswordInput): Promise<PasswordEntry>;
+  deletePassword(id: string): Promise<void>;
+  revealPassword(id: string): Promise<string>;
+
+  listOnlineTools(): Promise<OnlineTool[]>;
+  createOnlineTool(input: OnlineToolInput): Promise<OnlineTool>;
+  updateOnlineTool(id: string, input: OnlineToolInput): Promise<OnlineTool>;
+  deleteOnlineTool(id: string): Promise<void>;
 
   pickLinkFile(): Promise<LinkedFile | null>;
   checkFile(path: string): Promise<FileCheck>;
@@ -91,6 +134,7 @@ export interface Api {
   createWarranty(input: WarrantyInput): Promise<WarrantyRecord>;
   updateWarranty(id: string, input: WarrantyInput): Promise<WarrantyRecord>;
   deleteWarranty(id: string): Promise<void>;
+  deleteWarranties(ids: string[]): Promise<number>;
   revealWarrantyPassword(id: string): Promise<string>;
 
   pickImages(): Promise<ImageRef[]>;

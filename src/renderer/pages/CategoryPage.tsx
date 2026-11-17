@@ -1,6 +1,8 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
+import { FileSpreadsheet } from 'lucide-react';
 import { useParams } from 'react-router';
 import { CATEGORY_LABEL, JOB_LABEL, type JobType } from '../../shared/types';
+import { BulkImportWizard } from '../components/BulkImportWizard';
 import { Breadcrumbs, EmptyState } from '../components/common';
 import { ProjectsView } from '../components/ProjectBoard';
 import { CATEGORY_SLUG, nodePath } from '../lib/projects';
@@ -11,7 +13,9 @@ import { WarrantyPage } from './WarrantyPage';
 
 export function CategoryPage() {
   const { jobType, yearId, category } = useParams();
-  const { yearById, projects } = useAppData();
+  const { yearById, projects, refresh } = useAppData();
+  const [importing, setImporting] = useState(false);
+  const usedStt = useMemo(() => new Set(projects.map((p) => p.stt)), [projects]);
   const { openCreate } = useProjectActions();
   const year = yearId ? yearById.get(yearId) : undefined;
   const cat = category ? CATEGORY_SLUG[category] : undefined;
@@ -47,9 +51,24 @@ export function CategoryPage() {
         baseList={list}
         onAdd={() => openCreate({ jobType: year.jobType, jobYearId: year.id, workCategory: cat })}
         addLabel={`Thêm Project vào ${CATEGORY_LABEL[cat]}`}
+        extraActions={
+          <button className="btn" onClick={() => setImporting(true)}>
+            <FileSpreadsheet size={15} /> Import xlsx
+          </button>
+        }
         viewKey="view-mode:category"
         defaultView="list"
       />
+      {importing && (
+        <BulkImportWizard
+          target={cat}
+          jobYearId={year.id}
+          scopeLabel={`${CATEGORY_LABEL[cat]} ${year.yearLabel}`}
+          usedStt={usedStt}
+          onClose={() => setImporting(false)}
+          onDone={() => refresh('projects', 'years')}
+        />
+      )}
     </>
   );
 }

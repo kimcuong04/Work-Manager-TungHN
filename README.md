@@ -80,13 +80,30 @@ Backup/Restore trong **Settings › Dữ liệu & Backup** xuất một file `.z
 
 - **Dashboard**: KPI theo trạng thái, ring chart 3 trạng thái hoạt động, danh sách khẩn cấp (mở chi tiết/mở file),
   **Dự án trong tháng** (STT / Tên / Hãng / Tên SI / Sale / Ngày bắt đầu / Trạng thái; chuyển tháng; **xuất .xlsx** chọn
-  cột; cột ngày ghi thành ô ngày Excel dạng mm/dd/yyyy), lọc theo Job/Năm/Nhóm; bấm KPI/biểu đồ để mở
+  cột; cột ngày ghi thành ô ngày Excel dạng mm/dd/yyyy), lọc theo Năm/Nhóm (dự án Job Chính); bấm KPI/biểu đồ để mở
   *Tất cả mục* với bộ lọc tương ứng.
 - **Calendar** (kiểu Google Calendar): xem Ngày / Tuần / Tháng / Lịch trình. Dự án mới tự có mục *Bắt đầu dự án* ở ngày
   tiếp nhận; khi sửa dự án, nút xanh **Lưu và thêm vào Calendar** ghi mục *Cập nhật dự án* kèm tóm tắt thay đổi.
   Lớp *Hạn chót dự án* lấy từ ngày tới hạn. Tạo sự kiện riêng (có giờ, màu, liên kết dự án), kéo thả để đổi ngày.
-- **Sidebar**: My Workspace › Dashboard, Tất cả mục, Job Chính / Job Freelance › Năm › Pre-sales / Post-sales / Warranty,
-  Experience › Hãng, AI Assistant (Coming Soon), Settings. Thêm/đổi tên/xóa năm, “+” thêm Project theo ngữ cảnh.
+- **Sidebar**: My Workspace › Dashboard, Tất cả mục, Calendar, Job Chính › Năm › Pre-sales / Post-sales / Warranty,
+  **Job Freelance** (một bảng), Experience / Kiến thức › Hãng, **Tiện ích › Password, Tools (Tool app / Tool online)**,
+  AI Assistant (Coming Soon), Settings. Thêm/đổi tên/xóa năm, “+” thêm Project theo ngữ cảnh.
+- **Job Freelance**: một bảng chung cho mọi năm, quản lý riêng với Job Chính — STT (tự +1, không trùng), **Tên dự án**
+  (bắt buộc), Bên thuê, Ngày bắt đầu, **Tình trạng** (danh mục riêng, đổi ngay trên bảng; sửa/sắp xếp ở Settings ›
+  Master Data › Job Freelance) và **ghi chú theo ngày** như Job Chính (sửa được ngày cũ, dán ảnh). Lọc theo Tình trạng /
+  năm, tìm không dấu. Dữ liệu Freelance cũ (Pre/Post-sales) được chuyển sang bảng này khi cập nhật lên v1.5; Warranty
+  Freelance cũ chuyển sang Warranty Job Chính cùng năm.
+- **Import .xlsx hàng loạt** cho Pre-sales / Post-sales / Warranty (theo năm) và Job Freelance: tự nhận diện dòng header
+  và cột theo tên tiêu đề, chỉnh mapping từng cột, xem trước (dòng lỗi được đánh dấu và bỏ qua), Tên SI / Hãng / Sale /
+  EU / Tình trạng khớp theo tên, chưa có thì thêm vào danh mục; Pre/Post-sales tạo luôn thư mục dự án nếu chọn. File không có
+  cột STT mà tên dự án mở đầu bằng số (`01. ABC`) thì STT lấy theo số đó (tên còn `ABC`), không đánh theo thứ tự dòng.
+- **Chọn nhiều để xóa** (Pre-sales / Post-sales / Tất cả mục / Warranty / Job Freelance): bấm **Chọn**, tick từng dòng
+  (hoặc bấm vào dòng) hay ô tick đầu bảng để chọn tất cả dòng đang hiển thị, rồi **Xóa**. Dự án có thêm lựa chọn
+  *Xóa cả folder local* như khi xóa từng dự án.
+- **Password**: danh sách STT / Tên website / Username / Password / Link website — thêm, sửa, xóa, tìm theo Tên website.
+  Mật khẩu mã hóa theo tài khoản Windows, che mặc định, bấm mắt để xem (tự ẩn sau 20 giây), sao chép không cần hiện.
+- **Tools**: *Tool app* — các tool nhỏ chạy trong app (đăng ký trong `src/renderer/tools/registry.ts`); *Tool online* —
+  danh sách STT / Tên tool / Mục đích / Link (bắt buộc là link), thêm, sửa, xóa, tìm theo tên, bấm để mở trình duyệt.
 - **Pre-sales / Post-sales** mặc định xem dạng **Danh sách** (bảng sắp xếp theo cột, ẩn/hiện cột; bấm một dòng mở panel
   xem nhanh bên phải với View info / Edit); chuyển sang **Tiến độ** để xem board.
 - **Thông tin dự án**: **STT** (tự +1, không trùng) và **Tên dự án** là bắt buộc; Tên SI, Hãng (chọn nhiều), Sale
@@ -113,9 +130,17 @@ Backup/Restore trong **Settings › Dữ liệu & Backup** xuất một file `.z
   không dấu trong toàn bộ nội dung.
 - **Ảnh**: ngoài nút *Thêm ảnh*, **kéo thả** file ảnh từ thư mục, hoặc chụp màn hình (Win+Shift+S) / copy ảnh rồi **Ctrl+V**;
   trong trình xem ảnh có *Sao chép ảnh* (Ctrl+C).
-- **Settings**: Light/Dark, ngưỡng trạng thái có preview, danh mục EU / Tên SI / Hãng / Sale & Phòng ban
-  (chống trùng, chặn xóa khi đang dùng — gán lại hoặc gỡ liên kết; Hãng chỉ Deactivate), quản lý năm, backup/restore,
-  dung lượng ảnh, giới hạn XLSX.
+- **Settings**: Light/Dark, ngưỡng trạng thái có preview, Master Data theo **phân loại Job Chính** (EU / Tên SI / Hãng /
+  Sale & Phòng ban) **/ Job Freelance** (Tình trạng, sắp xếp lên/xuống) — chống trùng, chặn xóa khi đang dùng (gán lại
+  hoặc gỡ liên kết; Hãng chỉ Deactivate), quản lý năm (Job Chính), backup/restore, dung lượng ảnh, giới hạn XLSX.
+
+### Thêm Tool app
+
+1. Tạo component trong `src/renderer/tools/`, ví dụ `SubnetTool.tsx` (export một React component, không nhận props).
+2. Thêm một mục vào `APP_TOOLS` trong `src/renderer/tools/registry.ts`:
+   `{ id: 'subnet', name: 'Chia subnet', description: 'Tính dải IP cho camera', icon: Network, component: SubnetTool }`
+   (`icon` lấy từ `lucide-react`; `id` dùng trong đường dẫn `#/tools/app/subnet`, đừng đổi sau khi phát hành).
+3. Tool cần đọc/ghi dữ liệu thì thêm method vào `src/shared/api.ts` + `src/main/handlers.ts` như các tính năng khác.
 
 ## Kiểm thử
 

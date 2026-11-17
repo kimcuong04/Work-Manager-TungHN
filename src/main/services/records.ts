@@ -107,7 +107,7 @@ function getWarranty(ctx: Ctx, id: string): WarrantyRecord {
 function checkWarranty(ctx: Ctx, input: WarrantyInput) {
   const e = validateWarrantyInput(input);
   if (hasErrors(e)) throw new AppError(Object.values(e).filter(Boolean).join(' '));
-  getYear(ctx, input.jobYearId);
+  if (getYear(ctx, input.jobYearId).jobType !== 'MAIN') throw new AppError('Job Freelance không có Warranty.');
   if (input.brandId && !ctx.db.scalar<number>('SELECT COUNT(*) FROM brands WHERE id = ?', [input.brandId]))
     throw new AppError('Hãng không tồn tại.');
   if (input.siId && !ctx.db.scalar<number>('SELECT COUNT(*) FROM si_partners WHERE id = ?', [input.siId]))
@@ -161,6 +161,15 @@ export function deleteWarranty(ctx: Ctx, id: string): void {
   const rec = getWarranty(ctx, id);
   ctx.db.tx(() => ctx.db.run('DELETE FROM warranty_records WHERE id = ?', [id]));
   deleteImageFiles(ctx, rec.images.map((i) => i.storageKey));
+}
+
+/** Xóa nhiều Warranty Record (kèm ảnh) trong một transaction; id không còn tồn tại thì bỏ qua. */
+export function deleteWarranties(ctx: Ctx, ids: string[]): number {
+  const found = [...new Set(ids)].filter((id) => ctx.db.scalar<number>('SELECT COUNT(*) FROM warranty_records WHERE id = ?', [id]) > 0);
+  const images = loadImages(ctx, WARRANTY_IMG, found);
+  ctx.db.tx(() => found.forEach((id) => ctx.db.run('DELETE FROM warranty_records WHERE id = ?', [id])));
+  deleteImageFiles(ctx, [...images.values()].flat().map((i) => i.storageKey));
+  return found.length;
 }
 
 export function revealWarrantyPassword(ctx: Ctx, id: string): string {

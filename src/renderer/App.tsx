@@ -10,10 +10,12 @@ import { CalendarPage } from './pages/CalendarPage';
 import { CategoryPage } from './pages/CategoryPage';
 import { DashboardPage } from './pages/DashboardPage';
 import { ExperienceBrandPage, ExperienceHomePage } from './pages/ExperiencePages';
+import { FreelanceDetailPage, FreelanceListPage } from './pages/FreelancePages';
 import { KnowledgeBrandPage, KnowledgeHomePage } from './pages/KnowledgePages';
 import { ProjectDetailPage } from './pages/ProjectDetailPage';
 import { SearchPage } from './pages/SearchPage';
 import { SettingsPage } from './pages/SettingsPage';
+import { OnlineToolsPage, PasswordPage, ToolAppPage, ToolAppRunPage } from './pages/UtilityPages';
 import { AppDataProvider, useAppData } from './state/AppData';
 import { ProjectActionsProvider } from './state/projectActions';
 import { UiProvider, useUi } from './state/ui';
@@ -70,6 +72,12 @@ function Shell() {
             <Route path="/all" element={<AllProjectsPage key={location.key} />} />
             <Route path="/job/:jobType/:yearId/:category" element={<CategoryPage />} />
             <Route path="/project/:id" element={<ProjectDetailPage />} />
+            <Route path="/freelance" element={<FreelanceListPage />} />
+            <Route path="/freelance/:id" element={<FreelanceDetailPage />} />
+            <Route path="/passwords" element={<PasswordPage />} />
+            <Route path="/tools/app" element={<ToolAppPage />} />
+            <Route path="/tools/app/:toolId" element={<ToolAppRunPage />} />
+            <Route path="/tools/online" element={<OnlineToolsPage />} />
             <Route path="/experience" element={<ExperienceHomePage />} />
             <Route path="/experience/:brandId" element={<ExperienceBrandPage />} />
             <Route path="/knowledge" element={<KnowledgeHomePage />} />

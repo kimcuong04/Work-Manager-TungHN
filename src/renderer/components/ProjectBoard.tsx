@@ -44,6 +44,8 @@ import { useUi } from '../state/ui';
 import { ColumnToggle, EmptyState, MenuButton, MultiSelect, PriorityBadge, SearchInput, type MenuItem } from './common';
 import { useOpenFile } from './FileLink';
 import { DEFAULT_HIDDEN_PROJECT_COLS, PROJECT_COLUMNS, ProjectPreviewPanel, ProjectTable } from './ProjectTable';
+import { Modal } from './Modal';
+import { SelectToggleButton, SelectionBar, useSelection } from './Selection';
 
 export type ProjectViewMode = 'list' | 'board';
 
@@ -217,13 +219,80 @@ export interface ProjectsViewProps {
   initialFilter?: Partial<ProjectFilter>;
   onAdd: () => void;
   addLabel?: string;
+  /** Nút thêm cạnh nút Thêm (vd Import xlsx). */
+  extraActions?: React.ReactNode;
   /** Khóa lưu chế độ xem đã chọn (localStorage) và chế độ mặc định khi chưa chọn. */
   viewKey: string;
   defaultView: ProjectViewMode;
 }
 
-/** Toolbar (Thêm mới, chế độ xem, Chỉnh sửa Board, Search, Filter, Sort) + bảng danh sách hoặc board 4 cột. */
-export function ProjectsView({ scopeKey, baseList, showLocationFilters, initialFilter, onAdd, addLabel = 'Thêm Project', viewKey, defaultView }: ProjectsViewProps) {
+/** Xóa các dự án đã chọn: Hủy / Xóa / Xóa cả folder local (giống xóa từng dự án). */
+function DeleteProjectsDialog({ list, onClose, onDone }: { list: ProjectView[]; onClose: () => void; onDone: () => void }) {
+  const { refresh } = useAppData();
+  const { toast, toastError } = useUi();
+  const [busy, setBusy] = useState<false | 'keep' | 'folder'>(false);
+  const withFolder = list.filter((p) => p.folderPath).length;
+  const run = async (deleteFolder: boolean) => {
+    setBusy(deleteFolder ? 'folder' : 'keep');
+    try {
+      const res = await api.deleteProjects(
+        list.map((p) => p.id),
+        { deleteFolder },
+      );
+      await refresh('projects', 'years');
+      toast('success', deleteFolder ? `Đã xóa ${res.deleted} dự án và chuyển thư mục vào Thùng rác.` : `Đã xóa ${res.deleted} dự án (thư mục trên máy được giữ lại).`);
+      if (res.failed.length) toast('warn', `Chưa xóa ${res.failed.length} dự án: ${res.failed.slice(0, 3).join('; ')}${res.failed.length > 3 ? '…' : ''}`);
+      onDone();
+    } catch (e) {
+      toastError(e);
+      setBusy(false);
+    }
+  };
+  return (
+    <Modal
+      size="sm"
+      title={`Xóa ${list.length} dự án đã chọn`}
+      onClose={onClose}
+      footer={() => (
+        <>
+          <button className="btn" onClick={onClose} disabled={!!busy}>
+            Hủy
+          </button>
+          <button className="btn danger" onClick={() => void run(false)} disabled={!!busy}>
+            {busy === 'keep' ? 'Đang xóa…' : `Xóa ${list.length} dự án`}
+          </button>
+          {withFolder > 0 && (
+            <button className="btn danger solid" onClick={() => void run(true)} disabled={!!busy}>
+              {busy === 'folder' ? 'Đang xóa…' : 'Xóa cả folder local'}
+            </button>
+          )}
+        </>
+      )}
+    >
+      <div className="stack" style={{ gap: 10 }}>
+        <ul className="small" style={{ margin: 0, paddingLeft: 18, maxHeight: 180, overflow: 'auto' }}>
+          {list.slice(0, 12).map((p) => (
+            <li key={p.id}>{p.label}</li>
+          ))}
+          {list.length > 12 && <li className="faint">… và {list.length - 12} dự án khác</li>}
+        </ul>
+        <div className="muted small">Ghi chú, dữ liệu Excel đã import và lịch của các dự án này cũng bị xóa. File DWG/TXT liên kết không bị ảnh hưởng.</div>
+        {withFolder > 0 && (
+          <div className="alert info small">
+            <div>
+              <b>Xóa</b>: giữ nguyên thư mục trên máy.
+              <br />
+              <b>Xóa cả folder local</b>: chuyển thư mục của {withFolder} dự án vào Thùng rác (khôi phục được từ Thùng rác).
+            </div>
+          </div>
+        )}
+      </div>
+    </Modal>
+  );
+}
+
+/** Toolbar (Thêm mới, chế độ xem, Chỉnh sửa Board, Chọn, Search, Filter, Sort) + bảng danh sách hoặc board 4 cột. */
+export function ProjectsView({ scopeKey, baseList, showLocationFilters, initialFilter, onAdd, addLabel = 'Thêm Project', extraActions, viewKey, defaultView }: ProjectsViewProps) {
   const { masters, years, today, thresholds, refresh } = useAppData();
   const [mode, setMode] = useLocalState<ProjectViewMode>(viewKey, defaultView);
   const [hiddenCols, setHiddenCols] = useLocalState<string[]>('project-list-hidden-cols-v2', DEFAULT_HIDDEN_PROJECT_COLS);
@@ -255,6 +324,10 @@ export function ProjectsView({ scopeKey, baseList, showLocationFilters, initialF
   }, [baseList, pending, today, thresholds]);
 
   const filtered = useMemo(() => sortProjects(applyFilter(effective, filter), sort), [effective, filter, sort]);
+  const filteredIds = useMemo(() => filtered.map((p) => p.id), [filtered]);
+  const sel = useSelection(filteredIds);
+  const [deletingMany, setDeletingMany] = useState(false);
+  const viewMode: ProjectViewMode = sel.active ? 'list' : mode;
   const groups = useMemo(() => groupByStatus(filtered), [filtered]);
   const columns = filter.statuses.length ? STATUS_ORDER.filter((s) => filter.statuses.includes(s)) : STATUS_ORDER;
 
@@ -333,12 +406,14 @@ export function ProjectsView({ scopeKey, baseList, showLocationFilters, initialF
         <MultiSelect label="EU" options={toOpts('clients')} value={filter.clients} onChange={(v) => setF('clients', v)} />
         {showLocationFilters && (
           <>
-            <MultiSelect
-              label="Job"
-              options={JOB_TYPES.map((j) => ({ id: j, name: JOB_LABEL[j] }))}
-              value={filter.jobs}
-              onChange={(v) => setF('jobs', v as ProjectFilter['jobs'])}
-            />
+            {JOB_TYPES.length > 1 && (
+              <MultiSelect
+                label="Job"
+                options={JOB_TYPES.map((j) => ({ id: j, name: JOB_LABEL[j] }))}
+                value={filter.jobs}
+                onChange={(v) => setF('jobs', v as ProjectFilter['jobs'])}
+              />
+            )}
             <MultiSelect label="Năm" options={yearOpts} value={filter.years} onChange={(v) => setF('years', v)} />
             <MultiSelect
               label="Nhóm"
@@ -383,29 +458,49 @@ export function ProjectsView({ scopeKey, baseList, showLocationFilters, initialF
         </div>
         <div className="seg" role="group" aria-label="Chế độ xem">
           <button
-            className={mode === 'list' ? 'on' : ''}
-            aria-pressed={mode === 'list'}
+            className={viewMode === 'list' ? 'on' : ''}
+            aria-pressed={viewMode === 'list'}
             disabled={editMode}
             title={editMode ? 'Lưu hoặc hủy chỉnh sửa Board trước' : 'Xem theo danh sách'}
             onClick={() => setMode('list')}
           >
             <List size={14} /> Danh sách
           </button>
-          <button className={mode === 'board' ? 'on' : ''} aria-pressed={mode === 'board'} title="Xem theo tiến độ (board 4 cột)" onClick={() => setMode('board')}>
+          <button
+            className={viewMode === 'board' ? 'on' : ''}
+            aria-pressed={viewMode === 'board'}
+            disabled={sel.active}
+            title={sel.active ? 'Bấm Xong để thoát chế độ chọn trước' : 'Xem theo tiến độ (board 4 cột)'}
+            onClick={() => setMode('board')}
+          >
             <SquareKanban size={14} /> Tiến độ
           </button>
         </div>
-        {mode === 'list' ? (
+        <SelectToggleButton sel={sel} disabled={editMode || baseList.length === 0} />
+        {viewMode === 'list' ? (
           <ColumnToggle columns={PROJECT_COLUMNS} hidden={hiddenCols} onChange={setHiddenCols} />
         ) : (
           <button className={`btn ${editMode ? 'toggled' : ''}`} onClick={() => (editMode ? void saveBoard() : setEditMode(true))} aria-pressed={editMode}>
             {editMode ? <Unlock size={15} /> : <Lock size={15} />} Chỉnh sửa Board
           </button>
         )}
+        {extraActions}
         <button className="btn primary" onClick={onAdd}>
           <Plus size={16} /> {addLabel}
         </button>
       </div>
+
+      {sel.active && <SelectionBar sel={sel} total={filtered.length} noun="dự án" onDelete={() => setDeletingMany(true)} />}
+      {deletingMany && (
+        <DeleteProjectsDialog
+          list={filtered.filter((p) => sel.selected.has(p.id))}
+          onClose={() => setDeletingMany(false)}
+          onDone={() => {
+            setDeletingMany(false);
+            sel.stop();
+          }}
+        />
+      )}
 
       {editMode && (
         <div className="edit-banner">
@@ -430,15 +525,19 @@ export function ProjectsView({ scopeKey, baseList, showLocationFilters, initialF
             title="Chưa có dự án nào"
             text="Thêm dự án đầu tiên để bắt đầu theo dõi thời hạn và ưu tiên."
             action={
-              <button className="btn primary" onClick={onAdd}>
-                <Plus size={16} /> {addLabel}
-              </button>
+              <div className="row">
+                {extraActions}
+                <button className="btn primary" onClick={onAdd}>
+                  <Plus size={16} /> {addLabel}
+                </button>
+              </div>
             }
           />
         </div>
-      ) : mode === 'list' ? (
+      ) : viewMode === 'list' ? (
         <div className="split">
           <ProjectTable
+            selection={sel}
             list={filtered}
             showLocation={!!showLocationFilters}
             sort={sort}
@@ -447,7 +546,7 @@ export function ProjectsView({ scopeKey, baseList, showLocationFilters, initialF
             selectedId={selected?.id ?? null}
             onSelect={(p) => setSelectedId(p.id)}
           />
-          {selected && <ProjectPreviewPanel key={selected.id} p={selected} onClose={() => setSelectedId(null)} />}
+          {selected && !sel.active && <ProjectPreviewPanel key={selected.id} p={selected} onClose={() => setSelectedId(null)} />}
         </div>
       ) : (
         <div className="board" style={{ '--cols': columns.length } as React.CSSProperties}>

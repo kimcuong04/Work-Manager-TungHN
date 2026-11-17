@@ -122,7 +122,7 @@ interface Normalized {
 function normalizeInput(ctx: Ctx, input: ProjectInput, currentId?: string): Normalized {
   const errors = validateProjectInput(input);
   if (hasErrors(errors)) throw new AppError(Object.values(errors).filter(Boolean).join(' '));
-  getYear(ctx, input.jobYearId);
+  if (getYear(ctx, input.jobYearId).jobType !== 'MAIN') throw new AppError('Job Freelance không có Pre-sales / Post-sales — dùng bảng Job Freelance.');
   const clientId = strOrNull(input.clientId);
   const siId = strOrNull(input.siId);
   const salespersonId = strOrNull(input.salespersonId);
@@ -326,19 +326,32 @@ export function syncProjectFolder(ctx: Ctx, id: string, parent?: string | null):
   return saved;
 }
 
+function deleteProjectRow(ctx: Ctx, p: Project): void {
+  removeProjectStartEvents(ctx, p.id);
+  ctx.db.run(
+    `UPDATE experience_records SET project_text = COALESCE(NULLIF(project_text,''), ?), updated_at = ? WHERE project_id = ?`,
+    [p.projectName, now(), p.id],
+  );
+  ctx.db.run('DELETE FROM projects WHERE id = ?', [p.id]);
+}
+
 /** Không đụng tới thư mục trên ổ đĩa (việc chuyển thư mục vào Thùng rác do lớp gọi xử lý trước). */
 export function deleteProject(ctx: Ctx, id: string): void {
-  const p = getProject(ctx, id);
-  const noteImages = projectNoteImageKeys(ctx, id);
-  ctx.db.tx(() => {
-    removeProjectStartEvents(ctx, id);
-    ctx.db.run(
-      `UPDATE experience_records SET project_text = COALESCE(NULLIF(project_text,''), ?), updated_at = ? WHERE project_id = ?`,
-      [p.projectName, now(), id],
-    );
-    ctx.db.run('DELETE FROM projects WHERE id = ?', [id]);
+  deleteProjects(ctx, [id]);
+}
+
+/** Xóa nhiều dự án trong một transaction; id không còn tồn tại thì bỏ qua. Trả về số dự án đã xóa. */
+export function deleteProjects(ctx: Ctx, ids: string[]): number {
+  const list = [...new Set(ids)].map((id) => {
+    const r = ctx.db.get(`${SELECT_PROJECT} WHERE p.id = ?`, [id]);
+    return r ? mapProject(r, []) : null;
   });
+  const found = list.filter((p): p is Project => !!p);
+  if (ids.length === 1 && !found.length) throw new AppError('Không tìm thấy dự án (có thể đã bị xóa).');
+  const noteImages = found.flatMap((p) => projectNoteImageKeys(ctx, p.id));
+  ctx.db.tx(() => found.forEach((p) => deleteProjectRow(ctx, p)));
   deleteUnreferencedImages(ctx, noteImages);
+  return found.length;
 }
 
 function setCompletedRow(ctx: Ctx, id: string, completed: boolean, stamp: string) {
@@ -363,7 +376,7 @@ export function applyBoardChanges(ctx: Ctx, changes: { id: string; completed: bo
 
 export function moveProject(ctx: Ctx, id: string, jobYearId: string, category: ProjectCategory): Project {
   getProject(ctx, id);
-  getYear(ctx, jobYearId);
+  if (getYear(ctx, jobYearId).jobType !== 'MAIN') throw new AppError('Job Freelance không có Pre-sales / Post-sales.');
   if (category !== 'PRE_SALES' && category !== 'POST_SALES') throw new AppError('Nhóm đích không hợp lệ.');
   ctx.db.tx(() =>
     ctx.db.run('UPDATE projects SET job_year_id = ?, work_category = ?, updated_at = ? WHERE id = ?', [jobYearId, category, now(), id]),

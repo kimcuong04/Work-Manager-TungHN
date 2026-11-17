@@ -8,7 +8,7 @@ import { formatBytes } from './common';
 import { ImportedContent } from './ImportedContent';
 import { Modal } from './Modal';
 
-function ColSelect({
+export function ColSelect({
   sheet,
   headerRow,
   value,
@@ -38,7 +38,7 @@ function ColSelect({
   );
 }
 
-function RowInput({ value, onChange, min = 1, label }: { value: number; onChange: (v: number) => void; min?: number; label: string }) {
+export function RowInput({ value, onChange, min = 1, label }: { value: number; onChange: (v: number) => void; min?: number; label: string }) {
   return (
     <input
       className="input"
@@ -54,7 +54,7 @@ function RowInput({ value, onChange, min = 1, label }: { value: number; onChange
   );
 }
 
-function SheetSelect({ sheets, value, onChange }: { sheets: WorkbookSheet[]; value: string; onChange: (v: string) => void }) {
+export function SheetSelect({ sheets, value, onChange }: { sheets: WorkbookSheet[]; value: string; onChange: (v: string) => void }) {
   return (
     <select className="select" value={value} onChange={(e) => onChange(e.target.value)}>
       {sheets.map((s) => (

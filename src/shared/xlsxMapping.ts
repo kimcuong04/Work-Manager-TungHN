@@ -117,7 +117,7 @@ function cell(sheet: WorkbookSheet, r: number, c: number | undefined): CellValue
   return sheet.rows[r]?.[c];
 }
 
-function labelKey(v: CellValue | undefined): string {
+export function labelKey(v: CellValue | undefined): string {
   if (typeof v !== 'string') return '';
   return normalizeText(v)
     .replace(/[^a-z0-9/()]+/g, ' ')
@@ -126,7 +126,7 @@ function labelKey(v: CellValue | undefined): string {
 }
 
 /** Khớp nhãn với alias: bằng nhau, hoặc một vế khi tách theo "/" hoặc "(" bằng alias. */
-function matchesAlias(v: CellValue | undefined, aliases: string[]): boolean {
+export function matchesAlias(v: CellValue | undefined, aliases: string[]): boolean {
   const k = labelKey(v);
   if (!k || k.length > 60) return false;
   const parts = [k, ...k.split(/[/()]/)].map((p) => p.replace(/[^a-z0-9]+/g, ' ').trim()).filter(Boolean);

@@ -1,6 +1,17 @@
 import { isValidISODate } from './dates';
-import { CALENDAR_COLORS, type CalendarEventInput, type ExperienceInput, type KnowledgeInput, type ProjectInput, type WarrantyInput } from './types';
+import {
+  CALENDAR_COLORS,
+  type CalendarEventInput,
+  type ExperienceInput,
+  type FreelanceInput,
+  type KnowledgeInput,
+  type OnlineToolInput,
+  type PasswordInput,
+  type ProjectInput,
+  type WarrantyInput,
+} from './types';
 import { cleanName } from './text';
+import { isWebLink } from './webLink';
 
 export type FieldErrors = Partial<Record<string, string>>;
 
@@ -36,6 +47,44 @@ export function validateProjectInput(input: ProjectInput): FieldErrors {
     e.priorityPoint = 'Priority Point phải từ 1 đến 5.';
   if (input.fileExtension && !['dwg', 'txt'].includes(input.fileExtension.toLowerCase()))
     e.file = 'Chỉ hỗ trợ file .dwg hoặc .txt.';
+  return e;
+}
+
+/** Job Freelance: STT và Tên dự án là bắt buộc. */
+export function validateFreelanceInput(input: FreelanceInput): FieldErrors {
+  const e: FieldErrors = {};
+  if (input.stt === null) e.stt = 'Bắt buộc nhập STT.';
+  else if (input.stt !== undefined && !(Number.isInteger(input.stt) && input.stt >= 1 && input.stt <= 999999)) e.stt = 'STT phải là số nguyên dương.';
+  const name = cleanName(input.projectName ?? '');
+  if (!name) e.projectName = 'Bắt buộc nhập Tên dự án.';
+  else if (name.length > LIMITS.projectName) e.projectName = `Tối đa ${LIMITS.projectName} ký tự.`;
+  checkLen(e, 'hirer', cleanName(input.hirer ?? ''), LIMITS.projectName);
+  if (input.startDate && !isValidISODate(input.startDate)) e.startDate = 'Ngày không hợp lệ (dd/mm/yyyy).';
+  return e;
+}
+
+export function validatePasswordInput(input: PasswordInput, creating: boolean): FieldErrors {
+  const e: FieldErrors = {};
+  if (!(input.siteName ?? '').trim()) e.siteName = 'Bắt buộc nhập Tên website.';
+  if (!(input.username ?? '').trim()) e.username = 'Bắt buộc nhập Username.';
+  if (creating && !input.password) e.password = 'Bắt buộc nhập Password.';
+  if (input.password !== undefined && !creating && input.password === '') e.password = 'Password không được để trống.';
+  checkLen(e, 'siteName', input.siteName ?? '', LIMITS.projectName);
+  checkLen(e, 'username', input.username ?? '', LIMITS.shortText);
+  if (input.password !== undefined) checkLen(e, 'password', input.password, 1000);
+  checkLen(e, 'url', input.url ?? '', LIMITS.url);
+  return e;
+}
+
+export function validateOnlineToolInput(input: OnlineToolInput): FieldErrors {
+  const e: FieldErrors = {};
+  if (!(input.name ?? '').trim()) e.name = 'Bắt buộc nhập Tên tool.';
+  const url = (input.url ?? '').trim();
+  if (!url) e.url = 'Bắt buộc nhập Link.';
+  else if (!isWebLink(url)) e.url = 'Link không hợp lệ. Ví dụ: https://example.com hoặc example.com/tool';
+  checkLen(e, 'name', input.name ?? '', LIMITS.projectName);
+  checkLen(e, 'purpose', input.purpose ?? '', LIMITS.longText);
+  checkLen(e, 'url', url, LIMITS.url);
   return e;
 }
 

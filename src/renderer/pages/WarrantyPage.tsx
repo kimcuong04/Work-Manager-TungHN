@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { ArrowDown, ArrowUp, ChevronLeft, ChevronRight, Copy, Eye, EyeOff, Image as ImageIcon, KeyRound, Maximize2, Pencil, Plus, ShieldCheck, Trash2, X } from 'lucide-react';
+import { ArrowDown, ArrowUp, ChevronLeft, ChevronRight, Copy, Eye, EyeOff, FileSpreadsheet, Image as ImageIcon, KeyRound, Maximize2, Pencil, Plus, ShieldCheck, Trash2, X } from 'lucide-react';
 import { QUICK_RANGE_LABEL, formatDate, formatDateTime, inRange, monthRange, quickRange, todayISO, type QuickRangeKey } from '../../shared/dates';
 import { buildHaystack, compareVi, matchesQuery, normalizeText } from '../../shared/text';
 import type { ImageRef, JobYear, WarrantyInput, WarrantyRecord } from '../../shared/types';
@@ -7,6 +7,8 @@ import { hasErrors, validateWarrantyInput } from '../../shared/validation';
 import { api } from '../api';
 import { Breadcrumbs, ColumnToggle, DateInput, EmptyState, Field, MultiSelect, SearchInput, SearchableSelect, type Crumb } from '../components/common';
 import { ImageGallery } from '../components/ImageGallery';
+import { BulkImportWizard } from '../components/BulkImportWizard';
+import { SelectAllHeader, SelectCell, SelectToggleButton, SelectionBar, useSelection } from '../components/Selection';
 import { Modal, SidePanel } from '../components/Modal';
 import { useLocalState, useSessionState } from '../lib/persist';
 import { useAppData } from '../state/AppData';
@@ -607,6 +609,8 @@ export function WarrantyPage({ year, crumbs }: { year: JobYear; crumbs: Crumb[] 
   const location = useLocation();
   const [detailId, setDetailId] = useState<string | null>((location.state as { select?: string } | null)?.select ?? null);
   const [viewId, setViewId] = useState<string | null>(null);
+  const [importing, setImporting] = useState(false);
+  const noStt = useMemo(() => new Set<number>(), []);
 
   const load = useCallback(() => {
     api.listWarranty(year.id).then(setRecords).catch(toastError);
@@ -647,6 +651,29 @@ export function WarrantyPage({ year, crumbs }: { year: JobYear; crumbs: Crumb[] 
     });
   }, [indexed, f, range.from, range.to, sort]);
 
+  const shownIds = useMemo(() => shown.map((r) => r.id), [shown]);
+  const sel = useSelection(shownIds);
+  const removeSelected = async () => {
+    const ids = shownIds.filter((id) => sel.selected.has(id));
+    if (!ids.length) return;
+    const ok = await confirm({
+      title: `Xóa ${ids.length} Warranty Record`,
+      message: `Xóa ${ids.length} bản ghi đã chọn? Ảnh đính kèm của các bản ghi này cũng bị xóa. Không hoàn tác được.`,
+      confirmText: `Xóa ${ids.length} bản ghi`,
+      danger: true,
+    });
+    if (!ok) return;
+    try {
+      const n = await api.deleteWarranties(ids);
+      setDetailId(null);
+      setViewId(null);
+      sel.stop();
+      toast('success', `Đã xóa ${n} Warranty Record.`);
+      afterChange();
+    } catch (e) {
+      toastError(e);
+    }
+  };
   const detail = records?.find((r) => r.id === detailId) ?? null;
   const viewing = records?.find((r) => r.id === viewId) ?? null;
   const viewIndex = viewing ? shown.findIndex((r) => r.id === viewing.id) : -1;
@@ -694,7 +721,11 @@ export function WarrantyPage({ year, crumbs }: { year: JobYear; crumbs: Crumb[] 
           </h1>
         </div>
         <div className="actions">
+          <SelectToggleButton sel={sel} disabled={!records?.length} />
           <ColumnToggle columns={COLUMNS} hidden={hidden} onChange={setHidden} />
+          <button className="btn" onClick={() => setImporting(true)}>
+            <FileSpreadsheet size={15} /> Import xlsx
+          </button>
           <button className="btn primary" onClick={() => setForm({})}>
             <Plus size={16} /> Add Record
           </button>
@@ -720,6 +751,7 @@ export function WarrantyPage({ year, crumbs }: { year: JobYear; crumbs: Crumb[] 
         </span>
       </div>
 
+      {sel.active && <SelectionBar sel={sel} total={shown.length} noun="bản ghi" onDelete={() => void removeSelected()} />}
       {records === null ? (
         <div className="faint">Đang tải…</div>
       ) : records.length === 0 ? (
@@ -741,6 +773,7 @@ export function WarrantyPage({ year, crumbs }: { year: JobYear; crumbs: Crumb[] 
           <table className="tbl">
             <thead>
               <tr>
+                {sel.active && <SelectAllHeader sel={sel} />}
                 {cols.map((c) => (
                   <th
                     key={c.key}
@@ -759,7 +792,7 @@ export function WarrantyPage({ year, crumbs }: { year: JobYear; crumbs: Crumb[] 
             <tbody>
               {shown.length === 0 && (
                 <tr>
-                  <td colSpan={cols.length} className="faint" style={{ textAlign: 'center', padding: 24 }}>
+                  <td colSpan={cols.length + 1} className="faint" style={{ textAlign: 'center', padding: 24 }}>
                     Không có bản ghi phù hợp bộ lọc.
                   </td>
                 </tr>
@@ -767,13 +800,14 @@ export function WarrantyPage({ year, crumbs }: { year: JobYear; crumbs: Crumb[] 
               {shown.map((r) => (
                 <tr
                   key={r.id}
-                  className={`clickable ${r.id === detailId ? 'selected' : ''}`}
+                  className={`clickable ${(sel.active ? sel.selected.has(r.id) : r.id === detailId) ? 'selected' : ''}`}
                   tabIndex={0}
-                  aria-selected={r.id === detailId}
-                  onClick={() => setDetailId(r.id)}
-                  onDoubleClick={() => setViewId(r.id)}
-                  onKeyDown={(e) => e.key === 'Enter' && setDetailId(r.id)}
+                  aria-selected={sel.active ? sel.selected.has(r.id) : r.id === detailId}
+                  onClick={() => (sel.active ? sel.toggle(r.id) : setDetailId(r.id))}
+                  onDoubleClick={() => !sel.active && setViewId(r.id)}
+                  onKeyDown={(e) => e.key === 'Enter' && (sel.active ? sel.toggle(r.id) : setDetailId(r.id))}
                 >
+                  {sel.active && <SelectCell sel={sel} id={r.id} label={r.caseNumber || r.model || 'bản ghi'} />}
                   {cols.map((c) => (
                     <td key={c.key} className={c.cls}>
                       {c.render(r)}
@@ -784,7 +818,7 @@ export function WarrantyPage({ year, crumbs }: { year: JobYear; crumbs: Crumb[] 
             </tbody>
           </table>
         </div>
-        {detail && (
+        {detail && !sel.active && (
           <WarrantyDetail
             key={detail.id}
             r={detail}
@@ -809,6 +843,9 @@ export function WarrantyPage({ year, crumbs }: { year: JobYear; crumbs: Crumb[] 
         />
       )}
       {form && <WarrantyForm year={year} record={form.record} onClose={() => setForm(null)} onSaved={afterChange} />}
+      {importing && (
+        <BulkImportWizard target="WARRANTY" jobYearId={year.id} scopeLabel={`Warranty ${year.yearLabel}`} usedStt={noStt} onClose={() => setImporting(false)} onDone={afterChange} />
+      )}
     </>
   );
 }

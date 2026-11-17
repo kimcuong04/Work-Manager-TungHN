@@ -4,10 +4,26 @@ export type WorkCategory = ProjectCategory | 'WARRANTY';
 export type DeadlineStatus = 'URGENT' | 'ATTENTION' | 'NEW' | 'COMPLETED';
 export type ActiveStatus = Exclude<DeadlineStatus, 'COMPLETED'>;
 export type Theme = 'light' | 'dark';
-export type MasterKind = 'clients' | 'brands' | 'salespersons' | 'siPartners' | 'departments';
-export const MASTER_KINDS: MasterKind[] = ['clients', 'siPartners', 'brands', 'salespersons', 'departments'];
+export type MasterKind = 'clients' | 'brands' | 'salespersons' | 'siPartners' | 'departments' | 'freelanceStatuses';
+export const MASTER_KINDS: MasterKind[] = ['clients', 'siPartners', 'brands', 'salespersons', 'departments', 'freelanceStatuses'];
+/** Danh mục theo phân loại trong Settings › Master Data: Job Freelance quản lý riêng, không dùng chung với Job Chính. */
+export type MasterGroup = 'MAIN' | 'FREELANCE';
+export const MASTER_GROUP: Record<MasterKind, MasterGroup> = {
+  clients: 'MAIN',
+  siPartners: 'MAIN',
+  brands: 'MAIN',
+  salespersons: 'MAIN',
+  departments: 'MAIN',
+  freelanceStatuses: 'FREELANCE',
+};
+/** Danh mục sắp xếp theo thứ tự người dùng chọn (lên/xuống) thay vì theo tên. */
+export const ORDERED_MASTER_KINDS: MasterKind[] = ['freelanceStatuses'];
 
-export const JOB_TYPES: JobType[] = ['MAIN', 'FREELANCE'];
+/**
+ * Job có năm và Pre-sales / Post-sales / Warranty. Từ v1.5 Job Freelance là một bảng riêng (`freelance_jobs`),
+ * `FREELANCE` chỉ còn trong kiểu dữ liệu để đọc bản ghi cũ.
+ */
+export const JOB_TYPES: JobType[] = ['MAIN'];
 export const JOB_LABEL: Record<JobType, string> = { MAIN: 'Job Chính', FREELANCE: 'Job Freelance' };
 export const WORK_CATEGORIES: WorkCategory[] = ['PRE_SALES', 'POST_SALES', 'WARRANTY'];
 export const PROJECT_CATEGORIES: ProjectCategory[] = ['PRE_SALES', 'POST_SALES'];
@@ -22,6 +38,7 @@ export const MASTER_LABEL: Record<MasterKind, string> = {
   salespersons: 'Sale',
   siPartners: 'Tên SI',
   departments: 'Phòng ban',
+  freelanceStatuses: 'Tình trạng',
 };
 
 export const LINK_FILE_EXTENSIONS = ['dwg', 'txt'];
@@ -154,15 +171,116 @@ export interface ProjectSaveOptions {
   noteHtml?: string;
 }
 
-/** Ghi chú dự án theo ngày: mỗi ngày một mục, sửa được mục của ngày cũ. */
-export interface ProjectNote {
+/** Ghi chú theo ngày: mỗi ngày một mục, sửa được mục của ngày cũ. */
+export interface DayNote {
   id: string;
-  projectId: string;
   noteDate: string;
   html: string;
   text: string;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface ProjectNote extends DayNote {
+  projectId: string;
+}
+
+export interface FreelanceNote extends DayNote {
+  jobId: string;
+}
+
+/** Một dòng của bảng Job Freelance. */
+export interface FreelanceJob {
+  id: string;
+  stt: number;
+  projectName: string;
+  /** Bên thuê (nhập tự do). */
+  hirer: string;
+  startDate: string | null;
+  statusId: string | null;
+  statusName: string | null;
+  /** Bản chữ thuần của mọi ngày ghi chú (mới nhất trước). */
+  note: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface FreelanceInput {
+  /** undefined = tự lấy STT lớn nhất + 1; null = người dùng bỏ trống (báo lỗi). */
+  stt?: number | null;
+  projectName: string;
+  hirer: string;
+  startDate: string | null;
+  statusId: string | null;
+}
+
+export interface FreelanceSaveOptions {
+  /** Ghi chú (HTML) của ngày hôm nay; undefined = không đổi, rỗng = xóa ghi chú hôm nay. */
+  noteHtml?: string;
+}
+
+/** Mục Password: chỉ trả về cờ có mật khẩu, mật khẩu thật lấy qua revealPassword. */
+export interface PasswordEntry {
+  id: string;
+  siteName: string;
+  username: string;
+  url: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface PasswordInput {
+  siteName: string;
+  username: string;
+  /** Bắt buộc khi tạo; khi sửa undefined = giữ nguyên. */
+  password?: string;
+  url: string;
+}
+
+export interface OnlineTool {
+  id: string;
+  name: string;
+  purpose: string;
+  url: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface OnlineToolInput {
+  name: string;
+  purpose: string;
+  url: string;
+}
+
+/** Import hàng loạt từ .xlsx vào Pre-sales / Post-sales / Warranty của một năm, hoặc bảng Job Freelance. */
+export type BulkTarget = 'PRE_SALES' | 'POST_SALES' | 'WARRANTY' | 'FREELANCE';
+
+export type BulkValue = string | number | null;
+
+export interface BulkRowInput {
+  /** Số dòng trong sheet (bắt đầu từ 1) để báo lỗi. */
+  rowNumber: number;
+  values: Record<string, BulkValue>;
+}
+
+export interface BulkImportSpec {
+  target: BulkTarget;
+  /** Bắt buộc với Pre-sales / Post-sales / Warranty. */
+  jobYearId?: string;
+  rows: BulkRowInput[];
+  /** Pre/Post-sales: tạo thư mục "STT.Tên dự án_Tên SI_Hãng" cho từng dự án trong thư mục này. */
+  folderParent?: string | null;
+  workbookSignature?: string;
+  mappings?: ColumnMappingRecord[];
+}
+
+export interface BulkImportResult {
+  created: number;
+  skipped: { rowNumber: number; error: string }[];
+  /** Mục mới được thêm vào danh mục (EU, Hãng, Tình trạng…) vì chưa có. */
+  newMasters: { kind: MasterKind; name: string }[];
+  /** Cảnh báo không chặn (vd thư mục đã có sẵn được liên kết). */
+  notices: string[];
 }
 
 export interface ProjectNoteInput {
@@ -423,7 +541,7 @@ export interface SearchQuery {
 }
 
 export interface SearchHit {
-  kind: 'project' | 'warranty';
+  kind: 'project' | 'warranty' | 'freelance';
   id: string;
   title: string;
   subtitle: string;
@@ -431,9 +549,10 @@ export interface SearchHit {
   matched: string;
   date: string | null;
   jobType: JobType;
+  /** Rỗng với Job Freelance (không chia năm). */
   jobYearId: string;
   yearLabel: string;
-  workCategory: WorkCategory;
+  workCategory: WorkCategory | null;
 }
 
 export interface XlsxExport {

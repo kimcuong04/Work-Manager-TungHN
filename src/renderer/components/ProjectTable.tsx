@@ -9,6 +9,7 @@ import { useProjectActions } from '../state/projectActions';
 import { useUi } from '../state/ui';
 import { MenuButton, PriorityBadge, SortHeader, StatusBadge, shortenPath, type MenuItem } from './common';
 import { useOpenFile } from './FileLink';
+import { SelectAllHeader, SelectCell, type Selection } from './Selection';
 import { SidePanel } from './Modal';
 
 const PAGE = 100;
@@ -97,6 +98,7 @@ export function ProjectTable({
   hidden,
   selectedId,
   onSelect,
+  selection,
 }: {
   list: ProjectView[];
   showLocation: boolean;
@@ -105,7 +107,10 @@ export function ProjectTable({
   hidden: string[];
   selectedId: string | null;
   onSelect: (p: ProjectView) => void;
+  /** Đang ở chế độ Chọn: thêm cột tick, bấm dòng = tick/bỏ tick. */
+  selection?: Selection;
 }) {
+  const picking = !!selection?.active;
   const navigate = useNavigate();
   const menu = useProjectMenu();
   const [limit, setLimit] = useState(PAGE);
@@ -115,6 +120,7 @@ export function ProjectTable({
       <table className="tbl">
         <thead>
           <tr>
+            {picking && <SelectAllHeader sel={selection!} />}
             {cols.map((c) => (
               <SortHeader
                 key={c.key}
@@ -130,7 +136,7 @@ export function ProjectTable({
         <tbody>
           {list.length === 0 && (
             <tr>
-              <td colSpan={cols.length + 1} className="faint" style={{ textAlign: 'center', padding: 24 }}>
+              <td colSpan={cols.length + 2} className="faint" style={{ textAlign: 'center', padding: 24 }}>
                 Không có dự án phù hợp bộ lọc.
               </td>
             </tr>
@@ -138,14 +144,15 @@ export function ProjectTable({
           {list.slice(0, limit).map((p) => (
             <tr
               key={p.id}
-              className={`clickable st-${p.status} ${p.isCompleted ? 'row-done' : ''} ${p.id === selectedId ? 'selected' : ''}`}
+              className={`clickable st-${p.status} ${p.isCompleted ? 'row-done' : ''} ${(picking ? selection!.selected.has(p.id) : p.id === selectedId) ? 'selected' : ''}`}
               tabIndex={0}
-              aria-selected={p.id === selectedId}
-              onClick={() => onSelect(p)}
-              onDoubleClick={() => navigate(`/project/${p.id}`)}
-              onKeyDown={(e) => e.key === 'Enter' && e.target === e.currentTarget && onSelect(p)}
+              aria-selected={picking ? selection!.selected.has(p.id) : p.id === selectedId}
+              onClick={() => (picking ? selection!.toggle(p.id) : onSelect(p))}
+              onDoubleClick={() => !picking && navigate(`/project/${p.id}`)}
+              onKeyDown={(e) => e.key === 'Enter' && e.target === e.currentTarget && (picking ? selection!.toggle(p.id) : onSelect(p))}
               aria-label={p.label}
             >
+              {picking && <SelectCell sel={selection!} id={p.id} label={p.label} />}
               {cols.map((c) => (
                 <td key={c.key} className={c.cls}>
                   {c.render(p, showLocation)}

@@ -3,7 +3,16 @@ import { useNavigate } from 'react-router';
 import { Activity, ExternalLink, FileText, PartyPopper, Plus, X } from 'lucide-react';
 import { formatDate } from '../../shared/dates';
 import { ACTIVE_STATUSES, STATUS_LABEL, describeRemaining } from '../../shared/status';
-import { CATEGORY_LABEL, JOB_LABEL, JOB_TYPES, PROJECT_CATEGORIES, type ActiveStatus, type DeadlineStatus, type JobType, type ProjectCategory } from '../../shared/types';
+import {
+  CATEGORY_LABEL,
+  JOB_LABEL,
+  JOB_TYPES,
+  PROJECT_CATEGORIES,
+  type ActiveStatus,
+  type DeadlineStatus,
+  type JobType,
+  type ProjectCategory,
+} from '../../shared/types';
 import { EmptyState, PriorityBadge } from '../components/common';
 import { useFileCheck, useOpenFile } from '../components/FileLink';
 import { MonthProjects } from '../components/MonthProjects';
@@ -127,15 +136,9 @@ export function DashboardPage() {
   const navigate = useNavigate();
   const [f, setF] = useSessionState<DashFilter>('dash-filter', { job: '', year: '', category: '' });
 
-  const yearLabels = useMemo(
-    () => [...new Set(years.filter((y) => !f.job || y.jobType === f.job).map((y) => y.yearLabel))].sort().reverse(),
-    [years, f.job],
-  );
+  const yearLabels = useMemo(() => [...new Set(years.filter((y) => !f.job || y.jobType === f.job).map((y) => y.yearLabel))].sort().reverse(), [years, f.job]);
   const scoped = useMemo(
-    () =>
-      projects.filter(
-        (p) => (!f.job || p.jobType === f.job) && (!f.year || p.yearLabel === f.year) && (!f.category || p.workCategory === f.category),
-      ),
+    () => projects.filter((p) => (!f.job || p.jobType === f.job) && (!f.year || p.yearLabel === f.year) && (!f.category || p.workCategory === f.category)),
     [projects, f],
   );
   const counts = useMemo(() => {
@@ -146,9 +149,7 @@ export function DashboardPage() {
   const active = counts.URGENT + counts.ATTENTION + counts.NEW;
   const urgent = useMemo(
     () =>
-      scoped
-        .filter((p) => p.status === 'URGENT')
-        .sort((a, b) => a.priorityPoint - b.priorityPoint || (a.dueDate ?? '9999').localeCompare(b.dueDate ?? '9999')),
+      scoped.filter((p) => p.status === 'URGENT').sort((a, b) => a.priorityPoint - b.priorityPoint || (a.dueDate ?? '9999').localeCompare(b.dueDate ?? '9999')),
     [scoped],
   );
 
@@ -177,17 +178,25 @@ export function DashboardPage() {
       <div className="page-head">
         <div>
           <h1>Tổng quan</h1>
-          <div className="muted small">Toàn bộ workspace: Job Chính và Job Freelance</div>
+          <div className="muted small">Dự án Job Chính (Pre-sales / Post-sales) — Job Freelance theo dõi ở bảng riêng</div>
         </div>
         <div className="actions">
-          <select className="select" style={{ width: 150 }} value={f.job} onChange={(e) => setF({ ...f, job: e.target.value as JobType | '', year: '' })} aria-label="Lọc theo Job">
-            <option value="">Tất cả Job</option>
-            {JOB_TYPES.map((j) => (
-              <option key={j} value={j}>
-                {JOB_LABEL[j]}
-              </option>
-            ))}
-          </select>
+          {JOB_TYPES.length > 1 && (
+            <select
+              className="select"
+              style={{ width: 150 }}
+              value={f.job}
+              onChange={(e) => setF({ ...f, job: e.target.value as JobType | '', year: '' })}
+              aria-label="Lọc theo Job"
+            >
+              <option value="">Tất cả Job</option>
+              {JOB_TYPES.map((j) => (
+                <option key={j} value={j}>
+                  {JOB_LABEL[j]}
+                </option>
+              ))}
+            </select>
+          )}
           <select className="select" style={{ width: 120 }} value={f.year} onChange={(e) => setF({ ...f, year: e.target.value })} aria-label="Lọc theo năm">
             <option value="">Tất cả năm</option>
             {yearLabels.map((y) => (
@@ -196,7 +205,13 @@ export function DashboardPage() {
               </option>
             ))}
           </select>
-          <select className="select" style={{ width: 150 }} value={f.category} onChange={(e) => setF({ ...f, category: e.target.value as ProjectCategory | '' })} aria-label="Lọc theo nhóm">
+          <select
+            className="select"
+            style={{ width: 150 }}
+            value={f.category}
+            onChange={(e) => setF({ ...f, category: e.target.value as ProjectCategory | '' })}
+            aria-label="Lọc theo nhóm"
+          >
             <option value="">Tất cả nhóm</option>
             {PROJECT_CATEGORIES.map((c) => (
               <option key={c} value={c}>
@@ -222,7 +237,8 @@ export function DashboardPage() {
             title="Chào mừng! Bạn chưa có dự án nào."
             text={
               <>
-                Bắt đầu bằng cách thêm Project vào <b>Job Chính</b> hoặc <b>Job Freelance</b> ở sidebar (chọn năm → Pre-sales/Post-sales → nút “+”), hoặc bấm nút dưới đây.
+                Bắt đầu bằng cách thêm Project vào <b>Job Chính</b> hoặc <b>Job Freelance</b> ở sidebar (chọn năm → Pre-sales/Post-sales → nút “+”), hoặc bấm
+                nút dưới đây.
               </>
             }
             action={

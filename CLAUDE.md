@@ -27,7 +27,11 @@ App tự cập nhật trên máy user, nên mọi thay đổi phải giữ đư�
 7. **Thư mục dữ liệu** có thể nằm ngoài `%APPDATA%`: luôn lấy từ `ctx.paths`, không tự ghép đường dẫn mặc định.
    Vị trí ghi trong `userData/data-location.json` (xem `src/main/dataLocation.ts`); thêm file/thư mục dữ liệu mới thì
    bổ sung vào `DATA_ENTRIES` để được chép theo khi đổi thư mục.
-8. **Thư mục dự án trên máy**: chỉ tạo/đổi tên/chuyển trong nơi người dùng đã chọn qua hộp thoại; xóa thì chuyển vào
+8. **Job Freelance** là bảng riêng `freelance_jobs` (từ schema 5), không dùng năm/Pre/Post/Warranty và danh mục riêng
+   (`freelanceStatuses`, nhóm `FREELANCE` trong `MASTER_GROUP`). Không tạo lại `job_years` loại `FREELANCE`.
+   Ghi chú theo ngày dùng chung `writeDayNote` với `NoteStore` (`PROJECT_NOTES` / `FREELANCE_NOTES` trong
+   `src/main/services/notes.ts`). Mục Password lưu mật khẩu mã hóa giống Warranty, không bao giờ trả về trong list.
+9. **Thư mục dự án trên máy**: chỉ tạo/đổi tên/chuyển trong nơi người dùng đã chọn qua hộp thoại; xóa thì chuyển vào
    Thùng rác (`shell.trashItem`), không xóa vĩnh viễn. E2E không được ghi vào clipboard thật của Windows.
 
 ## Phát hành bản cập nhật

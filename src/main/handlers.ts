@@ -10,9 +10,12 @@ import { assertMovable, copyDataTo, dirSize, hasPpmData, readLocation, resolveTa
 import { checkFile, readWorkbook, writeXlsx } from './integration/files';
 import { imagePath, importImageBuffer, importImages, storageUsage } from './integration/images';
 import { inspectBackup, restoreBackup, writeBackup } from './services/backup';
+import { bulkImport } from './services/bulkImport';
 import * as calendar from './services/calendar';
+import * as freelance from './services/freelance';
 import * as master from './services/master';
 import * as notes from './services/notes';
+import * as passwords from './services/passwords';
 import * as projects from './services/projects';
 import * as records from './services/records';
 import { globalSearch } from './services/search';
@@ -90,6 +93,7 @@ export function createHandlers(ctx: Ctx, desktop: Desktop): Handlers {
     deleteMaster: (kind, id, strategy) => master.deleteMaster(ctx, kind, id, strategy),
     setMasterActive: (kind, id, active) => master.setMasterActive(ctx, kind, id, active),
     setSalespersonDepartment: (id, dept) => master.setSalespersonDepartment(ctx, id, dept),
+    moveMaster: (kind, id, dir) => master.moveMaster(ctx, kind, id, dir),
 
     listYears: () => master.listYears(ctx),
     createYear: (jobType, label) => master.createYear(ctx, jobType, label),
@@ -116,6 +120,29 @@ export function createHandlers(ctx: Ctx, desktop: Desktop): Handlers {
       }
       projects.deleteProject(ctx, id);
     },
+    deleteProjects: async (ids, opts) => {
+      if (!Array.isArray(ids) || ids.length > 20_000) throw new AppError('Danh sách dự án cần xóa không hợp lệ.');
+      const ok: string[] = [];
+      const failed: string[] = [];
+      for (const id of new Set(ids.map(String))) {
+        let p;
+        try {
+          p = projects.getProject(ctx, id);
+        } catch {
+          continue;
+        }
+        if (opts?.deleteFolder && p.folderPath && fs.existsSync(p.folderPath)) {
+          try {
+            await desktop.trashItem(p.folderPath);
+          } catch (e) {
+            failed.push(`${p.stt}. ${p.projectName} — không chuyển được thư mục vào Thùng rác (${(e as Error).message})`);
+            continue;
+          }
+        }
+        ok.push(id);
+      }
+      return { deleted: projects.deleteProjects(ctx, ok), failed };
+    },
     nextProjectStt: () => projects.nextProjectStt(ctx),
     pickFolder: async (title) => {
       const dir = await desktop.pickDirectory(title || 'Chọn thư mục');
@@ -140,6 +167,33 @@ export function createHandlers(ctx: Ctx, desktop: Desktop): Handlers {
     listProjectNotes: (id) => notes.listProjectNotes(ctx, id),
     saveProjectNote: (id, input, opts) => notes.saveProjectNote(ctx, id, input, opts ?? {}),
     deleteProjectNote: (id) => notes.deleteProjectNote(ctx, id),
+
+    listFreelance: () => freelance.listFreelance(ctx),
+    nextFreelanceStt: () => freelance.nextFreelanceStt(ctx),
+    createFreelance: (input, opts) => freelance.createFreelance(ctx, input, opts ?? {}),
+    updateFreelance: (id, input, opts) => freelance.updateFreelance(ctx, id, input, opts ?? {}),
+    setFreelanceStatus: (id, statusId) => freelance.setFreelanceStatus(ctx, id, statusId),
+    deleteFreelance: (id) => freelance.deleteFreelance(ctx, id),
+    deleteFreelances: (ids) => {
+      if (!Array.isArray(ids)) throw new AppError('Danh sách cần xóa không hợp lệ.');
+      return freelance.deleteFreelances(ctx, ids.map(String));
+    },
+    listFreelanceNotes: (id) => notes.listFreelanceNotes(ctx, id),
+    saveFreelanceNote: (id, input) => notes.saveFreelanceNote(ctx, id, input),
+    deleteFreelanceNote: (id) => notes.deleteFreelanceNote(ctx, id),
+
+    bulkImport: (spec) => bulkImport(ctx, spec),
+
+    listPasswords: () => passwords.listPasswords(ctx),
+    createPassword: (input) => passwords.createPassword(ctx, input),
+    updatePassword: (id, input) => passwords.updatePassword(ctx, id, input),
+    deletePassword: (id) => passwords.deletePassword(ctx, id),
+    revealPassword: (id) => passwords.revealPassword(ctx, id),
+
+    listOnlineTools: () => passwords.listOnlineTools(ctx),
+    createOnlineTool: (input) => passwords.createOnlineTool(ctx, input),
+    updateOnlineTool: (id, input) => passwords.updateOnlineTool(ctx, id, input),
+    deleteOnlineTool: (id) => passwords.deleteOnlineTool(ctx, id),
 
     pickLinkFile: async () => {
       const [file] = await desktop.pickFiles({
@@ -189,6 +243,10 @@ export function createHandlers(ctx: Ctx, desktop: Desktop): Handlers {
     createWarranty: (input) => records.createWarranty(ctx, input),
     updateWarranty: (id, input) => records.updateWarranty(ctx, id, input),
     deleteWarranty: (id) => records.deleteWarranty(ctx, id),
+    deleteWarranties: (ids) => {
+      if (!Array.isArray(ids)) throw new AppError('Danh sách cần xóa không hợp lệ.');
+      return records.deleteWarranties(ctx, ids.map(String));
+    },
     revealWarrantyPassword: (id) => records.revealWarrantyPassword(ctx, id),
 
     pickImages: async () => {

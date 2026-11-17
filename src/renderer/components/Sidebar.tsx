@@ -2,13 +2,16 @@ import { useMemo } from 'react';
 import { NavLink, useLocation } from 'react-router';
 import {
   BookMarked,
+  AppWindow,
   BookOpen,
   Briefcase,
   CalendarClock,
   CalendarDays,
   ChevronRight,
   FolderOpen,
+  Globe,
   GraduationCap,
+  KeyRound,
   LayoutDashboard,
   LayoutGrid,
   Laptop,
@@ -20,6 +23,7 @@ import {
   Sparkles,
   Tag,
   Trash2,
+  Wrench,
 } from 'lucide-react';
 import { nameKey } from '../../shared/text';
 import { CATEGORY_LABEL, JOB_LABEL, JOB_TYPES, PROJECT_CATEGORIES, type JobType, type JobYear, type ProjectCategory } from '../../shared/types';
@@ -32,6 +36,43 @@ import { useProjectActions } from '../state/projectActions';
 import { useUi } from '../state/ui';
 
 const JOB_ICON = { MAIN: Briefcase, FREELANCE: Laptop };
+
+/** Job Freelance là một bảng chung (không chia năm / Pre-sales / Post-sales / Warranty). */
+function FreelanceNode() {
+  const { freelance } = useAppData();
+  return (
+    <NavLink to="/freelance" className={({ isActive }) => `nav-row lvl-strong ${isActive ? 'active' : ''}`}>
+      <Laptop size={16} />
+      <span className="nav-label">Job Freelance</span>
+      <span className="nav-count">{freelance.length || ''}</span>
+    </NavLink>
+  );
+}
+
+function ToolsNode({ openMap, toggle }: { openMap: OpenMap; toggle: (k: string, def?: boolean) => void }) {
+  const open = openMap.tools ?? true;
+  return (
+    <>
+      <button className="nav-row lvl-strong" onClick={() => toggle('tools', true)} aria-expanded={open}>
+        <Wrench size={16} />
+        <span className="nav-label">Tools</span>
+        <Chevron open={open} />
+      </button>
+      {open && (
+        <div className="nav-children">
+          <NavLink to="/tools/app" className={({ isActive }) => `nav-row small ${isActive ? 'active' : ''}`}>
+            <AppWindow size={14} />
+            <span className="nav-label">Tool app</span>
+          </NavLink>
+          <NavLink to="/tools/online" className={({ isActive }) => `nav-row small ${isActive ? 'active' : ''}`}>
+            <Globe size={14} />
+            <span className="nav-label">Tool online</span>
+          </NavLink>
+        </div>
+      )}
+    </>
+  );
+}
 
 type OpenMap = Record<string, boolean>;
 
@@ -331,11 +372,20 @@ export function Sidebar({ collapsed, onExpand }: { collapsed: boolean; onExpand:
               </button>
             );
           })}
+          <NavLink to="/freelance" className={({ isActive }) => `nav-row ${isActive ? 'active' : ''}`} title="Job Freelance">
+            <Laptop size={18} />
+          </NavLink>
           <NavLink to="/experience" className={({ isActive }) => `nav-row ${isActive ? 'active' : ''}`} title="Experience">
             <Lightbulb size={18} />
           </NavLink>
           <NavLink to="/knowledge" className={({ isActive }) => `nav-row ${isActive ? 'active' : ''}`} title="Kiến thức">
             <GraduationCap size={18} />
+          </NavLink>
+          <NavLink to="/passwords" className={({ isActive }) => `nav-row ${isActive ? 'active' : ''}`} title="Password">
+            <KeyRound size={18} />
+          </NavLink>
+          <NavLink to="/tools/online" className={({ isActive }) => `nav-row ${isActive ? 'active' : ''}`} title="Tools">
+            <Wrench size={18} />
           </NavLink>
           <NavLink to="/ai" className={({ isActive }) => `nav-row ${isActive ? 'active' : ''}`} title="AI Assistant (Coming Soon)">
             <Sparkles size={18} />
@@ -373,10 +423,18 @@ export function Sidebar({ collapsed, onExpand }: { collapsed: boolean; onExpand:
         {JOB_TYPES.map((j) => (
           <JobNode key={j} jobType={j} openMap={openMap} toggle={toggle} />
         ))}
+        <FreelanceNode />
 
         <div className="sidebar-section">KINH NGHIỆM &amp; KIẾN THỨC</div>
         <ExperienceNode openMap={openMap} toggle={toggle} />
         <KnowledgeNode openMap={openMap} toggle={toggle} />
+
+        <div className="sidebar-section">TIỆN ÍCH</div>
+        <NavLink to="/passwords" className={({ isActive }) => `nav-row lvl-strong ${isActive ? 'active' : ''}`}>
+          <KeyRound size={16} />
+          <span className="nav-label">Password</span>
+        </NavLink>
+        <ToolsNode openMap={openMap} toggle={toggle} />
 
         <div className="sidebar-section">TRỢ LÝ AI</div>
         <NavLink to="/ai" className={({ isActive }) => `nav-row ${isActive ? 'active' : ''}`}>

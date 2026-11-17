@@ -54,8 +54,8 @@ Sau đó có thể xóa file portable.
 1. Máy cũ: **Settings › Dữ liệu & Backup › Xuất backup…**, chép file `.zip` sang máy mới.
 2. Máy mới: cài ứng dụng như mục 1, mở **Settings › Dữ liệu & Backup › Khôi phục từ backup…** và chọn file `.zip`.
 
-> Mật khẩu thiết bị trong Warranty được mã hóa theo tài khoản Windows, nên sau khi chuyển máy sẽ không xem lại được
-> mật khẩu cũ (mọi dữ liệu khác vẫn đầy đủ).
+> Mật khẩu thiết bị trong Warranty và các mục trong **Password** được mã hóa theo tài khoản Windows, nên sau khi chuyển
+> máy sẽ không xem lại được các mật khẩu đó (mọi dữ liệu khác vẫn đầy đủ) — nên ghi lại riêng trước khi chuyển máy.
 
 ## 4. Gỡ cài đặt
 

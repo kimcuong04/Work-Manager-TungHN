@@ -1,4 +1,6 @@
 import { randomUUID } from 'node:crypto';
+import { formatDate } from '../../shared/dates';
+import { noteHtmlToText, textToNoteHtml } from '../../shared/noteHtml';
 import type { Db } from './database';
 
 const MASTER_TABLE = (name: string) => `
@@ -306,6 +308,178 @@ ALTER TABLE experience_records ADD COLUMN local_path TEXT;
 ALTER TABLE knowledge_records ADD COLUMN local_path TEXT;
 `;
 
+/** v1.5: Job Freelance thành bảng riêng (có Tình trạng + ghi chú theo ngày), mục Password, Tool online. */
+const V5 = `
+${MASTER_TABLE('freelance_statuses')}
+
+CREATE TABLE freelance_jobs (
+  id TEXT PRIMARY KEY,
+  stt INTEGER NOT NULL,
+  project_name TEXT NOT NULL,
+  hirer TEXT,
+  start_date TEXT,
+  status_id TEXT REFERENCES freelance_statuses(id),
+  note TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+CREATE UNIQUE INDEX ux_freelance_jobs_stt ON freelance_jobs(stt);
+
+CREATE TABLE freelance_notes (
+  id TEXT PRIMARY KEY,
+  job_id TEXT NOT NULL REFERENCES freelance_jobs(id) ON DELETE CASCADE,
+  note_date TEXT NOT NULL,
+  content_html TEXT NOT NULL,
+  content_text TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+CREATE UNIQUE INDEX ux_freelance_notes_day ON freelance_notes(job_id, note_date);
+${IMAGE_TABLE('freelance_note_images', 'note_id', 'freelance_notes')}
+
+CREATE TABLE password_entries (
+  id TEXT PRIMARY KEY,
+  site_name TEXT NOT NULL,
+  username TEXT NOT NULL,
+  password_encrypted TEXT NOT NULL,
+  site_url TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+
+CREATE TABLE online_tools (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  purpose TEXT,
+  url TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+`;
+
+const FREELANCE_STATUSES = ['Mới nhận', 'Đang làm', 'Tạm dừng', 'Hoàn thành', 'Đã hủy'];
+
+function localDay(stamp: string): string {
+  const d = new Date(stamp);
+  if (Number.isNaN(d.getTime())) return stamp.slice(0, 10);
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+
+/**
+ * Chuyển dự án Pre/Post-sales cũ của Job Freelance sang bảng freelance_jobs (giữ id, STT, tên, ngày bắt đầu và ghi chú
+ * theo ngày; Bên thuê lấy từ EU, không có thì Tên SI). Các trường bảng mới không có (SI, Hãng, Sale, hạn, thư mục,
+ * file, bảng thiết bị import) được ghi lại thành một mục ghi chú để không mất thông tin.
+ * Warranty của Job Freelance chuyển sang Warranty Job Chính cùng năm. Sau đó xóa dự án và năm Freelance cũ.
+ */
+function migrateFreelanceV5(db: Db) {
+  const stamp = new Date().toISOString();
+  const statusIds = FREELANCE_STATUSES.map((name, i) => {
+    const id = randomUUID();
+    db.run('INSERT INTO freelance_statuses VALUES (?,?,?,1,?,?)', [id, name, i, stamp, stamp]);
+    return id;
+  });
+  const doing = statusIds[1];
+  const done = statusIds[3];
+
+  const years = db.all<{ id: string; year_label: string }>("SELECT id, year_label FROM job_years WHERE job_type = 'FREELANCE'");
+  if (!years.length) return;
+  const yearIds = years.map((y) => y.id);
+  const inYears = `(${yearIds.map(() => '?').join(',')})`;
+
+  const rows = db.all<Record<string, any>>(
+    `SELECT p.*, y.year_label, c.name AS client_name, si.name AS si_name, sp.name AS sale_name
+     FROM projects p JOIN job_years y ON y.id = p.job_year_id
+     LEFT JOIN clients c ON c.id = p.client_id LEFT JOIN si_partners si ON si.id = p.si_id
+     LEFT JOIN salespersons sp ON sp.id = p.salesperson_id
+     WHERE p.job_year_id IN ${inYears} ORDER BY p.stt`,
+    yearIds,
+  );
+  for (const p of rows) {
+    db.run('INSERT INTO freelance_jobs VALUES (?,?,?,?,?,?,?,?,?)', [
+      p.id,
+      p.stt,
+      p.project_name,
+      p.client_name ?? p.si_name ?? null,
+      p.received_date ?? null,
+      p.is_completed ? done : doing,
+      '',
+      p.created_at,
+      p.updated_at,
+    ]);
+    db.run(
+      'INSERT INTO freelance_notes SELECT id, project_id, note_date, content_html, content_text, created_at, updated_at FROM project_notes WHERE project_id = ?',
+      [p.id],
+    );
+    db.run(
+      `INSERT INTO freelance_note_images SELECT i.id, i.note_id, i.storage_key, i.file_name, i.mime_type, i.size_bytes, i.sort_order, i.created_at
+       FROM project_note_images i JOIN project_notes n ON n.id = i.note_id WHERE n.project_id = ?`,
+      [p.id],
+    );
+
+    const cat = p.work_category === 'POST_SALES' ? 'Post-sales' : 'Pre-sales';
+    const lines = [`Chuyển từ Job Freelance › ${p.year_label} › ${cat} (bản cũ). Thông tin không còn trong bảng mới:`];
+    const add = (label: string, v: unknown) => {
+      if (v !== null && v !== undefined && String(v).trim() !== '') lines.push(`${label}: ${v}`);
+    };
+    const brands = db.all<{ name: string }>(
+      'SELECT b.name FROM project_brands pb JOIN brands b ON b.id = pb.brand_id WHERE pb.project_id = ? ORDER BY pb.sort_order',
+      [p.id],
+    );
+    add('EU', p.client_name);
+    add('Tên SI', p.si_name);
+    add('Hãng', brands.map((b) => b.name).join(', '));
+    add('Sale', p.sale_name);
+    add('Ngày tới hạn', formatDate(p.due_date));
+    add('Priority', p.priority_point);
+    add('Thư mục dự án', p.folder_path);
+    add('File liên kết', p.file_path);
+    const imp = db.get<{ id: string; source_file_name: string }>('SELECT id, source_file_name FROM project_imports WHERE project_id = ?', [p.id]);
+    if (imp) {
+      const items = db.all<{ model: string | null; brand: string | null; description: string | null }>(
+        'SELECT model, brand, description FROM imported_items WHERE project_import_id = ? ORDER BY sort_order',
+        [imp.id],
+      );
+      lines.push(`Bảng thiết bị import từ ${imp.source_file_name} (${items.length} dòng):`);
+      for (const it of items.slice(0, 500)) lines.push(`• ${[it.model, it.brand, it.description].filter((x) => x && x.trim()).join(' – ')}`);
+      if (items.length > 500) lines.push(`… và ${items.length - 500} dòng khác (xem bản backup trước nâng cấp).`);
+    }
+    const day = localDay(p.created_at);
+    const html = textToNoteHtml(lines.join('\n'));
+    const existing = db.get<{ id: string; content_html: string }>('SELECT id, content_html FROM freelance_notes WHERE job_id = ? AND note_date = ?', [p.id, day]);
+    if (existing) {
+      const merged = `${existing.content_html}<div><br></div>${html}`;
+      db.run('UPDATE freelance_notes SET content_html = ?, content_text = ? WHERE id = ?', [merged, noteHtmlToText(merged), existing.id]);
+    } else db.run('INSERT INTO freelance_notes VALUES (?,?,?,?,?,?,?)', [randomUUID(), p.id, day, html, noteHtmlToText(html), stamp, stamp]);
+
+    const derived = db
+      .all<{ note_date: string; content_text: string }>('SELECT note_date, content_text FROM freelance_notes WHERE job_id = ? ORDER BY note_date DESC', [p.id])
+      .map((n) => `${formatDate(n.note_date)}: ${n.content_text}`)
+      .join('\n\n')
+      .slice(0, 20_000);
+    db.run('UPDATE freelance_jobs SET note = ? WHERE id = ?', [derived, p.id]);
+    db.run("UPDATE experience_records SET project_text = ? WHERE project_id = ? AND TRIM(COALESCE(project_text, '')) = ''", [
+      `${p.stt}. ${p.project_name} (Job Freelance)`,
+      p.id,
+    ]);
+  }
+  if (rows.length) db.run(`DELETE FROM projects WHERE job_year_id IN ${inYears}`, yearIds);
+
+  for (const y of years) {
+    if (!db.scalar<number>('SELECT COUNT(*) FROM warranty_records WHERE job_year_id = ?', [y.id])) continue;
+    let main = db.scalar<string>("SELECT id FROM job_years WHERE job_type = 'MAIN' AND year_label = ? COLLATE NOCASE", [y.year_label]);
+    if (!main) {
+      main = randomUUID();
+      const order = /^\d{4}$/.test(y.year_label)
+        ? Number(y.year_label)
+        : (db.scalar<number>("SELECT COALESCE(MAX(sort_order), 0) + 1 FROM job_years WHERE job_type = 'MAIN'") ?? 1);
+      db.run("INSERT INTO job_years VALUES (?, 'MAIN', ?, ?, ?, ?)", [main, y.year_label, order, stamp, stamp]);
+    }
+    db.run('UPDATE warranty_records SET job_year_id = ? WHERE job_year_id = ?', [main, y.id]);
+  }
+  db.run(`DELETE FROM job_years WHERE id IN ${inYears}`, yearIds);
+}
+
 export interface Migration {
   version: number;
   up: (db: Db) => void;
@@ -343,6 +517,13 @@ export const MIGRATIONS: Migration[] = [
     version: 4,
     foreignKeysOff: true,
     up: (db) => db.exec(V4),
+  },
+  {
+    version: 5,
+    up: (db) => {
+      db.exec(V5);
+      migrateFreelanceV5(db);
+    },
   },
 ];
 

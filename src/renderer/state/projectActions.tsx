@@ -85,6 +85,7 @@ function MoveDialog({ project, onClose }: { project: Project; onClose: () => voi
           <select
             className="select"
             value={jobType}
+            disabled={JOB_TYPES.length < 2}
             onChange={(e) => {
               const jt = e.target.value as JobType;
               setJobType(jt);

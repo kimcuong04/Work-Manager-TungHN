@@ -42,10 +42,10 @@ beforeEach(async () => {
 });
 
 describe('Khởi tạo & persistence', () => {
-  it('seed: hai Job có năm hiện tại, settings mặc định 2/5', () => {
+  it('seed: Job Chính có năm hiện tại (Job Freelance là bảng riêng, không chia năm), settings mặc định 2/5', () => {
     const years = master.listYears(ctx);
     expect(years.filter((y) => y.jobType === 'MAIN')).toHaveLength(1);
-    expect(years.filter((y) => y.jobType === 'FREELANCE')).toHaveLength(1);
+    expect(years.filter((y) => y.jobType === 'FREELANCE')).toHaveLength(0);
     expect(getSettings(ctx)).toMatchObject({ urgentThresholdDays: 2, attentionThresholdDays: 5, theme: 'light' });
   });
   it('TC-014/AC-001/AC-011: dữ liệu và settings còn sau khi đóng/mở lại', async () => {
@@ -100,10 +100,10 @@ describe('Danh mục (FR-FORM-003, FR-SET-004..006, TC-012)', () => {
 });
 
 describe('Năm (FR-YEAR-001..005, TC-NAV-003, TC-YEAR-006/007)', () => {
-  it('không trùng nhãn trong cùng Job; Job khác được trùng', () => {
+  it('không trùng nhãn năm; Job Freelance không tạo năm', () => {
     master.createYear(ctx, 'MAIN', '2025');
     expect(() => master.createYear(ctx, 'MAIN', '2025')).toThrow();
-    expect(master.createYear(ctx, 'FREELANCE', '2025').jobType).toBe('FREELANCE');
+    expect(() => master.createYear(ctx, 'FREELANCE', '2025')).toThrow(/không chia theo năm/);
   });
   it('đổi nhãn năm giữ liên kết Project', () => {
     const p = projects.createProject(ctx, input());
@@ -143,9 +143,9 @@ describe('Project (FR-PROJ, FR-NAV-007, FR-XLSX-006/007/009)', () => {
   it('TC-NAV-005: di chuyển Project giữ nguyên dữ liệu import', () => {
     const p = projects.createProject(ctx, input());
     projects.commitImport(ctx, p.id, payload('a.xlsx'));
-    const y2025 = master.createYear(ctx, 'FREELANCE', '2025');
+    const y2025 = master.createYear(ctx, 'MAIN', '2025');
     const moved = projects.moveProject(ctx, p.id, y2025.id, 'POST_SALES');
-    expect(moved).toMatchObject({ jobType: 'FREELANCE', yearLabel: '2025', workCategory: 'POST_SALES', id: p.id });
+    expect(moved).toMatchObject({ jobType: 'MAIN', yearLabel: '2025', workCategory: 'POST_SALES', id: p.id });
     expect(projects.getProjectImport(ctx, p.id)?.items).toHaveLength(1);
   });
   it('TC-XLSX-006/007: import mới thay thế; import lỗi giữ nguyên dữ liệu cũ', () => {

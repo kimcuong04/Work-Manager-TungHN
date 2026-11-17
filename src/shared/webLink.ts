@@ -1,3 +1,19 @@
+const DOMAIN_LINK = /^(www\.)?[\p{L}\d-]+(\.[\p{L}\d-]+)+(:\d+)?([/?#].*)?$/u;
+
+/** Có phải link (http/https đầy đủ hoặc dạng tên miền như example.com/tool) chứ không phải từ khóa. */
+export function isWebLink(text: string): boolean {
+  const s = (text ?? '').trim();
+  if (!s || /\s/.test(s)) return false;
+  if (/^https?:\/\//i.test(s)) {
+    try {
+      return !!new URL(s).hostname;
+    } catch {
+      return false;
+    }
+  }
+  return DOMAIN_LINK.test(s);
+}
+
 /**
  * "Link website" nhập tự do: link đầy đủ thì mở thẳng, dạng tên miền (vd: axis.com/support) thì thêm https://,
  * còn lại (từ khóa, scheme lạ như javascript:/file:) thì tìm kiếm trên trình duyệt. Chỉ trả về URL http/https.

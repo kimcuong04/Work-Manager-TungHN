@@ -169,7 +169,6 @@ try {
   // --- Seed thêm dữ liệu qua IPC ---
   const years = await call(win, 'listYears');
   const main = years.find((y) => y.jobType === 'MAIN');
-  const free = years.find((y) => y.jobType === 'FREELANCE');
   const cl2 = await call(win, 'createMaster', 'clients', 'Tập đoàn Vingroup');
   const cl3 = await call(win, 'createMaster', 'clients', 'Sở Xây dựng HN');
   const base = { jobYearId: main.id, workCategory: 'PRE_SALES', receivedDate: day(-10), note: '', filePath: null, fileName: null, fileExtension: null };
@@ -184,7 +183,7 @@ try {
   const created = [];
   for (const [name, c, due, prio, cat] of specs)
     created.push(await call(win, 'createProject', { ...base, projectName: name, clientId: c.id, dueDate: day(due), priorityPoint: prio, workCategory: cat }));
-  const fl = await call(win, 'createProject', { ...base, jobYearId: free.id, projectName: 'Freelance – bản vẽ shopdrawing', clientId: cl2.id, dueDate: day(12), priorityPoint: 2 });
+  const fl = await call(win, 'createProject', { ...base, workCategory: 'POST_SALES', projectName: 'Kho xưởng – bản vẽ shopdrawing', clientId: cl2.id, dueDate: day(12), priorityPoint: 2 });
   const legacyKind = await call(win, 'listMaster', 'stages').then(() => 'còn', (e) => String(e.message ?? e));
   check('API không còn danh mục Giai đoạn', /không hợp lệ/.test(legacyKind), legacyKind);
   await call(win, 'setProjectCompleted', created[5].id, true);
@@ -756,6 +755,275 @@ try {
   await win.getByRole('button', { name: 'Dữ liệu & Backup' }).click();
   await win.waitForSelector('text=Dữ liệu ở vị trí cũ vẫn còn');
   await shot(win, '22c-data-location-after');
+
+  // --- v1.5: Job Freelance là một bảng riêng (không còn năm / Pre / Post / Warranty) ---
+  await go(win, '#/');
+  await win.waitForTimeout(300);
+  const sideText = await win.locator('.sidebar').innerText();
+  check('Sidebar: Job Freelance là một mục, có Password và Tools (Tool app / Tool online)', /Job Freelance/.test(sideText) && /Password/.test(sideText) && /Tool app/.test(sideText) && /Tool online/.test(sideText));
+  await win.locator('.sidebar a[href="#/freelance"]').click();
+  await win.waitForSelector('text=Chưa có job Freelance nào');
+  await win.locator('.page-head').getByRole('button', { name: 'Thêm job' }).click();
+  await win.waitForSelector('.modal #fl-name');
+  const flStt = await win.locator('#fl-stt').inputValue();
+  await win.locator('#fl-name').fill('Thiết kế logo quán cà phê');
+  await win.locator('#fl-hirer').fill('Chị Hoa');
+  await win.locator('.modal .rich-editor, .modal [contenteditable="true"]').first().click();
+  await win.keyboard.type('Gửi 3 phương án logo');
+  await shot(win, '30-freelance-form');
+  await win.getByRole('button', { name: 'Thêm job' }).last().click();
+  await win.waitForTimeout(500);
+  const flJobs = await call(win, 'listFreelance');
+  check(
+    'Thêm job Freelance: STT tự +1, Bên thuê, Tình trạng mặc định, ghi chú hôm nay',
+    flStt === '1' && flJobs.length === 1 && flJobs[0].hirer === 'Chị Hoa' && flJobs[0].statusName === 'Mới nhận' && flJobs[0].note.includes('Gửi 3 phương án logo'),
+    JSON.stringify(flJobs.map((j) => [j.stt, j.projectName, j.statusName])),
+  );
+  const flHeads = (await win.locator('.freelance-table th').allInnerTexts()).map((t) => t.replace(/[▲▼]/g, '').trim()).filter(Boolean);
+  check('Bảng Freelance: STT / Tên dự án / Bên thuê / Ngày bắt đầu / Tình trạng / Ghi chú', flHeads.join('|') === 'STT|Tên dự án|Bên thuê|Ngày bắt đầu|Tình trạng|Ghi chú gần nhất', flHeads.join(' | '));
+  const statuses = await call(win, 'listMaster', 'freelanceStatuses');
+  await win.locator('.freelance-table select').first().selectOption({ label: 'Đang làm' });
+  await win.waitForTimeout(400);
+  check('Đổi Tình trạng ngay trên bảng', (await call(win, 'listFreelance'))[0].statusName === 'Đang làm');
+  await shot(win, '31-freelance-list');
+  await win.locator('.freelance-table tbody tr').first().click();
+  await win.waitForSelector('text=Thông tin job');
+  await win.getByRole('button', { name: /Ngày khác/ }).click();
+  const yesterday = day(-1);
+  await win.locator('.modal input').first().fill(`${yesterday.slice(8, 10)}/${yesterday.slice(5, 7)}/${yesterday.slice(0, 4)}`);
+  await win.getByRole('button', { name: 'Mở ghi chú' }).click();
+  await win.locator('.note-editing [contenteditable="true"]').click();
+  await win.keyboard.type('Khách duyệt phương án 2');
+  await win.locator('.note-editing').getByRole('button', { name: 'Lưu', exact: true }).click();
+  await win.waitForTimeout(500);
+  const flNotes = await call(win, 'listFreelanceNotes', flJobs[0].id);
+  check(
+    'Ghi chú Freelance theo ngày (log ngày cũ), không có nút Calendar',
+    flNotes.length === 2 && flNotes[1].noteDate === yesterday && (await win.getByRole('button', { name: /Lưu và thêm vào Calendar/ }).count()) === 0,
+    flNotes.map((n) => n.noteDate).join(', '),
+  );
+  await shot(win, '32-freelance-detail');
+
+  // --- v1.5: Settings › Master Data có phân loại Job Chính / Job Freelance ---
+  await go(win, '#/settings');
+  await win.getByRole('button', { name: 'Danh mục (Master Data)' }).click();
+  await win.locator('[aria-label="Phân loại danh mục"]').getByRole('button', { name: 'Job Freelance' }).click();
+  await win.waitForTimeout(250);
+  const flTabs = await win.locator('.tabs.small button').allInnerTexts();
+  await win.getByPlaceholder('Tên Tình trạng mới').fill('Chờ nghiệm thu');
+  await win.getByRole('button', { name: 'Thêm', exact: true }).first().click();
+  await win.waitForTimeout(300);
+  await win.getByRole('button', { name: 'Đưa Chờ nghiệm thu lên' }).click();
+  await win.waitForTimeout(300);
+  const st2 = (await call(win, 'listMaster', 'freelanceStatuses')).map((x) => x.name);
+  check(
+    'Master Data › Job Freelance › Tình trạng: thêm mới, sắp xếp lên/xuống',
+    flTabs.join('|') === 'Tình trạng' && statuses.length === 5 && st2.length === 6 && st2[4] === 'Chờ nghiệm thu',
+    st2.join(' > '),
+  );
+  await shot(win, '33-settings-freelance-status');
+  await win.locator('[aria-label="Phân loại danh mục"]').getByRole('button', { name: 'Job Chính' }).click();
+  await win.waitForTimeout(200);
+  check('Phân loại Job Chính vẫn có EU / Tên SI / Hãng / Sale', (await win.locator('.tabs.small button').allInnerTexts()).join('|') === 'EU|Tên SI|Hãng|Sale & Phòng ban');
+
+  // --- v1.5: Import hàng loạt từ .xlsx (mapping cột) ---
+  const bulkProjects = path.join(fixtures, 'Danh sach du an.xlsx');
+  {
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(
+      wb,
+      XLSX.utils.aoa_to_sheet([
+        ['DANH SÁCH DỰ ÁN TỔNG HỢP'],
+        [],
+        ['STT', 'Tên công trình', 'Nhà tích hợp', 'Hãng', 'Sales', 'Chủ đầu tư', 'Ngày nhận', 'Deadline', 'Ghi chú'],
+        [null, 'Nhà máy Hưng Yên – CCTV', 'SI Alpha', 'Hikvision, Bosch', 'Anh Tuấn Sale', 'Tập đoàn Vingroup', '01/11/2026', '30/12/2026', 'Đã gửi BOQ'],
+        [null, 'Siêu thị Q7 – Access Control', 'SI Mới Toanh', 'Axis', null, null, '05/11/2026', null, null],
+        [null, '', 'SI Alpha', null, null, null, null, null, 'dòng thiếu tên'],
+        [null, 'Ngày sai', null, null, null, null, '45/13/2026', null, null],
+      ]),
+      'DS',
+    );
+    fs.writeFileSync(bulkProjects, XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' }));
+  }
+  const preBefore = (await call(win, 'listProjects')).length;
+  await go(win, `#/job/MAIN/${main.id}/pre-sales`);
+  await win.waitForTimeout(400);
+  await stubOpen(app, [bulkProjects]);
+  await win.getByRole('button', { name: 'Import xlsx' }).first().click();
+  await win.waitForSelector('.modal .bulk-preview');
+  await win.waitForTimeout(500);
+  const badRows = await win.locator('.bulk-preview tr.bulk-bad').count();
+  const goodRows = await win.locator('.bulk-preview tbody tr:not(.bulk-bad)').count();
+  check('Import xlsx: tự nhận diện header + cột, đánh dấu dòng lỗi', goodRows === 2 && badRows === 2, `${goodRows} hợp lệ, ${badRows} lỗi`);
+  await shot(win, '34-bulk-import-projects');
+  await win.getByRole('button', { name: 'Import 2 dòng' }).click();
+  await win.waitForTimeout(800);
+  const afterBulk = await call(win, 'listProjects');
+  const hy = afterBulk.find((p) => p.projectName === 'Nhà máy Hưng Yên – CCTV');
+  const newSi = (await call(win, 'listMaster', 'siPartners')).some((m) => m.name === 'SI Mới Toanh');
+  check(
+    'Import Pre-sales: ghi dự án, khớp danh mục theo tên, thêm mục mới, tạo thư mục',
+    afterBulk.length === preBefore + 2 &&
+      hy?.workCategory === 'PRE_SALES' &&
+      hy?.siName === 'SI Alpha' &&
+      hy?.brands.map((b) => b.name).join('+') === 'Hikvision+Bosch' &&
+      hy?.receivedDate === '2026-11-01' &&
+      newSi &&
+      !!hy?.folderPath &&
+      fs.existsSync(hy.folderPath),
+    `${afterBulk.length - preBefore} dự án mới · ${hy?.folderPath ?? 'không có thư mục'}`,
+  );
+
+  // --- v1.5.1: nút Chọn → tick từng dòng / tất cả → xóa các mục đã chọn ---
+  await win.reload();
+  await win.waitForSelector('.sidebar');
+  await go(win, `#/job/MAIN/${main.id}/pre-sales`);
+  await win.waitForSelector('.project-table tbody tr');
+  const doneTitle = win.locator('.project-table tr.row-done .pt-title').first();
+  const thickness = (await doneTitle.count()) ? await doneTitle.evaluate((el) => getComputedStyle(el).textDecorationThickness) : 'không có dòng hoàn thành';
+  check('Gạch ngang tên dự án Đã hoàn thành mảnh 0.5px', thickness === '0.5px', thickness);
+  await win.getByRole('button', { name: 'Chọn', exact: true }).click();
+  await win.waitForSelector('.select-banner');
+  const preRows = await win.locator('.project-table tbody tr').count();
+  await win.getByRole('checkbox', { name: 'Chọn tất cả' }).check();
+  const allText = await win.locator('.select-banner').innerText();
+  await win.getByRole('checkbox', { name: 'Chọn tất cả' }).uncheck();
+  await win.getByRole('checkbox', { name: /Nhà máy Hưng Yên/ }).check();
+  await win.locator('.project-table tbody tr', { hasText: 'Siêu thị Q7' }).click();
+  const twoText = await win.locator('.select-banner').innerText();
+  await shot(win, '39-select-projects');
+  check(
+    'Chọn: tick tất cả / bỏ tick / tick từng dòng (bấm ô tick hoặc bấm dòng)',
+    allText.includes(`Đã chọn ${preRows}/${preRows}`) && twoText.includes(`Đã chọn 2/${preRows}`),
+    `${allText.split('.')[0]} → ${twoText.split('.')[0]}`,
+  );
+  await win.locator('.select-banner').getByRole('button', { name: /Xóa 2 mục/ }).click();
+  await win.waitForSelector('.modal');
+  await shot(win, '39b-delete-selected-dialog');
+  await win.getByRole('button', { name: 'Xóa 2 dự án' }).click();
+  await win.waitForTimeout(600);
+  const afterSelDel = await call(win, 'listProjects');
+  check(
+    'Xóa 2 dự án đã chọn (giữ thư mục trên máy), thoát chế độ chọn',
+    afterSelDel.length === afterBulk.length - 2 && !afterSelDel.some((x) => /Hưng Yên|Siêu thị Q7/.test(x.projectName)) && (await win.locator('.select-banner').count()) === 0 && fs.existsSync(hy.folderPath),
+    `${afterBulk.length} → ${afterSelDel.length} dự án`,
+  );
+
+  await go(win, `#/job/MAIN/${main.id}/warranty`);
+  await win.waitForTimeout(500);
+  const wBefore = (await call(win, 'listWarranty', main.id)).length;
+  await win.getByRole('button', { name: 'Chọn', exact: true }).click();
+  await win.getByRole('checkbox', { name: 'Chọn tất cả' }).check();
+  await win.locator('.select-banner').getByRole('button', { name: /Xóa \d+ mục/ }).click();
+  await win.getByRole('button', { name: `Xóa ${wBefore} bản ghi` }).click();
+  await win.waitForTimeout(500);
+  check('Warranty: chọn tất cả rồi xóa', wBefore > 0 && (await call(win, 'listWarranty', main.id)).length === 0, `${wBefore} bản ghi`);
+
+  const bulkFreelance = path.join(fixtures, 'Freelance jobs.xlsx');
+  {
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(
+      wb,
+      XLSX.utils.aoa_to_sheet([
+        ['Tên dự án', 'Bên thuê', 'Bắt đầu', 'Trạng thái'],
+        ['Landing page spa', 'Anh Tú', '02/11/2026', 'đang làm'],
+        ['App đặt lịch', 'Chị Mai', '10/11/2026', 'Chờ nghiệm thu'],
+      ]),
+      'Jobs',
+    );
+    fs.writeFileSync(bulkFreelance, XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' }));
+  }
+  await go(win, '#/freelance');
+  await win.waitForTimeout(300);
+  await stubOpen(app, [bulkFreelance]);
+  await win.getByRole('button', { name: 'Import xlsx' }).first().click();
+  await win.waitForSelector('.modal .bulk-preview');
+  await win.getByRole('button', { name: 'Import 2 dòng' }).click();
+  await win.waitForTimeout(800);
+  const flAll = await call(win, 'listFreelance');
+  check(
+    'Import Job Freelance: STT tiếp theo, Tình trạng khớp theo tên',
+    flAll.length === 3 && flAll.map((j) => j.statusName).join('|') === 'Đang làm|Đang làm|Chờ nghiệm thu' && flAll[2].stt === 3,
+    flAll.map((j) => `${j.stt}.${j.projectName}=${j.statusName}`).join(', '),
+  );
+  await shot(win, '35-freelance-after-import');
+  const hitFl = await call(win, 'globalSearch', { mode: 'name', text: 'landing page' });
+  check('Tìm kiếm Tên dự án ra cả Job Freelance', hitFl.length === 1 && hitFl[0].kind === 'freelance', JSON.stringify(hitFl.map((h) => h.title)));
+  await win.getByRole('button', { name: 'Chọn', exact: true }).click();
+  await win.getByRole('checkbox', { name: /App đặt lịch/ }).check();
+  await shot(win, '39c-select-freelance');
+  await win.locator('.select-banner').getByRole('button', { name: /Xóa 1 mục/ }).click();
+  await win.getByRole('button', { name: 'Xóa 1 job' }).click();
+  await win.waitForTimeout(500);
+  const flLeft = await call(win, 'listFreelance');
+  check('Job Freelance: chọn 1 job rồi xóa', flLeft.length === 2 && !flLeft.some((j) => j.projectName === 'App đặt lịch'), flLeft.map((j) => j.projectName).join(', '));
+
+  // --- v1.5: Password ---
+  await win.locator('.sidebar a[href="#/passwords"]').click();
+  await win.waitForSelector('text=Chưa có thông tin đăng nhập nào');
+  for (const [site, user, pass, url] of [
+    ['Gmail công việc', 'me@company.vn', 'P@ss-Gmail-01', 'mail.google.com'],
+    ['Cổng hãng Axis', 'partner01', 'Axis#2026', ''],
+  ]) {
+    await win.locator('.page-head').getByRole('button', { name: 'Thêm' }).click();
+    await win.locator('#pw-site').fill(site);
+    await win.locator('#pw-user').fill(user);
+    await win.locator('#pw-pass').fill(pass);
+    await win.locator('#pw-url').fill(url);
+    await win.locator('.modal-foot').getByRole('button', { name: 'Lưu' }).click();
+    await win.waitForTimeout(350);
+  }
+  const pwMasked = await win.locator('code.secret').first().innerText();
+  await win.getByRole('button', { name: 'Hiện mật khẩu Gmail công việc' }).click();
+  await win.waitForTimeout(250);
+  const revealed = await win.locator('code.secret').first().innerText();
+  await win.evaluate(() => {
+    window.__copied = null;
+    navigator.clipboard.writeText = async (t) => {
+      window.__copied = t;
+    };
+  });
+  await win.getByRole('button', { name: 'Sao chép mật khẩu Cổng hãng Axis' }).click();
+  await win.waitForTimeout(250);
+  const copied = await win.evaluate(() => window.__copied);
+  check('Password: che mặc định, bấm mắt để xem, sao chép không cần hiện', pwMasked === '••••••••' && revealed === 'P@ss-Gmail-01' && copied === 'Axis#2026', `${pwMasked} → ${revealed}`);
+  await shot(win, '36-passwords');
+  await win.getByPlaceholder('Tìm theo Tên website…').fill('axis');
+  await win.waitForTimeout(200);
+  const pwRows = await win.locator('.tbl tbody tr').count();
+  check('Password: tìm theo Tên website', pwRows === 1 && (await win.locator('.tbl tbody').innerText()).includes('Cổng hãng Axis'));
+  await win.getByPlaceholder('Tìm theo Tên website…').fill('');
+
+  // --- v1.5: Tools ---
+  await win.locator('.sidebar a[href="#/tools/app"]').click();
+  await win.waitForSelector('text=Chưa có tool nào');
+  await shot(win, '37-tool-app');
+  await win.locator('.sidebar a[href="#/tools/online"]').click();
+  await win.waitForSelector('text=Chưa có tool online nào');
+  for (const [name, purpose, url] of [
+    ['TinyPNG', 'Nén ảnh PNG/JPG trước khi gửi khách', 'tinypng.com'],
+    ['IP Calculator', 'Chia subnet cho hệ thống camera', 'https://jodies.de/ipcalc'],
+  ]) {
+    await win.locator('.page-head').getByRole('button', { name: 'Thêm tool' }).click();
+    await win.locator('#tool-name').fill(name);
+    await win.locator('#tool-purpose').fill(purpose);
+    await win.locator('#tool-url').fill(url);
+    await win.locator('.modal-foot').getByRole('button', { name: 'Lưu' }).click();
+    await win.waitForTimeout(300);
+  }
+  await win.locator('.page-head').getByRole('button', { name: 'Thêm tool' }).click();
+  await win.locator('#tool-name').fill('Sai link');
+  await win.locator('#tool-url').fill('nén ảnh online');
+  await win.locator('.modal-foot').getByRole('button', { name: 'Lưu' }).click();
+  const linkErr = await win.locator('.modal .field-error').innerText().catch(() => '');
+  await win.locator('.modal-foot').getByRole('button', { name: 'Hủy' }).click();
+  await win.getByPlaceholder('Tìm theo tên tool…').fill('tiny');
+  await win.waitForTimeout(200);
+  const toolRows = await win.locator('.tbl tbody tr').count();
+  await win.getByPlaceholder('Tìm theo tên tool…').fill('');
+  await win.waitForTimeout(200);
+  check('Tool online: thêm, bắt buộc Link hợp lệ, tìm theo tên', (await call(win, 'listOnlineTools')).length === 2 && /Link không hợp lệ/.test(linkErr) && toolRows === 1, linkErr);
+  await shot(win, '38-tool-online');
 
   // --- NFR-001: 1.100 dự án — board/dashboard <= 2s, search <= 300ms ---
   const ys = await call(win, 'listYears');

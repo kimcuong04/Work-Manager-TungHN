@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { useLocation, useNavigate } from 'react-router';
-import { FolderKanban, Funnel, Search, ShieldCheck, X } from 'lucide-react';
+import { FolderKanban, Laptop, Funnel, Search, ShieldCheck, X } from 'lucide-react';
 import { formatDate } from '../../shared/dates';
 import { SEARCH_MODE_LABEL, type SearchHit, type SearchMode } from '../../shared/types';
 import { api } from '../api';
@@ -54,15 +54,19 @@ export const SEARCH_PLACEHOLDER: Record<SearchMode, string> = {
   model: 'Tìm Model / mã thiết bị trong bảng thiết bị…',
 };
 
-/** Mở đúng nơi chứa kết quả: dự án → trang chi tiết; Warranty → bảng Warranty của năm đó với bản ghi được chọn. */
+/** Mở đúng nơi chứa kết quả: dự án / job Freelance → trang chi tiết; Warranty → bảng Warranty của năm đó với bản ghi được chọn. */
 export function useOpenHit() {
   const navigate = useNavigate();
   return (h: SearchHit) =>
-    h.kind === 'project' ? navigate(`/project/${h.id}`) : navigate(nodePath(h.jobType, h.jobYearId, 'WARRANTY'), { state: { select: h.id } });
+    h.kind === 'project'
+      ? navigate(`/project/${h.id}`)
+      : h.kind === 'freelance'
+        ? navigate(`/freelance/${h.id}`)
+        : navigate(nodePath(h.jobType, h.jobYearId, 'WARRANTY'), { state: { select: h.id } });
 }
 
 export function HitIcon({ kind }: { kind: SearchHit['kind'] }) {
-  return kind === 'project' ? <FolderKanban size={15} /> : <ShieldCheck size={15} />;
+  return kind === 'project' ? <FolderKanban size={15} /> : kind === 'freelance' ? <Laptop size={15} /> : <ShieldCheck size={15} />;
 }
 
 export function SearchDateFilter({ st, onChange }: { st: GlobalSearchState; onChange: (p: Partial<GlobalSearchState>) => void }) {
