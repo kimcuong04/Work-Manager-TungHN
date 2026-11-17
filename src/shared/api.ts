@@ -5,6 +5,7 @@ import type {
   DataLocationInfo,
   CalendarEvent,
   CalendarEventInput,
+  CalendarFeedItem,
   CalendarQuery,
   BulkImportResult,
   BulkImportSpec,
@@ -21,6 +22,7 @@ import type {
   FileCheck,
   ImageRef,
   ImportPayload,
+  NoteTextRow,
   JobType,
   JobYear,
   KnowledgeInput,
@@ -78,12 +80,15 @@ export interface Api {
    * thư mục thì giữ lại và trả về trong `failed`.
    */
   deleteProjects(ids: string[], opts?: { deleteFolder?: boolean }): Promise<{ deleted: number; failed: string[] }>;
-  nextProjectStt(): Promise<number>;
+  /** STT tiếp theo của danh sách (năm × Pre-sales/Post-sales). */
+  nextProjectStt(jobYearId: string, category: ProjectCategory): Promise<number>;
   /** Chọn thư mục qua hộp thoại; thư mục được chọn mới dùng làm nơi lưu thư mục dự án. */
   pickFolder(title?: string): Promise<string | null>;
   openProjectFolder(id: string): Promise<void>;
   /** Tạo thư mục cho dự án chưa có, hoặc đổi tên thư mục cho khớp STT/Tên/SI/Hãng hiện tại. */
   syncProjectFolder(id: string, parent?: string | null): Promise<ProjectSaved>;
+  /** Liên kết thư mục có sẵn (đã chọn qua pickFolder) — không tự đổi tên; null = bỏ liên kết (không xóa thư mục). */
+  setProjectFolderLink(id: string, dir: string | null): Promise<ProjectSaved>;
   setProjectCompleted(id: string, completed: boolean): Promise<Project>;
   applyBoardChanges(changes: { id: string; completed: boolean }[]): Promise<void>;
   moveProject(id: string, jobYearId: string, category: ProjectCategory): Promise<Project>;
@@ -92,6 +97,8 @@ export interface Api {
   /** Lưu (tạo/sửa) ghi chú của một ngày; nội dung rỗng thì xóa mục của ngày đó và trả về null. */
   saveProjectNote(projectId: string, input: ProjectNoteInput, opts?: { addToCalendar?: boolean }): Promise<ProjectNote | null>;
   deleteProjectNote(id: string): Promise<void>;
+  /** Ghi chú chữ thuần của mọi dự án trong khoảng ngày (vd một tháng). */
+  listProjectNotesInRange(from: string, to: string): Promise<NoteTextRow[]>;
 
   listFreelance(): Promise<FreelanceJob[]>;
   nextFreelanceStt(): Promise<number>;
@@ -135,6 +142,7 @@ export interface Api {
   updateWarranty(id: string, input: WarrantyInput): Promise<WarrantyRecord>;
   deleteWarranty(id: string): Promise<void>;
   deleteWarranties(ids: string[]): Promise<number>;
+  nextWarrantyStt(jobYearId: string): Promise<number>;
   revealWarrantyPassword(id: string): Promise<string>;
 
   pickImages(): Promise<ImageRef[]>;
@@ -165,6 +173,8 @@ export interface Api {
   deleteKnowledge(id: string): Promise<void>;
 
   listCalendarEvents(query: CalendarQuery): Promise<CalendarEvent[]>;
+  /** Mục Calendar của Job Freelance và Kinh nghiệm (tính từ dữ liệu, chỉ đọc). */
+  listCalendarFeed(query: CalendarQuery): Promise<CalendarFeedItem[]>;
   createCalendarEvent(input: CalendarEventInput): Promise<CalendarEvent>;
   updateCalendarEvent(id: string, input: CalendarEventInput): Promise<CalendarEvent>;
   moveCalendarEvent(id: string, eventDate: string): Promise<CalendarEvent>;

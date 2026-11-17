@@ -10,6 +10,8 @@ import { useUi } from './ui';
 interface ProjectActions {
   openCreate: (defaults?: ProjectDefaults) => void;
   openEdit: (p: Project) => void;
+  /** Mở form Thêm mới đã điền sẵn thông tin của dự án này (STT mới, tên thêm “(bản sao)”). */
+  openDuplicate: (p: Project) => void;
   openMove: (p: Project) => void;
   remove: (p: Project) => Promise<boolean>;
   setCompleted: (p: Project, completed: boolean) => Promise<boolean>;
@@ -54,9 +56,10 @@ function MoveDialog({ project, onClose }: { project: Project; onClose: () => voi
     });
     if (!ok) return;
     try {
-      await api.moveProject(project.id, yearId, category);
+      const moved = await api.moveProject(project.id, yearId, category);
       await refresh('projects', 'years');
       toast('success', `Đã di chuyển sang ${to}.`);
+      if (moved.stt !== project.stt) toast('info', `STT ${project.stt} đã có ở danh sách mới nên dự án được đổi sang STT ${moved.stt}.`);
       onClose();
     } catch (e) {
       toastError(e);
@@ -186,7 +189,7 @@ function DeleteDialog({ project, onDone }: { project: Project; onDone: (deleted:
 export function ProjectActionsProvider({ children }: { children: ReactNode }) {
   const { refresh } = useAppData();
   const { confirm, toast, toastError } = useUi();
-  const [form, setForm] = useState<{ project?: Project; defaults?: ProjectDefaults } | null>(null);
+  const [form, setForm] = useState<{ project?: Project; template?: Project; defaults?: ProjectDefaults } | null>(null);
   const [moving, setMoving] = useState<Project | null>(null);
   const [deleting, setDeleting] = useState<{ project: Project; resolve: (v: boolean) => void } | null>(null);
 
@@ -225,6 +228,7 @@ export function ProjectActionsProvider({ children }: { children: ReactNode }) {
     () => ({
       openCreate: (defaults) => setForm({ defaults }),
       openEdit: (project) => setForm({ project }),
+      openDuplicate: (template) => setForm({ template }),
       openMove: (p) => setMoving(p),
       remove,
       setCompleted,
@@ -235,7 +239,7 @@ export function ProjectActionsProvider({ children }: { children: ReactNode }) {
   return (
     <Ctx.Provider value={value}>
       {children}
-      {form && <ProjectForm project={form.project} defaults={form.defaults} onClose={() => setForm(null)} />}
+      {form && <ProjectForm project={form.project} template={form.template} defaults={form.defaults} onClose={() => setForm(null)} />}
       {moving && <MoveDialog project={moving} onClose={() => setMoving(null)} />}
       {deleting && (
         <DeleteDialog

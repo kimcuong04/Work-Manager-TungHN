@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { formatDate } from '../../shared/dates';
 import { noteHtmlToText, textToNoteHtml } from '../../shared/noteHtml';
+import { cleanName, nameKey } from '../../shared/text';
 import type { Db } from './database';
 
 const MASTER_TABLE = (name: string) => `
@@ -480,6 +481,49 @@ function migrateFreelanceV5(db: Db) {
   db.run(`DELETE FROM job_years WHERE id IN ${inYears}`, yearIds);
 }
 
+/**
+ * v1.6: STT dự án đánh riêng cho từng danh sách (năm × Pre-sales/Post-sales) thay vì một dãy chung, STT cho Warranty
+ * (đánh theo năm, thứ tự Ngày nhận), Bên thuê của Job Freelance thành danh mục, cờ thư mục dự án
+ * liên kết có sẵn (không tự đổi tên). Dọn mục Calendar "Bắt đầu / Cập nhật dự án" còn sót của dự án đã xóa.
+ */
+const V6 = `
+ALTER TABLE projects ADD COLUMN folder_auto INTEGER NOT NULL DEFAULT 1;
+DROP INDEX ux_projects_stt;
+CREATE UNIQUE INDEX ux_projects_stt ON projects(job_year_id, work_category, stt);
+
+ALTER TABLE warranty_records ADD COLUMN stt INTEGER;
+UPDATE warranty_records SET stt = (
+  SELECT t.rn FROM (
+    SELECT id, ROW_NUMBER() OVER (PARTITION BY job_year_id ORDER BY COALESCE(received_date, '9999-12-31'), created_at, id) AS rn
+    FROM warranty_records
+  ) t WHERE t.id = warranty_records.id
+);
+CREATE UNIQUE INDEX ux_warranty_stt ON warranty_records(job_year_id, stt);
+
+${MASTER_TABLE('freelance_hirers')}
+ALTER TABLE freelance_jobs ADD COLUMN hirer_id TEXT REFERENCES freelance_hirers(id);
+
+DELETE FROM calendar_events WHERE project_id IS NULL AND kind IN ('PROJECT_START', 'PROJECT_UPDATE');
+`;
+
+/** Bên thuê đang nhập tự do → mục trong danh mục (gộp tên trùng không phân biệt hoa thường/dấu cách thừa). */
+function backfillHirersV6(db: Db) {
+  const stamp = new Date().toISOString();
+  const byKey = new Map<string, string>();
+  const rows = db.all<{ id: string; hirer: string | null }>("SELECT id, hirer FROM freelance_jobs WHERE TRIM(COALESCE(hirer, '')) <> '' ORDER BY stt");
+  for (const r of rows) {
+    const name = cleanName(r.hirer!);
+    const key = nameKey(name);
+    let id = byKey.get(key);
+    if (!id) {
+      id = randomUUID();
+      db.run('INSERT INTO freelance_hirers VALUES (?,?,?,1,?,?)', [id, name, byKey.size, stamp, stamp]);
+      byKey.set(key, id);
+    }
+    db.run('UPDATE freelance_jobs SET hirer_id = ? WHERE id = ?', [id, r.id]);
+  }
+}
+
 export interface Migration {
   version: number;
   up: (db: Db) => void;
@@ -523,6 +567,13 @@ export const MIGRATIONS: Migration[] = [
     up: (db) => {
       db.exec(V5);
       migrateFreelanceV5(db);
+    },
+  },
+  {
+    version: 6,
+    up: (db) => {
+      db.exec(V6);
+      backfillHirersV6(db);
     },
   },
 ];

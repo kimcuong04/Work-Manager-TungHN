@@ -100,7 +100,8 @@ describe('Nâng cấp v1.4 → v1.5: Job Freelance thành bảng riêng', () => 
     const w2Year = master.getYear(c, db.scalar<string>("SELECT job_year_id FROM warranty_records WHERE id = 'w2'"));
     expect([w1Year.jobType, w1Year.yearLabel]).toEqual(['MAIN', label]);
     expect([w2Year.jobType, w2Year.yearLabel]).toEqual(['MAIN', '2024']);
-    expect(calendar.listCalendarEvents(c, {}).find((e) => e.id === 'e1')).toMatchObject({ title: 'Thiết kế web', projectId: null });
+    expect(calendar.listCalendarEvents(c, {}).find((e) => e.id === 'e1')).toBeUndefined();
+    expect(calendar.listCalendarFeed(c, { from: '2026-09-01', to: '2026-09-01' }).filter((i) => i.kind === 'PROJECT_START')).toMatchObject([{ source: 'FREELANCE', kind: 'PROJECT_START', title: '2. Thiết kế web' }]);
     expect(records.listExperience(c, 'b1')[0].projectText).toBe('2. Thiết kế web (Job Freelance)');
   });
 
@@ -114,16 +115,16 @@ describe('Nâng cấp v1.4 → v1.5: Job Freelance thành bảng riêng', () => 
 describe('Job Freelance', () => {
   it('STT tự +1, trùng STT bị chặn, chỉ bắt buộc STT + Tên; ghi chú hôm nay khi tạo', () => {
     const doing = master.listMaster(ctx, 'freelanceStatuses')[1];
-    const a = freelance.createFreelance(ctx, { projectName: 'Logo quán cà phê', hirer: 'Chị Hoa', startDate: '2026-11-01', statusId: doing.id }, { noteHtml: '<div>Gửi 3 phương án</div>' });
+    const a = freelance.createFreelance(ctx, { projectName: 'Logo quán cà phê', hirerId: master.createMaster(ctx, 'freelanceHirers', 'Chị Hoa').id, startDate: '2026-11-01', statusId: doing.id }, { noteHtml: '<div>Gửi 3 phương án</div>' });
     expect(a).toMatchObject({ stt: 1, hirer: 'Chị Hoa', statusName: 'Đang làm' });
     expect(a.note).toContain('16/11/2026: Gửi 3 phương án');
-    const b = freelance.createFreelance(ctx, { stt: 7, projectName: 'Web bán hàng', hirer: '', startDate: null, statusId: null });
-    expect(b).toMatchObject({ stt: 7, hirer: '', startDate: null, statusId: null });
+    const b = freelance.createFreelance(ctx, { stt: 7, projectName: 'Web bán hàng', hirerId: null, startDate: null, statusId: null });
+    expect(b).toMatchObject({ stt: 7, hirerId: null, startDate: null, statusId: null });
     expect(freelance.nextFreelanceStt(ctx)).toBe(8);
-    expect(() => freelance.createFreelance(ctx, { stt: 7, projectName: 'X', hirer: '', startDate: null, statusId: null })).toThrow(/STT 7 đã được dùng/);
-    expect(() => freelance.createFreelance(ctx, { stt: null, projectName: 'X', hirer: '', startDate: null, statusId: null })).toThrow(/Bắt buộc nhập STT/);
-    expect(() => freelance.createFreelance(ctx, { projectName: '  ', hirer: '', startDate: null, statusId: null })).toThrow(/Tên dự án/);
-    expect(() => freelance.createFreelance(ctx, { projectName: 'X', hirer: '', startDate: '31/02/2026', statusId: null })).toThrow(/Ngày không hợp lệ/);
+    expect(() => freelance.createFreelance(ctx, { stt: 7, projectName: 'X', hirerId: null, startDate: null, statusId: null })).toThrow(/STT 7 đã được dùng/);
+    expect(() => freelance.createFreelance(ctx, { stt: null, projectName: 'X', hirerId: null, startDate: null, statusId: null })).toThrow(/Bắt buộc nhập STT/);
+    expect(() => freelance.createFreelance(ctx, { projectName: '  ', hirerId: null, startDate: null, statusId: null })).toThrow(/Tên dự án/);
+    expect(() => freelance.createFreelance(ctx, { projectName: 'X', hirerId: null, startDate: '31/02/2026', statusId: null })).toThrow(/Ngày không hợp lệ/);
   });
 
   it('STT của Job Freelance độc lập với Job Chính', () => {
@@ -131,11 +132,11 @@ describe('Job Freelance', () => {
       stt: 1, jobYearId: mainYear, workCategory: 'PRE_SALES', receivedDate: null, dueDate: null, projectName: 'Dự án chính', clientId: null,
       salespersonId: null, note: '', filePath: null, fileName: null, fileExtension: null, priorityPoint: 3,
     });
-    expect(freelance.createFreelance(ctx, { stt: 1, projectName: 'Job 1', hirer: '', startDate: null, statusId: null }).stt).toBe(1);
+    expect(freelance.createFreelance(ctx, { stt: 1, projectName: 'Job 1', hirerId: null, startDate: null, statusId: null }).stt).toBe(1);
   });
 
   it('ghi chú theo ngày: sửa ngày cũ, xóa khi rỗng, ảnh dọn khi xóa job', () => {
-    const j = freelance.createFreelance(ctx, { projectName: 'Job ảnh', hirer: '', startDate: null, statusId: null });
+    const j = freelance.createFreelance(ctx, { projectName: 'Job ảnh', hirerId: null, startDate: null, statusId: null });
     const img = importImageBuffer(ctx, PNG, 'a.png');
     notes.saveFreelanceNote(ctx, j.id, { noteDate: '2026-11-10', html: `<div>Bản nháp</div><img data-key="${img.storageKey}">` });
     notes.saveFreelanceNote(ctx, j.id, { noteDate: TEST_TODAY, html: '<div>Chốt</div>' });
@@ -154,7 +155,7 @@ describe('Job Freelance', () => {
     const [st0, st1] = master.listMaster(ctx, 'freelanceStatuses');
     master.moveMaster(ctx, 'freelanceStatuses', st1.id, -1);
     expect(master.listMaster(ctx, 'freelanceStatuses').slice(0, 2).map((s) => s.id)).toEqual([st1.id, st0.id]);
-    const j = freelance.createFreelance(ctx, { projectName: 'J', hirer: '', startDate: null, statusId: st0.id });
+    const j = freelance.createFreelance(ctx, { projectName: 'J', hirerId: null, startDate: null, statusId: st0.id });
     expect(() => master.deleteMaster(ctx, 'freelanceStatuses', st0.id, null)).toThrow(/đang được 1 mục/);
     master.deleteMaster(ctx, 'freelanceStatuses', st0.id, { replaceWithId: st1.id });
     expect(freelance.getFreelance(ctx, j.id).statusName).toBe(st1.name);
@@ -164,7 +165,7 @@ describe('Job Freelance', () => {
   });
 
   it('tìm theo Tên dự án ra cả Job Freelance', () => {
-    freelance.createFreelance(ctx, { projectName: 'Thiết kế nội thất căn hộ', hirer: 'Anh Nam', startDate: '2026-10-01', statusId: null });
+    freelance.createFreelance(ctx, { projectName: 'Thiết kế nội thất căn hộ', hirerId: master.createMaster(ctx, 'freelanceHirers', 'Anh Nam').id, startDate: '2026-10-01', statusId: null });
     const hits = globalSearch(ctx, { mode: 'name', text: 'noi that' });
     expect(hits).toHaveLength(1);
     expect(hits[0]).toMatchObject({ kind: 'freelance', title: '1. Thiết kế nội thất căn hộ', workCategory: null });
@@ -326,7 +327,14 @@ describe('Import hàng loạt từ .xlsx', () => {
     const rows = buildBulkRows('FREELANCE', ws, cfg).map(({ rowNumber, values }) => ({ rowNumber, values }));
     const res = bulkImport(ctx, { target: 'FREELANCE', rows });
     expect(res.created).toBe(2);
-    expect(res.newMasters).toEqual([{ kind: 'freelanceStatuses', name: 'Chờ nghiệm thu' }]);
+    expect(res.newMasters).toEqual(
+      expect.arrayContaining([
+        { kind: 'freelanceStatuses', name: 'Chờ nghiệm thu' },
+        { kind: 'freelanceHirers', name: 'Chị Hoa' },
+        { kind: 'freelanceHirers', name: 'Anh Tú' },
+      ]),
+    );
+    expect(res.newMasters).toHaveLength(3);
     expect(freelance.listFreelance(ctx).map((j) => [j.stt, j.projectName, j.hirer, j.startDate, j.statusName])).toEqual([
       [3, 'Logo', 'Chị Hoa', '2026-10-01', 'Hoàn thành'],
       [4, 'Landing page', 'Anh Tú', null, 'Chờ nghiệm thu'],

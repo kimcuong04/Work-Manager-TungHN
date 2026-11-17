@@ -15,10 +15,10 @@ export function CategoryPage() {
   const { jobType, yearId, category } = useParams();
   const { yearById, projects, refresh } = useAppData();
   const [importing, setImporting] = useState(false);
-  const usedStt = useMemo(() => new Set(projects.map((p) => p.stt)), [projects]);
   const { openCreate } = useProjectActions();
   const year = yearId ? yearById.get(yearId) : undefined;
   const cat = category ? CATEGORY_SLUG[category] : undefined;
+  const usedStt = useMemo(() => new Set(projects.filter((p) => p.jobYearId === yearId && p.workCategory === cat).map((p) => p.stt)), [projects, yearId, cat]);
   const title = year && cat ? `${CATEGORY_LABEL[cat]} ${year.yearLabel}` : 'Không tìm thấy';
   usePageTitle(title);
 

@@ -148,7 +148,7 @@ try {
   await dueInput.press('Tab');
   await win.getByRole('button', { name: 'Tạo dự án' }).click();
   await win.waitForTimeout(200);
-  check('Bắt buộc chọn nơi lưu thư mục dự án', await win.getByText('Chọn nơi lưu thư mục dự án trên máy.').isVisible());
+  check('Tick “Tạo thư mục mới” thì phải chọn nơi lưu (hoặc bỏ tick)', await win.getByText(/Chọn nơi lưu, hoặc bỏ tick/).isVisible());
   await stubOpen(app, [projectsRoot]);
   await win.getByRole('button', { name: /Chọn nơi lưu/ }).click();
   await win.waitForTimeout(250);
@@ -539,6 +539,16 @@ try {
   await win.getByRole('button', { name: /Xuất \.xlsx/ }).click();
   await win.waitForTimeout(600);
   const exported = fs.existsSync(xlsxOut) ? XLSX.utils.sheet_to_json(XLSX.read(fs.readFileSync(xlsxOut)).Sheets['Tháng ' + (new Date().getMonth() + 1) + '-' + new Date().getFullYear()] ?? {}, { header: 1 }) : [];
+  {
+    const ci = (exported[0] ?? []).findIndex((h) => String(h).startsWith('Ghi chú trong tháng'));
+    const cells = exported.slice(1).map((r) => String(r[ci] ?? '')).filter(Boolean);
+    const hit = cells.find((c) => c.includes('Gửi báo giá lần 1')) ?? '';
+    check(
+      'Xuất xlsx: cột "Ghi chú trong tháng" gộp ghi chú theo ngày (• Ngày dd/mm/yyyy / - nội dung)',
+      ci >= 0 && /^• Ngày \d{2}\/\d{2}\/\d{4}\n {4}- /.test(hit) && !cells.some((c) => /tháng trước/.test(c)),
+      hit.split('\n').slice(0, 3).join(' ⏎ '),
+    );
+  }
   check('Xuất xlsx theo cột đã chọn', exported.length === monthRows + 1 && exported[0][0] === 'STT' && !exported[0].includes('Ghi chú gần nhất'), `${exported.length} dòng, cột: ${(exported[0] ?? []).join(', ')}`);
   {
     const ws = Object.values(XLSX.read(fs.readFileSync(xlsxOut)).Sheets)[0];
@@ -587,7 +597,11 @@ try {
   await win.waitForTimeout(300);
   const startChips = await win.locator('.ev-chip', { hasText: 'Nhà máy Đông Á' }).count();
   check('Calendar: dự án mới tự có ở ngày tiếp nhận', startChips >= 1, `${startChips} chip`);
+  // Ô hôm nay còn có mục Kinh nghiệm (hiện tự động) nên tạm bỏ tick nguồn Kinh nghiệm để chip dự án không bị dồn vào “+N”.
+  await win.locator('.cal-layer', { hasText: 'Kinh nghiệm' }).locator('input').uncheck();
+  await win.waitForTimeout(150);
   check('Calendar: hiển thị mục "Cập nhật dự án" hôm nay', (await win.locator('.cal-cell.today .ev-chip', { hasText: 'Trường THCS' }).count()) === 1);
+  await win.locator('.cal-layer', { hasText: 'Kinh nghiệm' }).locator('input').check();
   await shot(win, '19-calendar-month');
   await win.locator('.ev-chip', { hasText: 'Nhà máy Đông Á' }).first().click();
   await win.waitForSelector('.cal-pop');
@@ -767,7 +781,10 @@ try {
   await win.waitForSelector('.modal #fl-name');
   const flStt = await win.locator('#fl-stt').inputValue();
   await win.locator('#fl-name').fill('Thiết kế logo quán cà phê');
+  await win.locator('#fl-hirer').click();
   await win.locator('#fl-hirer').fill('Chị Hoa');
+  await win.getByRole('button', { name: /Thêm Bên thuê “Chị Hoa”/ }).click();
+  await win.waitForTimeout(250);
   await win.locator('.modal .rich-editor, .modal [contenteditable="true"]').first().click();
   await win.keyboard.type('Gửi 3 phương án logo');
   await shot(win, '30-freelance-form');
@@ -818,7 +835,7 @@ try {
   const st2 = (await call(win, 'listMaster', 'freelanceStatuses')).map((x) => x.name);
   check(
     'Master Data › Job Freelance › Tình trạng: thêm mới, sắp xếp lên/xuống',
-    flTabs.join('|') === 'Tình trạng' && statuses.length === 5 && st2.length === 6 && st2[4] === 'Chờ nghiệm thu',
+    flTabs.join('|') === 'Tình trạng|Bên thuê' && statuses.length === 5 && st2.length === 6 && st2[4] === 'Chờ nghiệm thu',
     st2.join(' > '),
   );
   await shot(win, '33-settings-freelance-status');
@@ -880,8 +897,8 @@ try {
   await go(win, `#/job/MAIN/${main.id}/pre-sales`);
   await win.waitForSelector('.project-table tbody tr');
   const doneTitle = win.locator('.project-table tr.row-done .pt-title').first();
-  const thickness = (await doneTitle.count()) ? await doneTitle.evaluate((el) => getComputedStyle(el).textDecorationThickness) : 'không có dòng hoàn thành';
-  check('Gạch ngang tên dự án Đã hoàn thành mảnh 0.5px', thickness === '0.5px', thickness);
+  const deco = (await doneTitle.count()) ? await doneTitle.evaluate((el) => getComputedStyle(el).textDecorationLine) : 'không có dòng hoàn thành';
+  check('Tên dự án Đã hoàn thành hiển thị bình thường (không gạch ngang)', deco === 'none', deco);
   await win.getByRole('button', { name: 'Chọn', exact: true }).click();
   await win.waitForSelector('.select-banner');
   const preRows = await win.locator('.project-table tbody tr').count();
@@ -1024,6 +1041,86 @@ try {
   await win.waitForTimeout(200);
   check('Tool online: thêm, bắt buộc Link hợp lệ, tìm theo tên', (await call(win, 'listOnlineTools')).length === 2 && /Link không hợp lệ/.test(linkErr) && toolRows === 1, linkErr);
   await shot(win, '38-tool-online');
+
+  // --- v1.6: Calendar có Job Freelance + Kinh nghiệm, tick Nguồn / Loại ---
+  const deletedGone = !(await call(win, 'listCalendarEvents', {})).some((e) => /Hưng Yên|Siêu thị Q7/.test(e.title));
+  check('Xóa dự án thì các mục Bắt đầu/Cập nhật của nó biến mất khỏi Calendar', deletedGone);
+  await go(win, '#/calendar');
+  await win.waitForSelector('.cal-layers');
+  const flChip = win.locator('.ev-chip', { hasText: 'Thiết kế logo quán cà phê' });
+  await win.waitForTimeout(400);
+  const chipBefore = await flChip.count();
+  await shot(win, '40-calendar-sources');
+  await win.locator('.cal-layer', { hasText: 'Job Freelance' }).locator('input').uncheck();
+  await win.waitForTimeout(200);
+  const chipOff = await flChip.count();
+  await win.locator('.cal-layer', { hasText: 'Job Freelance' }).locator('input').check();
+  const sideTxt = await win.locator('.cal-side').innerText();
+  check(
+    'Calendar: Job Freelance hiện tự động, tick Nguồn (Job Chính / Job Freelance / Kinh nghiệm) và Loại để lọc',
+    chipBefore > 0 && chipOff === 0 && /Nguồn/.test(sideTxt) && /Kinh nghiệm/.test(sideTxt) && /Hạn chót/.test(sideTxt),
+    `${chipBefore} → ${chipOff} mục Freelance khi bỏ tick`,
+  );
+
+  // --- v1.6: STT riêng cho Pre-sales / Post-sales ---
+  const pre = await call(win, 'listProjects');
+  const maxIn = (cat) => Math.max(0, ...pre.filter((x) => x.jobYearId === main.id && x.workCategory === cat).map((x) => x.stt));
+  const nextPost = await call(win, 'nextProjectStt', main.id, 'POST_SALES');
+  check('STT +1 theo từng danh sách (Post-sales không nhảy theo Pre-sales)', nextPost === maxIn('POST_SALES') + 1, `Pre max ${maxIn('PRE_SALES')}, Post tiếp theo ${nextPost}`);
+
+  // --- v1.6: Duplicate dự án (cạnh View info) + bỏ tick tạo thư mục ---
+  await go(win, `#/job/MAIN/${main.id}/pre-sales`);
+  await win.waitForSelector('.project-table tbody tr');
+  await win.locator('.project-table tbody tr', { hasText: 'Nhà máy Đông Á' }).click();
+  await win.locator('.side-panel').getByRole('button', { name: 'Duplicate' }).click();
+  await win.waitForSelector('.modal #pf-name');
+  await win.waitForTimeout(300);
+  const dupName = await win.locator('#pf-name').inputValue();
+  const dupStt = await win.locator('#pf-stt').inputValue();
+  await win.getByRole('checkbox', { name: 'Tạo thư mục mới cho dự án' }).uncheck();
+  await shot(win, '41-duplicate-project');
+  await win.getByRole('button', { name: 'Tạo dự án' }).click();
+  await win.waitForTimeout(600);
+  const dup = (await call(win, 'listProjects')).find((x) => x.projectName === dupName);
+  check(
+    'Duplicate dự án: điền sẵn thông tin, STT tiếp theo của danh sách, bỏ tick thì không tạo thư mục',
+    /\(bản sao\)$/.test(dupName) && Number(dupStt) === maxIn('PRE_SALES') + 1 && !!dup && dup.siName === 'SI Alpha' && dup.folderPath === null,
+    `${dupStt}. ${dupName}`,
+  );
+
+  // --- v1.6: Warranty STT + Duplicate ---
+  await call(win, 'createWarranty', {
+    jobYearId: main.id, model: 'P1375', brandId: null, ipAddress: '10.0.0.5', username: 'root', password: 'Pass#1', macAddress: '', serialNumber: 'SN1',
+    receivedDate: day(0), testedDate: null, customerReport: 'Mất hình', inspection: '', result: '', resolution: '', caseNumber: 'RMA-77', images: [],
+  });
+  await go(win, `#/job/MAIN/${main.id}/warranty`);
+  await win.waitForTimeout(500);
+  const wHeads = (await win.locator('.tbl thead th').allInnerTexts()).map((t) => t.trim()).filter(Boolean);
+  await win.locator('.tbl tbody tr', { hasText: 'P1375' }).click();
+  await win.locator('.side-panel').getByRole('button', { name: 'Duplicate' }).click();
+  await win.waitForSelector('.modal');
+  await win.waitForTimeout(300);
+  const wDupStt = await win.locator('.modal input[aria-label="STT"]').inputValue();
+  await shot(win, '42-warranty-duplicate');
+  await win.locator('.modal-foot').getByRole('button', { name: 'Lưu' }).click();
+  await win.waitForTimeout(500);
+  const ws2 = await call(win, 'listWarranty', main.id);
+  const copyW = ws2.find((w) => w.stt === 2);
+  check(
+    'Warranty: cột STT đứng đầu, Case no sau; Duplicate ra STT mới, chép thông tin và mật khẩu',
+    wHeads[0] === 'STT' && wHeads[1] === 'Case no' && wDupStt === '2' && !!copyW && copyW.model === 'P1375' && copyW.hasPassword && (await call(win, 'revealWarrantyPassword', copyW.id)) === 'Pass#1',
+    `${wHeads.slice(0, 3).join(' | ')} · bản sao STT ${wDupStt}`,
+  );
+
+  // --- v1.6: Master Data › Job Freelance › Bên thuê ---
+  await go(win, '#/settings');
+  await win.getByRole('button', { name: 'Danh mục (Master Data)' }).click();
+  await win.locator('[aria-label="Phân loại danh mục"]').getByRole('button', { name: 'Job Freelance' }).click();
+  await win.getByRole('button', { name: 'Bên thuê', exact: true }).click();
+  await win.waitForTimeout(250);
+  const hirerNames = (await call(win, 'listMaster', 'freelanceHirers')).map((h) => h.name);
+  await shot(win, '43-settings-hirers');
+  check('Master Data › Job Freelance có danh mục Bên thuê', hirerNames.includes('Chị Hoa') && (await win.getByText('Chị Hoa').first().isVisible()), hirerNames.join(', '));
 
   // --- NFR-001: 1.100 dự án — board/dashboard <= 2s, search <= 300ms ---
   const ys = await call(win, 'listYears');

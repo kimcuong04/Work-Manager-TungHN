@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { CalendarCheck, CalendarClock, ChevronDown, FolderCog, FolderOpen, FolderPlus, Info } from 'lucide-react';
 import { formatDate } from '../../shared/dates';
 import { projectFolderName } from '../../shared/folderName';
@@ -32,7 +32,27 @@ export interface ProjectDefaults {
   workCategory?: ProjectCategory;
 }
 
-function initialInput(project: Project | undefined, defaults: ProjectDefaults | undefined, today: string, fallbackYear: string): ProjectInput {
+function initialInput(project: Project | undefined, defaults: ProjectDefaults | undefined, today: string, fallbackYear: string, template?: Project): ProjectInput {
+  if (template && !project)
+    return {
+      stt: null,
+      jobYearId: template.jobYearId,
+      workCategory: template.workCategory,
+      receivedDate: template.receivedDate,
+      dueDate: template.dueDate,
+      projectName: `${template.projectName} (bản sao)`,
+      clientId: template.clientId,
+      siId: template.siId,
+      brandIds: template.brands.map((b) => b.id),
+      salespersonId: template.salespersonId,
+      note: '',
+      filePath: template.filePath,
+      fileName: template.fileName,
+      fileExtension: template.fileExtension,
+      priorityPoint: template.priorityPoint,
+      folderParent: null,
+      folderLink: null,
+    };
   if (project)
     return {
       stt: project.stt,
@@ -77,11 +97,14 @@ const joinPath = (dir: string, name: string) => `${dir.replace(/[\\/]+$/, '')}\\
 
 export function ProjectForm({
   project,
+  template,
   defaults,
   onClose,
   onSaved,
 }: {
   project?: Project;
+  /** Duplicate: điền sẵn từ dự án này, lưu thành dự án mới. */
+  template?: Project;
   defaults?: ProjectDefaults;
   onClose: () => void;
   onSaved?: (p: Project) => void;
@@ -96,7 +119,9 @@ export function ProjectForm({
     return (list.find((y) => y.yearLabel === today.slice(0, 4)) ?? list[0])?.id ?? '';
   }, [years, defaults, today]);
 
-  const [initial, setInitial] = useState(() => initialInput(project, defaults, today, fallbackYear));
+  const [initial, setInitial] = useState(() => initialInput(project, defaults, today, fallbackYear, template));
+  // Dự án mới: tick = tạo thư mục "STT.Tên dự án_Tên SI_Hãng"; bỏ tick = liên kết thư mục có sẵn hoặc để đặt sau.
+  const [createFolder, setCreateFolder] = useState(true);
   const [form, setForm] = useState<ProjectInput>(initial);
   const [jobType, setJobType] = useState<JobType>(project?.jobType ?? defaults?.jobType ?? yearById.get(initial.jobYearId)?.jobType ?? 'MAIN');
   const [touched, setTouched] = useState<Record<string, boolean>>({});
@@ -104,22 +129,35 @@ export function ProjectForm({
   const [saving, setSaving] = useState<false | 'save' | 'calendar'>(false);
   const [moreOpen, setMoreOpen] = useState(() => !!project?.filePath);
 
-  // Dự án mới: gợi ý STT lớn nhất + 1 và nơi lưu thư mục dùng lần trước.
+  // Dự án mới: nơi lưu thư mục dùng lần trước; STT gợi ý = STT lớn nhất của danh sách (năm × nhóm) đang chọn + 1,
+  // đổi năm/nhóm thì gợi ý lại (trừ khi người dùng đã tự sửa STT).
+  const sttEdited = useRef(false);
   useEffect(() => {
     if (isEdit) return;
-    api
-      .nextProjectStt()
-      .then((stt) => {
-        const parent = settings.projectRootDir;
-        setInitial((i) => ({ ...i, stt, folderParent: parent }));
-        setForm((f) => ({ ...f, stt: f.stt ?? stt, folderParent: f.folderParent ?? parent }));
-      })
-      .catch(toastError);
+    const parent = settings.projectRootDir;
+    setInitial((i) => ({ ...i, folderParent: parent }));
+    setForm((f) => ({ ...f, folderParent: f.folderParent ?? parent }));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+  useEffect(() => {
+    if (isEdit || !form.jobYearId || sttEdited.current) return;
+    let alive = true;
+    api
+      .nextProjectStt(form.jobYearId, form.workCategory)
+      .then((stt) => {
+        if (!alive || sttEdited.current) return;
+        setInitial((i) => ({ ...i, stt }));
+        setForm((f) => ({ ...f, stt }));
+      })
+      .catch(toastError);
+    return () => {
+      alive = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [form.jobYearId, form.workCategory]);
 
   const errors = validateProjectInput(form);
-  if (!isEdit && !form.folderParent) errors.folderParent = 'Chọn nơi lưu thư mục dự án trên máy.';
+  if (!isEdit && createFolder && !form.folderParent) errors.folderParent = 'Chọn nơi lưu, hoặc bỏ tick “Tạo thư mục mới” nếu chưa cần thư mục.';
   const show = (k: string) => (submitted || touched[k] ? errors[k] : undefined);
   const touch = (k: string) => setTouched((t) => ({ ...t, [k]: true }));
   const set = <K extends keyof ProjectInput>(k: K, v: ProjectInput[K]) => setForm((f) => ({ ...f, [k]: v }));
@@ -160,6 +198,15 @@ export function ProjectForm({
     }
   };
 
+  const pickLink = async () => {
+    try {
+      const dir = await api.pickFolder('Chọn thư mục có sẵn của dự án');
+      if (dir) set('folderLink', dir);
+    } catch (e) {
+      toastError(e);
+    }
+  };
+
   const pickParent = async () => {
     try {
       const dir = await api.pickFolder('Chọn nơi lưu thư mục dự án');
@@ -179,7 +226,10 @@ export function ProjectForm({
     try {
       const saved: ProjectSaved = isEdit
         ? await api.updateProject(project!.id, form, { addToCalendar, noteHtml: noteChanged ? noteDraft : undefined })
-        : await api.createProject(form, { noteHtml: isNoteEmpty(noteDraft) ? undefined : noteDraft });
+        : await api.createProject(
+            { ...form, folderParent: createFolder ? form.folderParent : null, folderLink: createFolder ? null : (form.folderLink ?? null) },
+            { noteHtml: isNoteEmpty(noteDraft) ? undefined : noteDraft },
+          );
       await refresh('projects', 'years', 'settings');
       const name = `${saved.stt}. ${saved.projectName}`;
       toast(
@@ -190,7 +240,7 @@ export function ProjectForm({
             : `Đã cập nhật "${name}".`
           : saved.isCompleted
             ? `Đã tạo dự án "${name}" ở trạng thái Đã hoàn thành (ngày tới hạn đã qua).`
-            : `Đã tạo dự án "${name}"${saved.folderPath ? ' và thư mục trên máy' : ''}.`,
+            : `Đã tạo dự án "${name}"${saved.folderPath ? (saved.folderAuto ? ' và thư mục trên máy' : ' (đã liên kết thư mục có sẵn)') : ''}.`,
       );
       if (saved.notice) toast('warn', saved.notice);
       onSaved?.(saved);
@@ -225,7 +275,7 @@ export function ProjectForm({
   return (
     <Modal
       size="lg"
-      title={isEdit ? 'Chỉnh sửa dự án' : 'Thêm Project mới'}
+      title={isEdit ? 'Chỉnh sửa dự án' : template ? 'Duplicate dự án' : 'Thêm Project mới'}
       onClose={close}
       footer={() => (
         <>
@@ -326,7 +376,10 @@ export function ProjectForm({
                   type="number"
                   min={1}
                   value={form.stt ?? ''}
-                  onChange={(e) => set('stt', e.target.value === '' ? null : Number(e.target.value))}
+                  onChange={(e) => {
+                    sttEdited.current = true;
+                    set('stt', e.target.value === '' ? null : Number(e.target.value));
+                  }}
                   onBlur={() => touch('stt')}
                 />
               </Field>
@@ -408,11 +461,22 @@ export function ProjectForm({
 
         <section className="form-section">
           <h3>Thư mục dự án trên máy</h3>
-          <div className="stack" style={{ gap: 8 }}>
+          {isEdit && project?.folderPath && !project.folderAuto ? (
             <div className="folder-pick">
               <FolderOpen size={16} className="faint" />
               <div className="grow" style={{ minWidth: 0 }}>
-                <div className="small muted">Nơi lưu{!isEdit && <span className="req" style={{ color: 'var(--danger)' }}> *</span>}</div>
+                <div className="small muted">Thư mục có sẵn đã liên kết (không tự đổi tên)</div>
+                <div className="ellipsis" title={project.folderPath}>
+                  {shortenPath(project.folderPath, 80)}
+                </div>
+              </div>
+            </div>
+          ) : isEdit ? (
+            <div className="stack" style={{ gap: 8 }}>
+            <div className="folder-pick">
+              <FolderOpen size={16} className="faint" />
+              <div className="grow" style={{ minWidth: 0 }}>
+                <div className="small muted">Nơi lưu</div>
                 <div className="ellipsis" title={parent ?? ''}>
                   {parent ? shortenPath(parent, 70) : <span className="faint">Chưa chọn</span>}
                 </div>
@@ -437,7 +501,64 @@ export function ProjectForm({
                 )}
               </div>
             </div>
-          </div>
+            </div>
+          ) : (
+            <div className="stack" style={{ gap: 8 }}>
+              <label className="row small" style={{ cursor: 'pointer' }}>
+                <input type="checkbox" checked={createFolder} onChange={(e) => setCreateFolder(e.target.checked)} aria-label="Tạo thư mục mới cho dự án" />
+                Tạo thư mục mới cho dự án (STT.Tên dự án_Tên SI_Hãng)
+              </label>
+              {createFolder ? (
+                <>
+              <div className="folder-pick">
+                <FolderOpen size={16} className="faint" />
+                <div className="grow" style={{ minWidth: 0 }}>
+                  <div className="small muted">Nơi lưu<span className="req" style={{ color: 'var(--danger)' }}> *</span></div>
+                  <div className="ellipsis" title={parent ?? ''}>
+                    {parent ? shortenPath(parent, 70) : <span className="faint">Chưa chọn</span>}
+                  </div>
+                </div>
+                <button type="button" className="btn sm" onClick={() => void pickParent()}>
+                  <FolderCog size={14} /> {parent ? 'Đổi nơi lưu…' : 'Chọn nơi lưu…'}
+                </button>
+              </div>
+              {show('folderParent') && <div className="field-error">{show('folderParent')}</div>}
+              <div className="folder-preview">
+                <FolderPlus size={15} />
+                <div style={{ minWidth: 0 }}>
+                  <div className="small muted">
+                    Sẽ tạo thư mục (STT.Tên dự án_Tên SI_Hãng)
+                  </div>
+                  <code className="folder-name">{folderName || '—'}</code>
+                  {targetFolder && (
+                    <div className="small faint ellipsis" title={targetFolder}>
+                      {shortenPath(targetFolder, 90)}
+                    </div>
+                  )}
+                </div>
+              </div>
+                </>
+              ) : (
+                <div className="folder-pick">
+                  <FolderOpen size={16} className="faint" />
+                  <div className="grow" style={{ minWidth: 0 }}>
+                    <div className="small muted">Thư mục có sẵn (không bắt buộc)</div>
+                    <div className="ellipsis" title={form.folderLink ?? ''}>
+                      {form.folderLink ? shortenPath(form.folderLink, 70) : <span className="faint">Chưa chọn — có thể đặt sau ở trang chi tiết dự án</span>}
+                    </div>
+                  </div>
+                  {form.folderLink && (
+                    <button type="button" className="btn sm ghost" onClick={() => set('folderLink', null)}>
+                      Bỏ chọn
+                    </button>
+                  )}
+                  <button type="button" className="btn sm" onClick={() => void pickLink()}>
+                    <FolderCog size={14} /> {form.folderLink ? 'Đổi thư mục…' : 'Chọn thư mục có sẵn…'}
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
         </section>
 
         <section className="form-section">

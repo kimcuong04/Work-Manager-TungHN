@@ -22,6 +22,7 @@ const SPECS: Record<MasterKind, MasterSpec> = {
   departments: { table: 'departments', usage: [{ table: 'salespersons', column: 'department_id', nullable: true }] },
   salespersons: { table: 'salespersons', usage: [{ table: 'projects', column: 'salesperson_id', nullable: true }] },
   freelanceStatuses: { table: 'freelance_statuses', usage: [{ table: 'freelance_jobs', column: 'status_id', nullable: true }] },
+  freelanceHirers: { table: 'freelance_hirers', usage: [{ table: 'freelance_jobs', column: 'hirer_id', nullable: true }] },
   brands: {
     table: 'brands',
     usage: [

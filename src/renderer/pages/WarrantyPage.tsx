@@ -30,7 +30,7 @@ interface WarrantyFilter {
   to: string | null;
 }
 
-type SortKey = 'receivedDate' | 'testedDate' | 'brand' | 'model' | 'caseNumber';
+type SortKey = 'stt' | 'receivedDate' | 'testedDate' | 'brand' | 'model' | 'caseNumber';
 
 interface Column {
   key: string;
@@ -41,7 +41,8 @@ interface Column {
 }
 
 const COLUMNS: Column[] = [
-  { key: 'caseNumber', label: 'Case no', sort: 'caseNumber', render: (r) => <b>{r.caseNumber}</b>, cls: 'nowrap' },
+  { key: 'stt', label: 'STT', sort: 'stt', render: (r) => <b>{r.stt}</b>, cls: 'num nowrap' },
+  { key: 'caseNumber', label: 'Case no', sort: 'caseNumber', render: (r) => r.caseNumber, cls: 'nowrap' },
   { key: 'model', label: 'Model', sort: 'model', render: (r) => r.model, cls: 'nowrap' },
   { key: 'brand', label: 'Hãng', sort: 'brand', render: (r) => r.brandName ?? <span className="faint">—</span>, cls: 'nowrap' },
   { key: 'si', label: 'Tên SI', render: (r) => r.siName ?? <span className="faint">—</span>, cls: 'nowrap' },
@@ -164,6 +165,7 @@ function emptyInput(yearId: string): WarrantyInput {
 
 function toInput(r: WarrantyRecord): WarrantyInput {
   return {
+    stt: r.stt,
     jobYearId: r.jobYearId,
     model: r.model,
     brandId: r.brandId,
@@ -202,7 +204,24 @@ export function useBrandOptions() {
   return { options, create };
 }
 
-function WarrantyForm({ year, record, onClose, onSaved }: { year: JobYear; record?: WarrantyRecord; onClose: () => void; onSaved: () => void }) {
+/** Duplicate: chép mọi thông tin của bản gốc (trừ ảnh), STT lấy số tiếp theo, mật khẩu dùng lại của bản gốc nếu có. */
+function duplicateInput(r: WarrantyRecord): WarrantyInput {
+  return { ...toInput(r), stt: undefined, images: [], password: undefined, copyPasswordFrom: r.hasPassword ? r.id : undefined };
+}
+
+function WarrantyForm({
+  year,
+  record,
+  template,
+  onClose,
+  onSaved,
+}: {
+  year: JobYear;
+  record?: WarrantyRecord;
+  template?: WarrantyRecord;
+  onClose: () => void;
+  onSaved: () => void;
+}) {
   const { confirm, toast, toastError } = useUi();
   const brands = useBrandOptions();
   const { masters, refresh } = useAppData();
@@ -218,8 +237,21 @@ function WarrantyForm({ year, record, onClose, onSaved }: { year: JobYear; recor
       return null;
     }
   };
-  const [initial] = useState(() => (record ? toInput(record) : emptyInput(year.id)));
+  const [initial, setInitial] = useState(() => (record ? toInput(record) : template ? duplicateInput(template) : emptyInput(year.id)));
   const [form, setForm] = useState<WarrantyInput>(initial);
+  const keepsPassword = record ? record.hasPassword : !!template?.hasPassword;
+  // Bản ghi mới / Duplicate: gợi ý STT tiếp theo trong năm (sửa được).
+  useEffect(() => {
+    if (record) return;
+    api
+      .nextWarrantyStt(year.id)
+      .then((stt) => {
+        setInitial((i) => ({ ...i, stt }));
+        setForm((f) => ({ ...f, stt: f.stt ?? stt }));
+      })
+      .catch(toastError);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const [showPwd, setShowPwd] = useState(false);
   const [submitted, setSubmitted] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -263,7 +295,7 @@ function WarrantyForm({ year, record, onClose, onSaved }: { year: JobYear; recor
   return (
     <Modal
       size="lg"
-      title={record ? 'Sửa Warranty Record' : `Thêm Warranty Record — ${year.yearLabel}`}
+      title={record ? 'Sửa Warranty Record' : template ? `Duplicate Warranty Record — ${year.yearLabel}` : `Thêm Warranty Record — ${year.yearLabel}`}
       onClose={close}
       footer={() => (
         <>
@@ -277,6 +309,29 @@ function WarrantyForm({ year, record, onClose, onSaved }: { year: JobYear; recor
       )}
     >
       <div className="stack">
+        {template && (
+          <div className="alert info small">
+            <div>
+              Bản sao của <b>{recordTitle(template)}</b> — đã chép đủ thông tin (trừ ảnh). Sửa những gì cần rồi bấm Lưu.
+            </div>
+          </div>
+        )}
+        <section className="form-section">
+          <h3>Thông tin chung</h3>
+          <div className="grid-3" style={{ gridTemplateColumns: '140px 1fr' }}>
+            <Field label="STT" required error={err('stt')}>
+              <input
+                className={`input ${err('stt') ? 'invalid' : ''}`}
+                type="number"
+                min={1}
+                aria-label="STT"
+                value={form.stt ?? ''}
+                onChange={(e) => set('stt', e.target.value === '' ? null : Math.floor(Number(e.target.value)))}
+              />
+            </Field>
+            {text('caseNumber', 'Case no', 'Nhập tự do, vd RMA-2026-001')}
+          </div>
+        </section>
         <section className="form-section">
           <h3>Thiết bị</h3>
           <div className="grid-2">
@@ -297,11 +352,11 @@ function WarrantyForm({ year, record, onClose, onSaved }: { year: JobYear; recor
             {text('ipAddress', 'IP', 'IPv4 / IPv6')}
             {text('username', 'User')}
             <Field label="Pass" error={err('password')} hint="Được mã hóa khi lưu, che mặc định.">
-              {record && form.password === undefined ? (
+              {(record || keepsPassword) && form.password === undefined ? (
                 <div className="row">
-                  <span className="muted small grow">{record.hasPassword ? '•••••••• (đã lưu)' : 'Chưa có'}</span>
+                  <span className="muted small grow">{keepsPassword ? (record ? '•••••••• (đã lưu)' : '•••••••• (dùng lại của bản gốc)') : 'Chưa có'}</span>
                   <button type="button" className="btn sm" onClick={() => set('password', '')}>
-                    <KeyRound size={13} /> {record.hasPassword ? 'Đổi' : 'Đặt'}
+                    <KeyRound size={13} /> {keepsPassword ? 'Đổi' : 'Đặt'}
                   </button>
                 </div>
               ) : (
@@ -315,7 +370,7 @@ function WarrantyForm({ year, record, onClose, onSaved }: { year: JobYear; recor
                     onChange={(e) => set('password', e.target.value)}
                   />
                   <div className="combo-icons">
-                    {record && (
+                    {(record || keepsPassword) && (
                       <button type="button" title="Giữ mật khẩu cũ" aria-label="Giữ mật khẩu cũ" onClick={() => set('password', undefined)}>
                         <X size={14} />
                       </button>
@@ -330,7 +385,7 @@ function WarrantyForm({ year, record, onClose, onSaved }: { year: JobYear; recor
           </div>
         </section>
         <section className="form-section">
-          <h3>Thời gian &amp; case</h3>
+          <h3>Thời gian</h3>
           <div className="grid-3">
             <Field label="Ngày nhận" error={err('receivedDate')}>
               <DateInput value={form.receivedDate} onChange={(v) => set('receivedDate', v)} clearable />
@@ -338,7 +393,6 @@ function WarrantyForm({ year, record, onClose, onSaved }: { year: JobYear; recor
             <Field label="Ngày test" error={err('testedDate')}>
               <DateInput value={form.testedDate} onChange={(v) => set('testedDate', v)} clearable />
             </Field>
-            {text('caseNumber', 'Case no')}
           </div>
         </section>
         <section className="form-section">
@@ -425,7 +479,7 @@ function InfoRows({ r, rows }: { r: WarrantyRecord; rows: [string, React.ReactNo
   );
 }
 
-const recordTitle = (r: WarrantyRecord) => `${r.model || 'Warranty'}${r.caseNumber ? ` · ${r.caseNumber}` : ''}`;
+const recordTitle = (r: WarrantyRecord) => `${r.stt}. ${r.model || 'Warranty'}${r.caseNumber ? ` · ${r.caseNumber}` : ''}`;
 
 /** Panel tóm tắt bên phải bảng: chọn dòng khác trong bảng thì panel đổi theo. */
 function WarrantyDetail({
@@ -433,12 +487,14 @@ function WarrantyDetail({
   onClose,
   onEdit,
   onView,
+  onDuplicate,
   onDelete,
 }: {
   r: WarrantyRecord;
   onClose: () => void;
   onEdit: () => void;
   onView: () => void;
+  onDuplicate: () => void;
   onDelete: () => void;
 }) {
   return (
@@ -452,6 +508,9 @@ function WarrantyDetail({
           <button className="btn danger left" onClick={onDelete}>
             <Trash2 size={15} /> Xóa
           </button>
+          <button className="btn" onClick={onDuplicate} title="Tạo bản ghi mới chép từ bản ghi này">
+            <Copy size={15} /> Duplicate
+          </button>
           <button className="btn" onClick={onView} title="Xem đầy đủ thông tin trên màn hình lớn">
             <Maximize2 size={15} /> View info
           </button>
@@ -464,6 +523,8 @@ function WarrantyDetail({
       <InfoRows
         r={r}
         rows={[
+          ['STT', r.stt],
+          ['Case no', r.caseNumber],
           ['Model', r.model],
           ['Hãng', r.brandName],
           ['Tên SI', r.siName],
@@ -474,7 +535,6 @@ function WarrantyDetail({
           ['Pass', null],
           ['Ngày nhận', formatDate(r.receivedDate)],
           ['Ngày test', formatDate(r.testedDate)],
-          ['Case no', r.caseNumber],
           ['Khách hàng báo', r.customerReport],
           ['Kiểm tra', r.inspection],
           ['Kết quả', r.result],
@@ -560,6 +620,7 @@ function WarrantyInfoModal({
             rows={[
               ['Ngày nhận', formatDate(r.receivedDate)],
               ['Ngày test', formatDate(r.testedDate)],
+              ['STT', r.stt],
               ['Case no', r.caseNumber],
               ['Năm', r.yearLabel],
             ]}
@@ -605,12 +666,12 @@ export function WarrantyPage({ year, crumbs }: { year: JobYear; crumbs: Crumb[] 
   });
   const [sort, setSort] = useLocalState<{ key: SortKey; dir: 'asc' | 'desc' }>('warranty-sort', { key: 'receivedDate', dir: 'desc' });
   const [hidden, setHidden] = useLocalState<string[]>('warranty-hidden-cols', []);
-  const [form, setForm] = useState<{ record?: WarrantyRecord } | null>(null);
+  const [form, setForm] = useState<{ record?: WarrantyRecord; template?: WarrantyRecord } | null>(null);
   const location = useLocation();
   const [detailId, setDetailId] = useState<string | null>((location.state as { select?: string } | null)?.select ?? null);
   const [viewId, setViewId] = useState<string | null>(null);
   const [importing, setImporting] = useState(false);
-  const noStt = useMemo(() => new Set<number>(), []);
+  const usedStt = useMemo(() => new Set((records ?? []).map((r) => r.stt)), [records]);
 
   const load = useCallback(() => {
     api.listWarranty(year.id).then(setRecords).catch(toastError);
@@ -641,8 +702,9 @@ export function WarrantyPage({ year, crumbs }: { year: JobYear; crumbs: Crumb[] 
       .map((x) => x.r);
     const sign = sort.dir === 'asc' ? 1 : -1;
     const val = (r: WarrantyRecord): string =>
-      sort.key === 'brand' ? r.brandName ?? '' : sort.key === 'receivedDate' ? r.receivedDate ?? '' : sort.key === 'testedDate' ? r.testedDate ?? '' : r[sort.key];
+      sort.key === 'brand' ? r.brandName ?? '' : sort.key === 'receivedDate' ? r.receivedDate ?? '' : sort.key === 'testedDate' ? r.testedDate ?? '' : sort.key === 'stt' ? '' : r[sort.key];
     return list.sort((a, b) => {
+      if (sort.key === 'stt') return sign * (a.stt - b.stt);
       const va = val(a);
       const vb = val(b);
       if (!va && vb) return 1;
@@ -825,6 +887,7 @@ export function WarrantyPage({ year, crumbs }: { year: JobYear; crumbs: Crumb[] 
             onClose={() => setDetailId(null)}
             onEdit={() => setForm({ record: detail })}
             onView={() => setViewId(detail.id)}
+            onDuplicate={() => setForm({ template: detail })}
             onDelete={() => void remove(detail)}
           />
         )}
@@ -842,9 +905,9 @@ export function WarrantyPage({ year, crumbs }: { year: JobYear; crumbs: Crumb[] 
           onStep={stepView}
         />
       )}
-      {form && <WarrantyForm year={year} record={form.record} onClose={() => setForm(null)} onSaved={afterChange} />}
+      {form && <WarrantyForm year={year} record={form.record} template={form.template} onClose={() => setForm(null)} onSaved={afterChange} />}
       {importing && (
-        <BulkImportWizard target="WARRANTY" jobYearId={year.id} scopeLabel={`Warranty ${year.yearLabel}`} usedStt={noStt} onClose={() => setImporting(false)} onDone={afterChange} />
+        <BulkImportWizard target="WARRANTY" jobYearId={year.id} scopeLabel={`Warranty ${year.yearLabel}`} usedStt={usedStt} onClose={() => setImporting(false)} onDone={afterChange} />
       )}
     </>
   );

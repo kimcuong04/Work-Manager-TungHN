@@ -1,5 +1,5 @@
 import { addDays, diffDays } from '../../shared/dates';
-import type { CalendarColor, CalendarEvent, CalendarEventKind } from '../../shared/types';
+import type { CalendarColor, CalendarEvent, CalendarEventKind, CalendarFeedItem, CalendarSource } from '../../shared/types';
 import type { ProjectView } from './projects';
 
 export type CalView = 'day' | 'week' | 'month' | 'agenda';
@@ -11,11 +11,16 @@ export const WEEKDAY_LONG = ['Thứ Hai', 'Thứ Ba', 'Thứ Tư', 'Thứ Năm',
 export const AGENDA_DAYS = 60;
 
 export const LAYER_LABEL: Record<LayerKey, string> = {
-  PROJECT_START: 'Bắt đầu dự án',
-  PROJECT_UPDATE: 'Cập nhật dự án',
+  PROJECT_START: 'Bắt đầu',
+  PROJECT_UPDATE: 'Cập nhật',
   CUSTOM: 'Sự kiện khác',
-  DUE: 'Hạn chót dự án',
+  DUE: 'Hạn chót',
 };
+
+export const SOURCES: CalendarSource[] = ['MAIN', 'FREELANCE', 'EXPERIENCE'];
+export const SOURCE_LABEL: Record<CalendarSource, string> = { MAIN: 'Job Chính', FREELANCE: 'Job Freelance', EXPERIENCE: 'Kinh nghiệm' };
+/** Job Chính giữ màu theo loại (Bắt đầu/Cập nhật/Hạn chót); Freelance và Kinh nghiệm có màu riêng để dễ phân biệt. */
+export const SOURCE_COLOR: Record<Exclude<CalendarSource, 'MAIN'>, CalendarColor> = { FREELANCE: 'teal', EXPERIENCE: 'amber' };
 export const LAYER_COLOR: Record<LayerKey, CalendarColor | 'due'> = {
   PROJECT_START: 'sage',
   PROJECT_UPDATE: 'blue',
@@ -105,8 +110,11 @@ export interface CalItem {
   title: string;
   color: CalendarColor | 'due';
   layer: LayerKey;
+  /** null = sự kiện tự tạo không liên kết dự án (luôn hiện, chỉ lọc theo loại). */
+  source: CalendarSource | null;
   event?: CalendarEvent;
   project?: ProjectView;
+  feed?: CalendarFeedItem;
 }
 
 export function eventItem(e: CalendarEvent): CalItem {
@@ -118,13 +126,18 @@ export function eventItem(e: CalendarEvent): CalItem {
     title: e.title,
     color: e.color ?? LAYER_COLOR[e.kind],
     layer: e.kind,
+    source: e.kind !== 'CUSTOM' || e.projectId ? 'MAIN' : null,
     event: e,
   };
 }
 
+export function feedItem(f: CalendarFeedItem): CalItem {
+  return { key: f.key, date: f.date, startTime: null, endTime: null, title: f.title, color: SOURCE_COLOR[f.source], layer: f.kind, source: f.source, feed: f };
+}
+
 /** Chỉ gọi cho dự án có ngày tới hạn. */
 export function dueItem(p: ProjectView & { dueDate: string }): CalItem {
-  return { key: `due:${p.id}`, date: p.dueDate, startTime: null, endTime: null, title: p.label, color: 'due', layer: 'DUE', project: p };
+  return { key: `due:${p.id}`, date: p.dueDate, startTime: null, endTime: null, title: p.label, color: 'due', layer: 'DUE', source: 'MAIN', project: p };
 }
 
 /** Sắp xếp trong ngày: mục cả ngày trước, rồi theo giờ bắt đầu. */

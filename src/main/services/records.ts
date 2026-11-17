@@ -66,6 +66,7 @@ LEFT JOIN si_partners si ON si.id = w.si_id`;
 function mapWarranty(r: Record<string, any>, images: ImageRef[]): WarrantyRecord {
   return {
     id: r.id,
+    stt: r.stt,
     jobYearId: r.job_year_id,
     jobType: r.job_type,
     yearLabel: r.year_label,
@@ -93,7 +94,7 @@ function mapWarranty(r: Record<string, any>, images: ImageRef[]): WarrantyRecord
 }
 
 export function listWarranty(ctx: Ctx, jobYearId: string): WarrantyRecord[] {
-  const rows = ctx.db.all<Record<string, any>>(`${SELECT_WARRANTY} WHERE w.job_year_id = ? ORDER BY w.received_date DESC, w.created_at DESC`, [jobYearId]);
+  const rows = ctx.db.all<Record<string, any>>(`${SELECT_WARRANTY} WHERE w.job_year_id = ? ORDER BY w.stt DESC`, [jobYearId]);
   const imgs = loadImages(ctx, WARRANTY_IMG, rows.map((r) => r.id));
   return rows.map((r) => mapWarranty(r, imgs.get(r.id) ?? []));
 }
@@ -102,6 +103,27 @@ function getWarranty(ctx: Ctx, id: string): WarrantyRecord {
   const r = ctx.db.get<Record<string, any>>(`${SELECT_WARRANTY} WHERE w.id = ?`, [id]);
   if (!r) throw new AppError('Không tìm thấy Warranty Record.');
   return mapWarranty(r, loadImages(ctx, WARRANTY_IMG, [id]).get(id) ?? []);
+}
+
+export function nextWarrantyStt(ctx: Ctx, jobYearId: string): number {
+  return (ctx.db.scalar<number>('SELECT COALESCE(MAX(stt), 0) FROM warranty_records WHERE job_year_id = ?', [jobYearId]) ?? 0) + 1;
+}
+
+/** STT duy nhất trong năm: bỏ trống (undefined) thì giữ STT cũ khi sửa cùng năm, hoặc lấy STT lớn nhất + 1. */
+function resolveWarrantyStt(ctx: Ctx, input: WarrantyInput, currentId?: string): number {
+  let stt = input.stt ?? undefined;
+  if (stt === undefined && currentId) {
+    const cur = ctx.db.get<{ stt: number; job_year_id: string }>('SELECT stt, job_year_id FROM warranty_records WHERE id = ?', [currentId]);
+    if (cur && cur.job_year_id === input.jobYearId) stt = cur.stt;
+  }
+  if (stt === undefined) return nextWarrantyStt(ctx, input.jobYearId);
+  const dup = ctx.db.get<{ model: string | null; case_number: string | null }>(
+    'SELECT model, case_number FROM warranty_records WHERE job_year_id = ? AND stt = ? AND id <> ?',
+    [input.jobYearId, stt, currentId ?? ''],
+  );
+  if (dup)
+    throw new AppError(`STT ${stt} đã dùng cho bản ghi "${dup.model || dup.case_number || 'khác'}" trong năm này. Hãy chọn STT khác (gợi ý: ${nextWarrantyStt(ctx, input.jobYearId)}).`);
+  return stt;
 }
 
 function checkWarranty(ctx: Ctx, input: WarrantyInput) {
@@ -118,15 +140,21 @@ const t = (s: string) => s.replace(/\r\n/g, '\n').trim();
 
 export function createWarranty(ctx: Ctx, input: WarrantyInput): WarrantyRecord {
   checkWarranty(ctx, input);
+  const stt = resolveWarrantyStt(ctx, input);
   const id = randomUUID();
   const stamp = now();
-  const pwd = input.password ? ctx.platform.encrypt(input.password) : null;
+  // Duplicate: chép mật khẩu đã mã hóa của bản gốc, không cần giải mã.
+  const copied =
+    input.password === undefined && input.copyPasswordFrom
+      ? ctx.db.scalar<string | null>('SELECT password_encrypted FROM warranty_records WHERE id = ?', [input.copyPasswordFrom]) ?? null
+      : null;
+  const pwd = input.password ? ctx.platform.encrypt(input.password) : copied;
   ctx.db.tx(() => {
     ctx.db.run(
-      `INSERT INTO warranty_records (id, job_year_id, model, brand_id, ip_address, username, password_encrypted, mac_address,
+      `INSERT INTO warranty_records (id, stt, job_year_id, model, brand_id, ip_address, username, password_encrypted, mac_address,
         serial_number, received_date, tested_date, customer_report, inspection, result, resolution, case_number, created_at, updated_at)
-       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
-      [id, input.jobYearId, t(input.model), input.brandId, t(input.ipAddress), t(input.username), pwd, t(input.macAddress),
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+      [id, stt, input.jobYearId, t(input.model), input.brandId, t(input.ipAddress), t(input.username), pwd, t(input.macAddress),
         t(input.serialNumber), input.receivedDate, input.testedDate, t(input.customerReport), t(input.inspection), t(input.result),
         t(input.resolution), t(input.caseNumber), stamp, stamp],
     );
@@ -139,8 +167,10 @@ export function createWarranty(ctx: Ctx, input: WarrantyInput): WarrantyRecord {
 export function updateWarranty(ctx: Ctx, id: string, input: WarrantyInput): WarrantyRecord {
   getWarranty(ctx, id);
   checkWarranty(ctx, input);
+  const stt = resolveWarrantyStt(ctx, input, id);
   let removed: string[] = [];
   ctx.db.tx(() => {
+    ctx.db.run('UPDATE warranty_records SET stt = ? WHERE id = ?', [stt, id]);
     ctx.db.run(
       `UPDATE warranty_records SET job_year_id=?, model=?, brand_id=?, ip_address=?, username=?, mac_address=?, serial_number=?,
         received_date=?, tested_date=?, customer_report=?, inspection=?, result=?, resolution=?, case_number=?, updated_at=? WHERE id=?`,

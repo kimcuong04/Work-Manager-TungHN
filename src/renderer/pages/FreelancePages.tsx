@@ -64,11 +64,11 @@ export function FreelanceForm({ job, onClose, onSaved }: { job?: FreelanceJob; o
   const isEdit = !!job;
   const [initial] = useState<FreelanceInput>(() =>
     job
-      ? { stt: job.stt, projectName: job.projectName, hirer: job.hirer, startDate: job.startDate, statusId: job.statusId }
+      ? { stt: job.stt, projectName: job.projectName, hirerId: job.hirerId, startDate: job.startDate, statusId: job.statusId }
       : {
           stt: Math.max(0, ...freelance.map((j) => j.stt)) + 1,
           projectName: '',
-          hirer: '',
+          hirerId: null,
           startDate: today,
           statusId: masters.freelanceStatuses.find((s) => s.isActive)?.id ?? null,
         },
@@ -99,7 +99,6 @@ export function FreelanceForm({ job, onClose, onSaved }: { job?: FreelanceJob; o
   const set = <K extends keyof FreelanceInput>(k: K, v: FreelanceInput[K]) => setForm((f) => ({ ...f, [k]: v }));
   const noteChanged = noteInit !== null && sanitizeNoteHtml(noteDraft) !== sanitizeNoteHtml(noteInit);
   const dirty = JSON.stringify(form) !== JSON.stringify(initial) || noteChanged;
-  const hirers = useMemo(() => [...new Set(freelance.map((j) => j.hirer).filter(Boolean))].sort(compareVi), [freelance]);
 
   const close = async () => {
     if (dirty && !(await confirm({ title: 'Bỏ thay đổi?', message: 'Form có thay đổi chưa lưu. Đóng và bỏ các thay đổi này?', confirmText: 'Bỏ thay đổi', danger: true })))
@@ -173,13 +172,26 @@ export function FreelanceForm({ job, onClose, onSaved }: { job?: FreelanceJob; o
             </Field>
           </div>
           <div className="grid-3" style={{ marginTop: 12 }}>
-            <Field label="Bên thuê" error={show('hirer')} htmlFor="fl-hirer">
-              <input id="fl-hirer" className="input" list="fl-hirers" value={form.hirer} onChange={(e) => set('hirer', e.target.value)} placeholder="Không bắt buộc" />
-              <datalist id="fl-hirers">
-                {hirers.map((h) => (
-                  <option key={h} value={h} />
-                ))}
-              </datalist>
+            <Field label="Bên thuê" htmlFor="fl-hirer">
+              <SearchableSelect
+                id="fl-hirer"
+                options={masters.freelanceHirers.map((m) => ({ id: m.id, name: m.name, inactive: !m.isActive }))}
+                value={form.hirerId}
+                onChange={(id) => set('hirerId', id)}
+                onCreate={async (name) => {
+                  try {
+                    const item = await api.createMaster('freelanceHirers', name);
+                    await refresh('masters');
+                    toast('success', `Đã thêm Bên thuê "${item.name}" vào danh mục.`);
+                    return item.id;
+                  } catch (e) {
+                    toastError(e);
+                    return null;
+                  }
+                }}
+                createLabel="Thêm Bên thuê"
+                placeholder="Không bắt buộc"
+              />
             </Field>
             <Field label="Ngày bắt đầu" error={show('startDate')}>
               <DateInput value={form.startDate} onChange={(v) => set('startDate', v)} invalid={!!show('startDate')} clearable />
@@ -231,9 +243,10 @@ const SORT_COLS: { key: SortKey; label: string }[] = [
 interface FreelanceFilter {
   q: string;
   statuses: string[];
+  hirers?: string[];
   years: string[];
 }
-const EMPTY: FreelanceFilter = { q: '', statuses: [], years: [] };
+const EMPTY: FreelanceFilter = { q: '', statuses: [], hirers: [], years: [] };
 
 export async function confirmDeleteFreelance(job: FreelanceJob, confirm: ReturnType<typeof useUi>['confirm']): Promise<boolean> {
   return confirm({
@@ -274,6 +287,7 @@ export function FreelanceListPage() {
       .filter(
         ({ j, hay }) =>
           (!filter.statuses.length || (j.statusId !== null && filter.statuses.includes(j.statusId))) &&
+          (!filter.hirers?.length || (j.hirerId !== null && filter.hirers.includes(j.hirerId))) &&
           (!filter.years.length || (!!j.startDate && filter.years.includes(j.startDate.slice(0, 4)))) &&
           matchesQuery(nq, hay),
       )
@@ -323,7 +337,7 @@ export function FreelanceListPage() {
     }
   };
 
-  const anyFilter = !!filter.q.trim() || filter.statuses.length > 0 || filter.years.length > 0;
+  const anyFilter = !!filter.q.trim() || filter.statuses.length > 0 || (filter.hirers?.length ?? 0) > 0 || filter.years.length > 0;
   const usedStt = useMemo(() => new Set(freelance.map((j) => j.stt)), [freelance]);
   const actions = (
     <>
@@ -352,6 +366,12 @@ export function FreelanceListPage() {
       <div className="toolbar">
         <SearchInput value={filter.q} onChange={(q) => setFilter({ ...filter, q })} placeholder="Tìm STT, tên dự án, bên thuê, ghi chú…" width={320} />
         <MultiSelect label="Tình trạng" options={masters.freelanceStatuses.map((m) => ({ id: m.id, name: m.name, inactive: !m.isActive }))} value={filter.statuses} onChange={(statuses) => setFilter({ ...filter, statuses })} />
+        <MultiSelect
+          label="Bên thuê"
+          options={masters.freelanceHirers.map((m) => ({ id: m.id, name: m.name, inactive: !m.isActive }))}
+          value={filter.hirers ?? []}
+          onChange={(hirers) => setFilter({ ...filter, hirers })}
+        />
         <MultiSelect label="Năm" options={yearOpts} value={filter.years} onChange={(years) => setFilter({ ...filter, years })} />
         {anyFilter && (
           <button className="btn ghost sm" onClick={() => setFilter(EMPTY)}>

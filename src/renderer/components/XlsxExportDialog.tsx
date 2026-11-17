@@ -9,7 +9,7 @@ export interface ExportColumn<T> {
   label: string;
   /** Với cột `date`: trả về ngày ISO (YYYY-MM-DD); file xuất ghi thành ô ngày Excel dạng mm/dd/yyyy. */
   value: (row: T) => string | number | null;
-  type?: 'date';
+  type?: 'date' | 'multiline';
 }
 
 /** Chọn cột rồi xuất .xlsx (mặc định chọn tất cả; không đổi gì thì bấm Xuất luôn). */
@@ -40,6 +40,7 @@ export function XlsxExportDialog<T>({
         sheetName,
         rows: [chosen.map((c) => c.label), ...rows.map((r) => chosen.map((c) => c.value(r)))],
         dateColumns: chosen.flatMap((c, i) => (c.type === 'date' ? [i] : [])),
+        wrapColumns: chosen.flatMap((c, i) => (c.type === 'multiline' ? [i] : [])),
       });
       if (saved) {
         toast('success', `Đã xuất ${rows.length} dòng ra ${saved}`);

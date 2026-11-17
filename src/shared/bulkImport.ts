@@ -92,6 +92,7 @@ export const BULK_FIELDS: Record<BulkTarget, BulkField[]> = {
   PRE_SALES: PROJECT_FIELDS,
   POST_SALES: PROJECT_FIELDS,
   WARRANTY: [
+    STT,
     {
       key: 'caseNumber',
       label: 'Case no',

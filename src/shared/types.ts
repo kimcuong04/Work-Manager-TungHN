@@ -4,8 +4,8 @@ export type WorkCategory = ProjectCategory | 'WARRANTY';
 export type DeadlineStatus = 'URGENT' | 'ATTENTION' | 'NEW' | 'COMPLETED';
 export type ActiveStatus = Exclude<DeadlineStatus, 'COMPLETED'>;
 export type Theme = 'light' | 'dark';
-export type MasterKind = 'clients' | 'brands' | 'salespersons' | 'siPartners' | 'departments' | 'freelanceStatuses';
-export const MASTER_KINDS: MasterKind[] = ['clients', 'siPartners', 'brands', 'salespersons', 'departments', 'freelanceStatuses'];
+export type MasterKind = 'clients' | 'brands' | 'salespersons' | 'siPartners' | 'departments' | 'freelanceStatuses' | 'freelanceHirers';
+export const MASTER_KINDS: MasterKind[] = ['clients', 'siPartners', 'brands', 'salespersons', 'departments', 'freelanceStatuses', 'freelanceHirers'];
 /** Danh mục theo phân loại trong Settings › Master Data: Job Freelance quản lý riêng, không dùng chung với Job Chính. */
 export type MasterGroup = 'MAIN' | 'FREELANCE';
 export const MASTER_GROUP: Record<MasterKind, MasterGroup> = {
@@ -15,6 +15,7 @@ export const MASTER_GROUP: Record<MasterKind, MasterGroup> = {
   salespersons: 'MAIN',
   departments: 'MAIN',
   freelanceStatuses: 'FREELANCE',
+  freelanceHirers: 'FREELANCE',
 };
 /** Danh mục sắp xếp theo thứ tự người dùng chọn (lên/xuống) thay vì theo tên. */
 export const ORDERED_MASTER_KINDS: MasterKind[] = ['freelanceStatuses'];
@@ -39,6 +40,7 @@ export const MASTER_LABEL: Record<MasterKind, string> = {
   siPartners: 'Tên SI',
   departments: 'Phòng ban',
   freelanceStatuses: 'Tình trạng',
+  freelanceHirers: 'Bên thuê',
 };
 
 export const LINK_FILE_EXTENSIONS = ['dwg', 'txt'];
@@ -126,6 +128,8 @@ export interface Project {
   salespersonDepartment: string | null;
   /** Thư mục của dự án trên máy (tự tạo/đổi tên theo STT, tên, SI, Hãng). */
   folderPath: string | null;
+  /** false = thư mục có sẵn do người dùng liên kết khi tạo dự án: không tự đổi tên/chuyển theo thông tin dự án. */
+  folderAuto: boolean;
   salespersonId: string | null;
   salespersonName: string | null;
   note: string;
@@ -153,6 +157,8 @@ export interface ProjectInput {
   brandIds?: string[];
   /** Thư mục cha chứa thư mục dự án; undefined = giữ nguyên (khi sửa) / không tạo thư mục. */
   folderParent?: string | null;
+  /** Chỉ khi tạo mới: liên kết thư mục có sẵn (không tạo thư mục mới, không tự đổi tên). */
+  folderLink?: string | null;
   salespersonId: string | null;
   note: string;
   filePath: string | null;
@@ -194,7 +200,9 @@ export interface FreelanceJob {
   id: string;
   stt: number;
   projectName: string;
-  /** Bên thuê (nhập tự do). */
+  /** Bên thuê (danh mục riêng của Job Freelance). */
+  hirerId: string | null;
+  /** Tên Bên thuê để hiển thị ('' nếu chưa có). */
   hirer: string;
   startDate: string | null;
   statusId: string | null;
@@ -209,7 +217,7 @@ export interface FreelanceInput {
   /** undefined = tự lấy STT lớn nhất + 1; null = người dùng bỏ trống (báo lỗi). */
   stt?: number | null;
   projectName: string;
-  hirer: string;
+  hirerId: string | null;
   startDate: string | null;
   statusId: string | null;
 }
@@ -377,6 +385,8 @@ export interface ImageRef {
 
 export interface WarrantyRecord {
   id: string;
+  /** Số thứ tự trong năm (duy nhất trong năm đó). */
+  stt: number;
   jobYearId: string;
   jobType: JobType;
   yearLabel: string;
@@ -403,6 +413,8 @@ export interface WarrantyRecord {
 }
 
 export interface WarrantyInput {
+  /** undefined = tự lấy STT lớn nhất trong năm + 1; null = người dùng bỏ trống (báo lỗi). */
+  stt?: number | null;
   jobYearId: string;
   model: string;
   brandId: string | null;
@@ -411,6 +423,8 @@ export interface WarrantyInput {
   username: string;
   /** undefined = giữ nguyên mật khẩu cũ, '' = xóa mật khẩu. */
   password?: string;
+  /** Duplicate: dùng lại mật khẩu (đã mã hóa) của bản ghi này khi `password` để undefined. */
+  copyPasswordFrom?: string;
   macAddress: string;
   serialNumber: string;
   receivedDate: string | null;
@@ -515,6 +529,26 @@ export interface CalendarEventInput {
   projectId: string | null;
 }
 
+/** Nguồn hiển thị trên Calendar. Sự kiện tự tạo không liên kết dự án không thuộc nguồn nào (luôn hiện). */
+export type CalendarSource = 'MAIN' | 'FREELANCE' | 'EXPERIENCE';
+
+/**
+ * Mục Calendar sinh trực tiếp từ dữ liệu Job Freelance / Kinh nghiệm (không lưu riêng nên luôn khớp khi sửa/xóa):
+ * PROJECT_START = ngày bắt đầu job / ngày của kinh nghiệm; PROJECT_UPDATE = ngày có ghi chú / ngày sửa.
+ */
+export interface CalendarFeedItem {
+  key: string;
+  source: 'FREELANCE' | 'EXPERIENCE';
+  kind: 'PROJECT_START' | 'PROJECT_UPDATE';
+  date: string;
+  title: string;
+  subtitle: string;
+  note: string;
+  /** Id job Freelance / bản ghi Kinh nghiệm. */
+  targetId: string;
+  brandId?: string;
+}
+
 export interface CalendarQuery {
   from?: string;
   to?: string;
@@ -561,6 +595,15 @@ export interface XlsxExport {
   rows: (string | number | null)[][];
   /** Chỉ số các cột chứa ngày ISO (YYYY-MM-DD): ghi thành ô ngày của Excel, hiển thị mm/dd/yyyy. */
   dateColumns?: number[];
+  /** Chỉ số các cột nội dung nhiều dòng: bật "Wrap text" + căn trên để Excel hiện đủ các dòng. */
+  wrapColumns?: number[];
+}
+
+/** Ghi chú theo ngày dạng chữ thuần (đã bỏ ảnh/định dạng), dùng khi xuất file. */
+export interface NoteTextRow {
+  projectId: string;
+  noteDate: string;
+  text: string;
 }
 
 export interface BackupInfo {

@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import { randomUUID } from 'node:crypto';
 import { formatDate, isValidISODate } from '../../shared/dates';
 import { NOTE_HTML_MAX, isNoteEmpty, noteHtmlToText, noteImageKeys, noteSnippet, sanitizeNoteHtml } from '../../shared/noteHtml';
-import type { DayNote, FreelanceNote, ProjectNote, ProjectNoteInput } from '../../shared/types';
+import type { DayNote, FreelanceNote, NoteTextRow, ProjectNote, ProjectNoteInput } from '../../shared/types';
 import { AppError, now, todayOf, type Ctx } from '../context';
 import { assertStorageKey, deleteImageFiles, imageExists, imagePath } from '../integration/images';
 import { addProjectStartEvent, addProjectUpdateEvent, hasProjectStartEvent } from './calendar';
@@ -57,6 +57,17 @@ function mapFreelanceNote(r: Record<string, any>): FreelanceNote {
 
 function listNotes(ctx: Ctx, store: NoteStore, ownerId: string): Record<string, any>[] {
   return ctx.db.all<Record<string, any>>(`SELECT * FROM ${store.notes} WHERE ${store.owner} = ? ORDER BY note_date DESC`, [ownerId]);
+}
+
+/** Ghi chú (chữ thuần) của mọi dự án trong khoảng ngày, cũ trước — cho cột "Ghi chú trong tháng" khi xuất xlsx. */
+export function listProjectNotesInRange(ctx: Ctx, from: string, to: string): NoteTextRow[] {
+  if (!isValidISODate(from) || !isValidISODate(to)) throw new AppError('Khoảng ngày không hợp lệ.');
+  return ctx.db
+    .all<{ project_id: string; note_date: string; content_text: string }>(
+      'SELECT project_id, note_date, content_text FROM project_notes WHERE note_date >= ? AND note_date <= ? ORDER BY project_id, note_date',
+      [from, to],
+    )
+    .map((r) => ({ projectId: r.project_id, noteDate: r.note_date, text: r.content_text }));
 }
 
 export function listProjectNotes(ctx: Ctx, projectId: string): ProjectNote[] {

@@ -58,7 +58,6 @@ export function validateFreelanceInput(input: FreelanceInput): FieldErrors {
   const name = cleanName(input.projectName ?? '');
   if (!name) e.projectName = 'Bắt buộc nhập Tên dự án.';
   else if (name.length > LIMITS.projectName) e.projectName = `Tối đa ${LIMITS.projectName} ký tự.`;
-  checkLen(e, 'hirer', cleanName(input.hirer ?? ''), LIMITS.projectName);
   if (input.startDate && !isValidISODate(input.startDate)) e.startDate = 'Ngày không hợp lệ (dd/mm/yyyy).';
   return e;
 }
@@ -123,6 +122,8 @@ function checkLen(e: FieldErrors, key: string, value: string, max: number) {
 
 export function validateWarrantyInput(input: WarrantyInput): FieldErrors {
   const e: FieldErrors = {};
+  if (input.stt === null) e.stt = 'Bắt buộc nhập STT.';
+  else if (input.stt !== undefined && !(Number.isInteger(input.stt) && input.stt >= 1 && input.stt <= 999999)) e.stt = 'STT phải là số nguyên dương.';
   if (!input.jobYearId) e.jobYearId = 'Thiếu năm.';
   if (!input.model.trim() && !input.caseNumber.trim()) e.model = 'Nhập ít nhất Model hoặc Case no.';
   if (input.receivedDate && !isValidISODate(input.receivedDate)) e.receivedDate = 'Ngày không hợp lệ.';

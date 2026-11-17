@@ -15,8 +15,8 @@ import type {
 import { textToNoteHtml } from '../../shared/noteHtml';
 import { LIMITS, fileExtension, hasErrors, validateProjectInput } from '../../shared/validation';
 import { AppError, now, str, strOrNull, todayOf, type Ctx } from '../context';
-import { ensureProjectFolder, moveProjectFolder, removeIfEmpty, undoFolderMove } from '../integration/folders';
-import { addProjectStartEvent, addProjectUpdateEvent, describeProjectChanges, hasProjectStartEvent, removeProjectStartEvents, syncProjectStartEvent } from './calendar';
+import { assertDirectory, ensureProjectFolder, moveProjectFolder, removeIfEmpty, undoFolderMove } from '../integration/folders';
+import { addProjectStartEvent, addProjectUpdateEvent, describeProjectChanges, hasProjectStartEvent, removeProjectEvents, syncProjectStartEvent } from './calendar';
 import { getYear } from './master';
 import { deleteUnreferencedImages, noteCalendarLine, projectNoteImageKeys, writeNote, type NoteWrite } from './notes';
 
@@ -67,6 +67,7 @@ function mapProject(r: Record<string, any>, brands: NamedRef[]): Project {
     salespersonName: strOrNull(r.salesperson_name),
     salespersonDepartment: strOrNull(r.department_name),
     folderPath: strOrNull(r.folder_path),
+    folderAuto: r.folder_auto === undefined || r.folder_auto === null ? true : !!r.folder_auto,
     note: str(r.note),
     filePath: strOrNull(r.file_path),
     fileName: strOrNull(r.file_name),
@@ -91,8 +92,11 @@ export function getProject(ctx: Ctx, id: string): Project {
   return mapProject(r, brandsByProject(ctx, id).get(id) ?? []);
 }
 
-export function nextProjectStt(ctx: Ctx): number {
-  return (ctx.db.scalar<number>('SELECT COALESCE(MAX(stt), 0) FROM projects') ?? 0) + 1;
+/** STT đánh riêng cho từng danh sách (năm × Pre-sales/Post-sales): STT lớn nhất trong danh sách đó + 1. */
+export function nextProjectStt(ctx: Ctx, jobYearId: string, category: ProjectCategory): number {
+  return (
+    (ctx.db.scalar<number>('SELECT COALESCE(MAX(stt), 0) FROM projects WHERE job_year_id = ? AND work_category = ?', [jobYearId, category]) ?? 0) + 1
+  );
 }
 
 function exists(ctx: Ctx, table: string, id: string | null): boolean {
@@ -116,6 +120,7 @@ interface Normalized {
   fileExtension: string | null;
   priorityPoint: number;
   folderParent: string | null | undefined;
+  folderLink: string | null;
 }
 
 /** Chấp nhận cả dữ liệu từ client cũ (không có STT/SI/Hãng): STT tự cấp, SI/Hãng để trống. */
@@ -133,9 +138,19 @@ function normalizeInput(ctx: Ctx, input: ProjectInput, currentId?: string): Norm
   for (const b of brandIds) if (!exists(ctx, 'brands', b)) throw new AppError('Hãng không tồn tại.');
 
   let stt = input.stt ?? undefined;
-  if (stt === undefined) stt = currentId ? ctx.db.scalar<number>('SELECT stt FROM projects WHERE id = ?', [currentId]) : nextProjectStt(ctx);
-  const dup = ctx.db.get<{ project_name: string }>('SELECT project_name FROM projects WHERE stt = ? AND id <> ?', [stt, currentId ?? '']);
-  if (dup) throw new AppError(`STT ${stt} đã được dùng cho dự án "${dup.project_name}". Hãy chọn STT khác (gợi ý: ${nextProjectStt(ctx)}).`);
+  const cur = currentId ? ctx.db.get<{ stt: number; job_year_id: string; work_category: string }>('SELECT stt, job_year_id, work_category FROM projects WHERE id = ?', [currentId]) : null;
+  if (stt === undefined)
+    stt = cur && cur.job_year_id === input.jobYearId && cur.work_category === input.workCategory ? cur.stt : nextProjectStt(ctx, input.jobYearId, input.workCategory);
+  const dup = ctx.db.get<{ project_name: string }>('SELECT project_name FROM projects WHERE stt = ? AND job_year_id = ? AND work_category = ? AND id <> ?', [
+    stt,
+    input.jobYearId,
+    input.workCategory,
+    currentId ?? '',
+  ]);
+  if (dup)
+    throw new AppError(
+      `STT ${stt} đã được dùng cho dự án "${dup.project_name}" trong cùng danh sách. Hãy chọn STT khác (gợi ý: ${nextProjectStt(ctx, input.jobYearId, input.workCategory)}).`,
+    );
 
   let filePath = strOrNull(input.filePath);
   let fileName = strOrNull(input.fileName);
@@ -165,6 +180,7 @@ function normalizeInput(ctx: Ctx, input: ProjectInput, currentId?: string): Norm
     fileExtension: ext,
     priorityPoint: input.priorityPoint,
     folderParent: input.folderParent === undefined ? undefined : strOrNull(input.folderParent),
+    folderLink: strOrNull(input.folderLink),
   };
 }
 
@@ -208,7 +224,8 @@ export function createProject(ctx: Ctx, raw: ProjectInput, opts: ProjectSaveOpti
   const today = todayOf(ctx);
   const completed = !!p.dueDate && p.dueDate < today;
   const noteHtml = opts.noteHtml ?? (p.note.trim() ? textToNoteHtml(p.note) : undefined);
-  const folder = p.folderParent ? ensureProjectFolder(p.folderParent, folderNameOf(ctx, p)) : null;
+  if (p.folderLink) assertDirectory(p.folderLink);
+  const folder = p.folderLink ? null : p.folderParent ? ensureProjectFolder(p.folderParent, folderNameOf(ctx, p)) : null;
   try {
     ctx.db.tx(() => {
       ctx.db.run(
@@ -216,13 +233,14 @@ export function createProject(ctx: Ctx, raw: ProjectInput, opts: ProjectSaveOpti
           salesperson_id, note, file_path, file_name, file_extension, folder_path, priority_point,
           is_completed, completed_at, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,'',?,?,?,?,?,?,?,?,?)`,
         [id, p.stt, p.jobYearId, p.workCategory, p.receivedDate, p.dueDate, p.projectName, p.clientId, p.siId,
-          p.salespersonId, p.filePath, p.fileName, p.fileExtension, folder?.path ?? null, p.priorityPoint,
+          p.salespersonId, p.filePath, p.fileName, p.fileExtension, p.folderLink ?? folder?.path ?? null, p.priorityPoint,
           completed, completed ? stamp : null, stamp, stamp],
       );
+      if (p.folderLink) ctx.db.run('UPDATE projects SET folder_auto = 0 WHERE id = ?', [id]);
       writeBrands(ctx, id, p.brandIds);
       if (p.receivedDate) addProjectStartEvent(ctx, id, p.projectName, p.receivedDate);
       if (noteHtml !== undefined) writeNote(ctx, id, today, noteHtml);
-      if (p.folderParent) rememberRoot(ctx, p.folderParent);
+      if (p.folderParent && !p.folderLink) rememberRoot(ctx, p.folderParent);
     });
   } catch (e) {
     if (folder?.created) removeIfEmpty(folder.path);
@@ -247,7 +265,9 @@ export function updateProject(ctx: Ctx, id: string, raw: ProjectInput, opts: Pro
   let folderPath = before.folderPath;
   let notice: string | undefined;
   let undo: (() => void) | null = null;
-  if (before.folderPath) {
+  if (before.folderPath && !before.folderAuto) {
+    // Thư mục có sẵn do người dùng liên kết: giữ nguyên tên và vị trí.
+  } else if (before.folderPath) {
     const parent = p.folderParent ?? path.dirname(before.folderPath);
     const move = moveProjectFolder(before.folderPath, path.join(parent, name));
     folderPath = move.path;
@@ -298,6 +318,7 @@ export function expectedFolderName(ctx: Ctx, id: string): string {
 /** Tạo thư mục cho dự án chưa có (dự án cũ) hoặc đồng bộ lại tên thư mục (khi lần đổi tên trước bị chặn). */
 export function syncProjectFolder(ctx: Ctx, id: string, parent?: string | null): ProjectSaved {
   const p = getProject(ctx, id);
+  if (p.folderPath && !p.folderAuto) throw new AppError('Thư mục của dự án này là thư mục có sẵn được liên kết — ứng dụng không tự đổi tên.');
   const name = expectedFolderName(ctx, id);
   let result: { path: string; notice?: string };
   let undo: (() => void) | null = null;
@@ -326,8 +347,18 @@ export function syncProjectFolder(ctx: Ctx, id: string, parent?: string | null):
   return saved;
 }
 
+/** Liên kết thư mục có sẵn (không tạo/đổi tên gì trên ổ đĩa) hoặc bỏ liên kết (`dir` = null, thư mục vẫn giữ nguyên). */
+export function setProjectFolderLink(ctx: Ctx, id: string, dir: string | null): ProjectSaved {
+  getProject(ctx, id);
+  if (dir) assertDirectory(dir);
+  ctx.db.tx(() =>
+    ctx.db.run('UPDATE projects SET folder_path = ?, folder_auto = ?, updated_at = ? WHERE id = ?', [dir || null, dir ? 0 : 1, now(), id]),
+  );
+  return getProject(ctx, id);
+}
+
 function deleteProjectRow(ctx: Ctx, p: Project): void {
-  removeProjectStartEvents(ctx, p.id);
+  removeProjectEvents(ctx, p.id);
   ctx.db.run(
     `UPDATE experience_records SET project_text = COALESCE(NULLIF(project_text,''), ?), updated_at = ? WHERE project_id = ?`,
     [p.projectName, now(), p.id],
@@ -375,11 +406,15 @@ export function applyBoardChanges(ctx: Ctx, changes: { id: string; completed: bo
 }
 
 export function moveProject(ctx: Ctx, id: string, jobYearId: string, category: ProjectCategory): Project {
-  getProject(ctx, id);
   if (getYear(ctx, jobYearId).jobType !== 'MAIN') throw new AppError('Job Freelance không có Pre-sales / Post-sales.');
   if (category !== 'PRE_SALES' && category !== 'POST_SALES') throw new AppError('Nhóm đích không hợp lệ.');
+  const p = getProject(ctx, id);
+  if (p.jobYearId === jobYearId && p.workCategory === category) return p;
+  // STT đã có người dùng ở danh sách đích thì lấy số tiếp theo của danh sách đó.
+  const taken = ctx.db.scalar<number>('SELECT COUNT(*) FROM projects WHERE job_year_id = ? AND work_category = ? AND stt = ?', [jobYearId, category, p.stt]) > 0;
+  const stt = taken ? nextProjectStt(ctx, jobYearId, category) : p.stt;
   ctx.db.tx(() =>
-    ctx.db.run('UPDATE projects SET job_year_id = ?, work_category = ?, updated_at = ? WHERE id = ?', [jobYearId, category, now(), id]),
+    ctx.db.run('UPDATE projects SET job_year_id = ?, work_category = ?, stt = ?, updated_at = ? WHERE id = ?', [jobYearId, category, stt, now(), id]),
   );
   return getProject(ctx, id);
 }

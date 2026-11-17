@@ -1040,11 +1040,6 @@ a.btn {
 .pcard.completed {
   opacity: 0.78;
 }
-.pcard.completed .pcard-title {
-  text-decoration: line-through;
-  text-decoration-color: var(--text-faint);
-  text-decoration-thickness: 0.5px;
-}
 .pcard.pending {
   outline: 2px dashed var(--accent);
   outline-offset: 2px;
@@ -1681,9 +1676,7 @@ table.tbl {
   color: var(--text-muted);
 }
 .tbl tbody tr.row-done .pt-title {
-  text-decoration: line-through;
-  text-decoration-color: var(--text-faint);
-  text-decoration-thickness: 0.5px;
+  color: var(--text);
 }
 
 /* ---------- Danh sách + panel chi tiết cố định (Warranty, Experience, Kiến thức) ---------- */

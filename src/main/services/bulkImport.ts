@@ -27,6 +27,7 @@ const MASTER_FIELDS: Record<string, string> = {
   sale: 'Sale',
   eu: 'EU',
   status: 'Tình trạng',
+  hirer: 'Bên thuê',
 };
 
 /** Chạy trước các luật của form (độ dài, quan hệ ngày…) để dòng sai bị bỏ qua thay vì làm hỏng cả lần import. */
@@ -62,7 +63,7 @@ function formErrors(target: BulkTarget, v: Record<string, BulkValue>): string[] 
       : target === 'FREELANCE'
         ? validateFreelanceInput({
             projectName: text(v.projectName),
-            hirer: text(v.hirer),
+            hirerId: null,
             startDate: text(v.startDate) || null,
             statusId: null,
           })
@@ -106,8 +107,14 @@ export function bulkImport(ctx: Ctx, spec: BulkImportSpec): BulkImportResult {
     notices: [],
   };
 
+  // Warranty: STT duy nhất trong năm; dự án Job Chính: trong từng danh sách (năm × nhóm); Job Freelance: cả bảng.
   const usedStt = new Set<number>(
-    target === 'WARRANTY' ? [] : ctx.db.all<{ stt: number }>(`SELECT stt FROM ${isProject ? 'projects' : 'freelance_jobs'}`).map((r) => r.stt),
+    (target === 'WARRANTY'
+      ? ctx.db.all<{ stt: number }>('SELECT stt FROM warranty_records WHERE job_year_id = ?', [String(spec.jobYearId)])
+      : isProject
+        ? ctx.db.all<{ stt: number }>('SELECT stt FROM projects WHERE job_year_id = ? AND work_category = ?', [String(spec.jobYearId), target])
+        : ctx.db.all<{ stt: number }>('SELECT stt FROM freelance_jobs')
+    ).map((r) => r.stt),
   );
   const prepared: Prepared[] = [];
   const seen = new Map<number, number>();
@@ -125,7 +132,7 @@ export function bulkImport(ctx: Ctx, spec: BulkImportSpec): BulkImportResult {
     errors.push(...bulkRowRuleErrors(target, values));
     if (!errors.length) errors.push(...formErrors(target, values));
     const stt = typeof values.stt === 'number' ? values.stt : null;
-    if (stt !== null && target !== 'WARRANTY') {
+    if (stt !== null) {
       if (usedStt.has(stt)) errors.push(`STT ${stt} đã có trong hệ thống.`);
       else if (seen.has(stt)) errors.push(`STT ${stt} trùng với dòng ${seen.get(stt)}.`);
     }
@@ -136,7 +143,7 @@ export function bulkImport(ctx: Ctx, spec: BulkImportSpec): BulkImportResult {
     if (stt !== null) seen.set(stt, rowNumber);
     prepared.push({ rowNumber, values, stt });
   }
-  if (target !== 'WARRANTY') {
+  {
     const taken = new Set([...usedStt, ...seen.keys()]);
     let next = Math.max(0, ...taken) + 1;
     for (const p of prepared)
@@ -198,6 +205,7 @@ export function bulkImport(ctx: Ctx, spec: BulkImportSpec): BulkImportResult {
           if (saved.notice) result.notices.push(`Dòng ${p.rowNumber}: ${saved.notice}`);
         } else if (target === 'WARRANTY') {
           createWarranty(ctx, {
+            stt: p.stt ?? undefined,
             jobYearId: spec.jobYearId!,
             model: text(v.model),
             brandId: masterId('brands', splitNames(text(v.brand))[0] ?? ''),
@@ -222,7 +230,7 @@ export function bulkImport(ctx: Ctx, spec: BulkImportSpec): BulkImportResult {
             {
               stt: p.stt,
               projectName: text(v.projectName),
-              hirer: text(v.hirer),
+              hirerId: masterId('freelanceHirers', text(v.hirer)),
               startDate: text(v.startDate) || null,
               statusId: masterId('freelanceStatuses', text(v.status)),
             },

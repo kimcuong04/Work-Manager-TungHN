@@ -156,14 +156,14 @@ describe('Calendar gắn với dự án', () => {
     expect(kinds).toEqual(['PROJECT_START', 'PROJECT_UPDATE']);
   });
 
-  it('xóa dự án: bỏ sự kiện bắt đầu, giữ lịch sử cập nhật với tên dự án', () => {
+  it('xóa dự án: xóa luôn các mục Bắt đầu / Cập nhật của dự án trên Calendar, sự kiện tự tạo chỉ gỡ liên kết', () => {
     const p = projects.createProject(ctx, input());
     projects.updateProject(ctx, p.id, input({ priorityPoint: 1 }), { addToCalendar: true });
+    calendar.createCalendarEvent(ctx, { eventDate: '2026-11-20', startTime: null, endTime: null, title: 'Họp khách', note: '', color: null, projectId: p.id });
     projects.deleteProject(ctx, p.id);
     const left = calendar.listCalendarEvents(ctx);
     expect(left).toHaveLength(1);
-    expect(left[0]).toMatchObject({ kind: 'PROJECT_UPDATE', projectId: null, projectExists: false, projectName: 'Trung tâm thương mại A' });
-    expect(left[0].note).toContain('Priority: 3 → 1');
+    expect(left[0]).toMatchObject({ kind: 'CUSTOM', title: 'Họp khách', projectId: null });
   });
 });
 

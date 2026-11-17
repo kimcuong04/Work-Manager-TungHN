@@ -460,12 +460,15 @@ const MASTER_TABS: Record<MasterGroup, { kind: MasterKind; label: string }[]> = 
     { kind: 'brands', label: 'Hãng' },
     { kind: 'salespersons', label: 'Sale & Phòng ban' },
   ],
-  FREELANCE: [{ kind: 'freelanceStatuses', label: 'Tình trạng' }],
+  FREELANCE: [
+    { kind: 'freelanceStatuses', label: 'Tình trạng' },
+    { kind: 'freelanceHirers', label: 'Bên thuê' },
+  ],
 };
 
 const MASTER_GROUP_NOTE: Record<MasterGroup, string> = {
   MAIN: 'Danh mục của Job Chính: dự án Pre-sales / Post-sales (EU, Tên SI, Hãng, Sale), Warranty, Experience và Kiến thức. Đổi tên tự cập nhật mọi nơi (liên kết theo ID). Hãng đang được dùng chỉ có thể Deactivate.',
-  FREELANCE: 'Danh mục riêng của Job Freelance, không dùng chung với Job Chính dù trùng tên. Tình trạng hiển thị theo thứ tự ở đây — dùng nút lên/xuống để sắp xếp.',
+  FREELANCE: 'Danh mục riêng của Job Freelance (Tình trạng, Bên thuê), không dùng chung với Job Chính dù trùng tên. Tình trạng hiển thị theo thứ tự ở đây — dùng nút lên/xuống để sắp xếp.',
 };
 
 function MasterData() {

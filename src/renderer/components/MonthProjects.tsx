@@ -6,7 +6,9 @@ import { STATUS_LABEL, describeRemaining } from '../../shared/status';
 import { CATEGORY_LABEL } from '../../shared/types';
 import { useSessionState } from '../lib/persist';
 import { latestNote, type ProjectView } from '../lib/projects';
+import { api } from '../api';
 import { useAppData } from '../state/AppData';
+import { useUi } from '../state/ui';
 import { EmptyState, StatusBadge } from './common';
 import { XlsxExportDialog, type ExportColumn } from './XlsxExportDialog';
 
@@ -43,6 +45,23 @@ const EXPORT_COLUMNS: ExportColumn<ProjectView>[] = [
   { key: 'note', label: 'Ghi chú gần nhất', value: (p) => toUsDatePrefix(latestNote(p)) },
 ];
 
+/**
+ * Ghi chú theo ngày trong tháng gộp vào một ô (chỉ chữ, bỏ ảnh/định dạng):
+ * • Ngày dd/mm/yyyy
+ *     - từng dòng ghi chú
+ */
+export function monthNotesCell(rows: { noteDate: string; text: string }[]): string {
+  return rows
+    .map((n) => {
+      const lines = n.text
+        .split(/\r?\n/)
+        .map((l) => l.trim())
+        .filter(Boolean);
+      return [`• Ngày ${formatDate(n.noteDate)}`, ...lines.map((l) => `    - ${l}`)].join('\n');
+    })
+    .join('\n');
+}
+
 /** Dashboard: tóm tắt các dự án có ngày bắt đầu và/hoặc ngày tới hạn rơi vào tháng đang xem; xuất được ra .xlsx. */
 export function MonthProjects({ scoped }: { scoped: ProjectView[] }) {
   const { today } = useAppData();
@@ -51,6 +70,8 @@ export function MonthProjects({ scoped }: { scoped: ProjectView[] }) {
   const [ym, setYm] = useSessionState('dash-month', thisMonth);
   const [basis, setBasis] = useSessionState<Basis>('dash-month-basis', 'any');
   const [exporting, setExporting] = useState(false);
+  const [monthNotes, setMonthNotes] = useState<Map<string, string> | null>(null);
+  const { toastError } = useUi();
   const [y, m] = ym.split('-').map(Number);
   const { from, to } = monthRange(y, m);
   const inMonth = (d: string | null) => !!d && d >= from && d <= to;
@@ -63,6 +84,18 @@ export function MonthProjects({ scoped }: { scoped: ProjectView[] }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [scoped, basis, from, to],
   );
+  // Ghi chú theo ngày của đúng tháng đang xem, gộp sẵn thành nội dung một ô cho từng dự án.
+  const openExport = async () => {
+    try {
+      const rows = await api.listProjectNotesInRange(from, to);
+      const byProject = new Map<string, { noteDate: string; text: string }[]>();
+      for (const r of rows) byProject.set(r.projectId, [...(byProject.get(r.projectId) ?? []), r]);
+      setMonthNotes(new Map([...byProject].map(([id, list]) => [id, monthNotesCell(list)])));
+      setExporting(true);
+    } catch (e) {
+      toastError(e);
+    }
+  };
   const received = list.filter((p) => inMonth(p.receivedDate)).length;
   const due = list.filter((p) => inMonth(p.dueDate)).length;
   const done = list.filter((p) => p.isCompleted).length;
@@ -95,7 +128,7 @@ export function MonthProjects({ scoped }: { scoped: ProjectView[] }) {
               </option>
             ))}
           </select>
-          <button className="btn sm" disabled={!list.length} onClick={() => setExporting(true)} title="Xuất danh sách ra file Excel">
+          <button className="btn sm" disabled={!list.length} onClick={() => void openExport()} title="Xuất danh sách ra file Excel">
             <FileDown size={14} /> Xuất xlsx
           </button>
         </span>
@@ -157,14 +190,20 @@ export function MonthProjects({ scoped }: { scoped: ProjectView[] }) {
           </div>
         </>
       )}
-      {exporting && (
+      {exporting && monthNotes && (
         <XlsxExportDialog
           title={`Xuất dự án tháng ${m}/${y}`}
-          columns={EXPORT_COLUMNS}
+          columns={[
+            ...EXPORT_COLUMNS,
+            { key: 'monthNotes', label: `Ghi chú trong tháng ${m}/${y}`, type: 'multiline', value: (p) => monthNotes.get(p.id) ?? '' },
+          ]}
           rows={list}
           fileName={`Du-an-thang-${String(m).padStart(2, '0')}-${y}`}
           sheetName={`Tháng ${m}-${y}`}
-          onClose={() => setExporting(false)}
+          onClose={() => {
+            setExporting(false);
+            setMonthNotes(null);
+          }}
         />
       )}
     </section>

@@ -118,7 +118,7 @@ export function globalSearch(ctx: Ctx, q: SearchQuery): SearchHit[] {
 
   if (q.mode === 'name') {
     const jobs = ctx.db.all<{ id: string; stt: number; project_name: string; hirer: string | null; start_date: string | null; status_name: string | null }>(
-      'SELECT f.id, f.stt, f.project_name, f.hirer, f.start_date, s.name AS status_name FROM freelance_jobs f LEFT JOIN freelance_statuses s ON s.id = f.status_id',
+      'SELECT f.id, f.stt, f.project_name, h.name AS hirer, f.start_date, s.name AS status_name FROM freelance_jobs f LEFT JOIN freelance_statuses s ON s.id = f.status_id LEFT JOIN freelance_hirers h ON h.id = f.hirer_id',
     );
     for (const r of jobs) {
       if (!inDate(r.start_date) || !hit([String(r.stt), r.project_name])) continue;

@@ -118,11 +118,11 @@ describe('Nâng cấp dữ liệu v1.3 → v1.4 (tạo lại bảng projects)', 
 
 describe('STT và các trường không bắt buộc', () => {
   it('STT tự +1 từ STT lớn nhất; trùng STT bị chặn; chỉ cần STT + tên', () => {
-    expect(projects.nextProjectStt(ctx)).toBe(1);
+    expect(projects.nextProjectStt(ctx, year, 'PRE_SALES')).toBe(1);
     const a = projects.createProject(ctx, input());
     const b = projects.createProject(ctx, input({ stt: 10, projectName: 'B' }));
     expect([a.stt, b.stt]).toEqual([1, 10]);
-    expect(projects.nextProjectStt(ctx)).toBe(11);
+    expect(projects.nextProjectStt(ctx, year, 'PRE_SALES')).toBe(11);
     expect(() => projects.createProject(ctx, input({ stt: 10 }))).toThrow(/STT 10 đã được dùng/);
     expect(() => projects.createProject(ctx, input({ stt: null }))).toThrow(/Bắt buộc nhập STT/);
     const bare = projects.createProject(ctx, input({ projectName: 'Chỉ có tên', receivedDate: null, dueDate: null }));

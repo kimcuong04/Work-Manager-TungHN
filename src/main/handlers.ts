@@ -103,6 +103,8 @@ export function createHandlers(ctx: Ctx, desktop: Desktop): Handlers {
     listProjects: () => projects.listProjects(ctx),
     createProject: (input, opts) => {
       assertFolderParent(input?.folderParent);
+      // Thư mục có sẵn chỉ liên kết được khi người dùng vừa chọn nó qua hộp thoại.
+      if (input?.folderLink && !pickedDirs.has(dirKey(input.folderLink))) throw new AppError('Hãy chọn lại thư mục có sẵn của dự án.');
       return projects.createProject(ctx, input, opts ?? {});
     },
     updateProject: (id, input, opts) => {
@@ -143,7 +145,11 @@ export function createHandlers(ctx: Ctx, desktop: Desktop): Handlers {
       }
       return { deleted: projects.deleteProjects(ctx, ok), failed };
     },
-    nextProjectStt: () => projects.nextProjectStt(ctx),
+    setProjectFolderLink: (id, dir) => {
+      if (dir && !pickedDirs.has(dirKey(dir))) throw new AppError('Hãy chọn lại thư mục có sẵn của dự án.');
+      return projects.setProjectFolderLink(ctx, id, dir || null);
+    },
+    nextProjectStt: (jobYearId, category) => projects.nextProjectStt(ctx, String(jobYearId), category),
     pickFolder: async (title) => {
       const dir = await desktop.pickDirectory(title || 'Chọn thư mục');
       if (dir) pickedDirs.add(dirKey(dir));
@@ -167,6 +173,7 @@ export function createHandlers(ctx: Ctx, desktop: Desktop): Handlers {
     listProjectNotes: (id) => notes.listProjectNotes(ctx, id),
     saveProjectNote: (id, input, opts) => notes.saveProjectNote(ctx, id, input, opts ?? {}),
     deleteProjectNote: (id) => notes.deleteProjectNote(ctx, id),
+    listProjectNotesInRange: (from, to) => notes.listProjectNotesInRange(ctx, String(from), String(to)),
 
     listFreelance: () => freelance.listFreelance(ctx),
     nextFreelanceStt: () => freelance.nextFreelanceStt(ctx),
@@ -243,6 +250,7 @@ export function createHandlers(ctx: Ctx, desktop: Desktop): Handlers {
     createWarranty: (input) => records.createWarranty(ctx, input),
     updateWarranty: (id, input) => records.updateWarranty(ctx, id, input),
     deleteWarranty: (id) => records.deleteWarranty(ctx, id),
+    nextWarrantyStt: (jobYearId) => records.nextWarrantyStt(ctx, jobYearId),
     deleteWarranties: (ids) => {
       if (!Array.isArray(ids)) throw new AppError('Danh sách cần xóa không hợp lệ.');
       return records.deleteWarranties(ctx, ids.map(String));
@@ -312,7 +320,7 @@ export function createHandlers(ctx: Ctx, desktop: Desktop): Handlers {
         defaultName: name.toLowerCase().endsWith('.xlsx') ? name : `${name}.xlsx`,
         filters: [{ name: 'Excel Workbook (*.xlsx)', extensions: ['xlsx'] }],
       });
-      return target ? writeXlsx(target, spec.sheetName, spec.rows, spec.dateColumns) : null;
+      return target ? writeXlsx(target, spec.sheetName, spec.rows, spec.dateColumns, spec.wrapColumns) : null;
     },
 
     listKnowledge: (scope) => records.listKnowledge(ctx, scope && 'brandId' in scope ? scope.brandId ?? null : undefined),
@@ -320,6 +328,7 @@ export function createHandlers(ctx: Ctx, desktop: Desktop): Handlers {
     updateKnowledge: (id, input) => records.updateKnowledge(ctx, id, input),
     deleteKnowledge: (id) => records.deleteKnowledge(ctx, id),
 
+    listCalendarFeed: (q) => calendar.listCalendarFeed(ctx, q ?? {}),
     listCalendarEvents: (q) => calendar.listCalendarEvents(ctx, q ?? {}),
     createCalendarEvent: (input) => calendar.createCalendarEvent(ctx, input),
     updateCalendarEvent: (id, input) => calendar.updateCalendarEvent(ctx, id, input),

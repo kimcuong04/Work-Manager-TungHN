@@ -5,6 +5,8 @@ import {
   ChevronLeft,
   ChevronRight,
   ExternalLink,
+  Laptop,
+  Lightbulb,
   Flag,
   FolderKanban,
   PenLine,
@@ -18,7 +20,15 @@ import {
 import { formatDate } from '../../shared/dates';
 import { compareVi } from '../../shared/text';
 import { STATUS_LABEL, describeRemaining } from '../../shared/status';
-import { CALENDAR_COLORS, CALENDAR_KIND_LABEL, type CalendarColor, type CalendarEvent, type CalendarEventInput } from '../../shared/types';
+import {
+  CALENDAR_COLORS,
+  CALENDAR_KIND_LABEL,
+  type CalendarColor,
+  type CalendarEvent,
+  type CalendarEventInput,
+  type CalendarFeedItem,
+  type CalendarSource,
+} from '../../shared/types';
 import { hasErrors, validateCalendarEventInput } from '../../shared/validation';
 import { api } from '../api';
 import { DateInput, Field, SearchableSelect, StatusBadge, useClickOutside } from '../components/common';
@@ -32,6 +42,10 @@ import {
   WEEKDAY_SHORT,
   dueItem,
   eventItem,
+  feedItem,
+  SOURCE_COLOR,
+  SOURCE_LABEL,
+  SOURCES,
   fromMinutes,
   groupByDate,
   layoutTimed,
@@ -56,6 +70,13 @@ const HOUR_PX = 48;
 const MONTH_MAX_CHIPS = 3;
 const LAYERS: LayerKey[] = ['PROJECT_START', 'PROJECT_UPDATE', 'CUSTOM', 'DUE'];
 const ALL_LAYERS_ON: Record<LayerKey, boolean> = { PROJECT_START: true, PROJECT_UPDATE: true, CUSTOM: true, DUE: true };
+const ALL_SOURCES_ON: Record<CalendarSource, boolean> = { MAIN: true, FREELANCE: true, EXPERIENCE: true };
+
+function SourceIcon({ source, size = 11 }: { source: CalendarSource | null; size?: number }) {
+  if (source === 'FREELANCE') return <Laptop size={size} />;
+  if (source === 'EXPERIENCE') return <Lightbulb size={size} />;
+  return null;
+}
 
 function LayerIcon({ layer, size = 11 }: { layer: LayerKey; size?: number }) {
   if (layer === 'PROJECT_START') return <Rocket size={size} />;
@@ -84,9 +105,9 @@ function EventChip({ it, onOpen, compact }: { it: CalItem; onOpen: (it: CalItem,
         e.stopPropagation();
         onOpen(it, e.currentTarget);
       }}
-      title={`${LAYER_LABEL[it.layer]}: ${it.title}${it.startTime ? ` (${timeLabel(it)})` : ''}`}
+      title={`${it.feed ? `${SOURCE_LABEL[it.feed.source]} · ` : ''}${LAYER_LABEL[it.layer]}: ${it.title}${it.startTime ? ` (${timeLabel(it)})` : ''}`}
     >
-      {it.startTime ? <span className="ev-dot" /> : <LayerIcon layer={it.layer} />}
+      {it.startTime ? <span className="ev-dot" /> : it.feed ? <SourceIcon source={it.source} /> : <LayerIcon layer={it.layer} />}
       {it.startTime && <span className="ev-time">{it.startTime}</span>}
       <span className="ev-title">{it.layer === 'DUE' ? `Hạn: ${it.title}` : it.title}</span>
     </button>
@@ -446,9 +467,10 @@ function EventPopover({
         </div>
       </div>
       <div className="cal-pop-row small">
-        <LayerIcon layer={it.layer} size={15} />
-        <span>{ev ? CALENDAR_KIND_LABEL[ev.kind] : LAYER_LABEL.DUE}</span>
+        {it.feed ? <SourceIcon source={it.source} size={15} /> : <LayerIcon layer={it.layer} size={15} />}
+        <span>{ev ? `${CALENDAR_KIND_LABEL[ev.kind]}${ev.projectId ? ' · Job Chính' : ''}` : it.feed ? `${SOURCE_LABEL[it.feed.source]} · ${LAYER_LABEL[it.layer]}` : `Job Chính · ${LAYER_LABEL.DUE}`}</span>
       </div>
+      {it.feed && <FeedDetail feed={it.feed} onClose={onClose} />}
       {(project || ev?.projectName) && (
         <div className="cal-pop-row small">
           <FolderKanban size={15} />
@@ -491,6 +513,38 @@ function EventPopover({
       )}
       {it.layer === 'DUE' && project && <div className="small faint" style={{ marginTop: 8 }}>{STATUS_LABEL[project.status]} — tính tự động từ ngày tới hạn.</div>}
     </div>
+  );
+}
+
+/** Mục của Job Freelance / Kinh nghiệm: chỉ xem, mở trang gốc để sửa (sửa xong Calendar tự cập nhật). */
+function FeedDetail({ feed, onClose }: { feed: CalendarFeedItem; onClose: () => void }) {
+  const navigate = useNavigate();
+  return (
+    <>
+      {feed.subtitle && (
+        <div className="cal-pop-row small">
+          <FolderKanban size={15} />
+          <span className="muted">{feed.subtitle}</span>
+        </div>
+      )}
+      {feed.note && (
+        <div className="cal-pop-row small">
+          <StickyNote size={15} />
+          <div className="pre cal-pop-note">{feed.note}</div>
+        </div>
+      )}
+      <div className="cal-pop-foot">
+        <button
+          className="btn sm primary"
+          onClick={() => {
+            onClose();
+            navigate(feed.source === 'FREELANCE' ? `/freelance/${feed.targetId}` : `/experience/${feed.brandId}`);
+          }}
+        >
+          <ExternalLink size={13} /> {feed.source === 'FREELANCE' ? 'Mở job Freelance' : 'Mở Kinh nghiệm'}
+        </button>
+      </div>
+    </>
   );
 }
 
@@ -668,13 +722,15 @@ function EventForm({ event, preset, onClose, onSaved, onDelete }: { event?: Cale
 
 export function CalendarPage() {
   usePageTitle('Calendar');
-  const { today, projects } = useAppData();
+  const { today, projects, freelance } = useAppData();
   const { confirm, toast, toastError } = useUi();
   const location = useLocation();
   const [view, setView] = useLocalState<CalView>('calendar-view', 'month');
   const [anchor, setAnchor] = useSessionState('calendar-anchor', today);
   const [layers, setLayers] = useLocalState<Record<LayerKey, boolean>>('calendar-layers', ALL_LAYERS_ON);
+  const [sources, setSources] = useLocalState<Record<CalendarSource, boolean>>('calendar-sources', ALL_SOURCES_ON);
   const [events, setEvents] = useState<CalendarEvent[]>([]);
+  const [feed, setFeed] = useState<CalendarFeedItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [pop, setPop] = useState<{ it: CalItem; rect: DOMRect } | null>(null);
   const [more, setMore] = useState<{ date: string; rect: DOMRect } | null>(null);
@@ -699,29 +755,35 @@ export function CalendarPage() {
 
   const range = useMemo(() => viewRange(view, anchor), [view, anchor]);
   const load = useCallback(() => {
-    api
-      .listCalendarEvents({ from: range.from, to: range.to })
-      .then((list) => {
+    Promise.all([api.listCalendarEvents({ from: range.from, to: range.to }), api.listCalendarFeed({ from: range.from, to: range.to })])
+      .then(([list, extra]) => {
         setEvents(list);
+        setFeed(extra);
         setLoading(false);
       })
       .catch(toastError);
   }, [range.from, range.to, toastError]);
-  useEffect(load, [load, projects]);
+  // Dự án / job Freelance đổi (thêm, sửa, xóa) thì tải lại để Calendar khớp ngay.
+  useEffect(load, [load, projects, freelance]);
 
-  const items = useMemo(() => {
-    const out: CalItem[] = events.filter((e) => layers[e.kind] !== false).map(eventItem);
-    if (layers.DUE !== false)
-      for (const p of projects) if (!p.isCompleted && p.dueDate && p.dueDate >= range.from && p.dueDate <= range.to) out.push(dueItem({ ...p, dueDate: p.dueDate }));
+  const allItems = useMemo(() => {
+    const out: CalItem[] = [...events.map(eventItem), ...feed.map(feedItem)];
+    for (const p of projects) if (!p.isCompleted && p.dueDate && p.dueDate >= range.from && p.dueDate <= range.to) out.push(dueItem({ ...p, dueDate: p.dueDate }));
     return out;
-  }, [events, projects, layers, range.from, range.to]);
+  }, [events, feed, projects, range.from, range.to]);
+  const sourceOn = (it: CalItem) => it.source === null || sources[it.source] !== false;
+  const items = useMemo(() => allItems.filter((it) => layers[it.layer] !== false && sourceOn(it)), [allItems, layers, sources]); // eslint-disable-line react-hooks/exhaustive-deps
   const byDate = useMemo(() => groupByDate(items), [items]);
   const counts = useMemo(() => {
     const c: Record<LayerKey, number> = { PROJECT_START: 0, PROJECT_UPDATE: 0, CUSTOM: 0, DUE: 0 };
-    for (const e of events) c[e.kind]++;
-    for (const p of projects) if (!p.isCompleted && p.dueDate && p.dueDate >= range.from && p.dueDate <= range.to) c.DUE++;
+    for (const it of allItems) if (sourceOn(it)) c[it.layer]++;
     return c;
-  }, [events, projects, range.from, range.to]);
+  }, [allItems, sources]); // eslint-disable-line react-hooks/exhaustive-deps
+  const sourceCounts = useMemo(() => {
+    const c: Record<CalendarSource, number> = { MAIN: 0, FREELANCE: 0, EXPERIENCE: 0 };
+    for (const it of allItems) if (it.source && layers[it.layer] !== false) c[it.source]++;
+    return c;
+  }, [allItems, layers]);
 
   const openItem = (it: CalItem, el: HTMLElement) => {
     setMore(null);
@@ -804,7 +866,20 @@ export function CalendarPage() {
         <MiniMonth anchor={anchor} today={today} view={view} onPick={(d) => setAnchor(d)} />
         <div className="cal-layers">
           <div className="small muted" style={{ fontWeight: 650, marginBottom: 6 }}>
-            Hiển thị
+            Nguồn
+          </div>
+          {SOURCES.map((src) => (
+            <label key={src} className="cal-layer">
+              <input type="checkbox" checked={sources[src] !== false} onChange={(e) => setSources({ ...ALL_SOURCES_ON, ...sources, [src]: e.target.checked })} />
+              <span className={`ev-swatch ${src === 'MAIN' ? 'ev-c-sage' : `ev-c-${SOURCE_COLOR[src]}`}`} />
+              <span className="grow">{SOURCE_LABEL[src]}</span>
+              <span className="small faint">{sourceCounts[src] || ''}</span>
+            </label>
+          ))}
+        </div>
+        <div className="cal-layers">
+          <div className="small muted" style={{ fontWeight: 650, marginBottom: 6 }}>
+            Loại
           </div>
           {LAYERS.map((l) => (
             <label key={l} className="cal-layer">
@@ -816,7 +891,7 @@ export function CalendarPage() {
           ))}
         </div>
         <div className="small faint" style={{ marginTop: 'auto', lineHeight: 1.6 }}>
-          Dự án mới tự có mục “Bắt đầu dự án” ở ngày tiếp nhận. Khi sửa dự án, chọn <b>Lưu và thêm vào Calendar</b> để ghi lại thay đổi. Kéo thả sự kiện để đổi ngày.
+          Dự án Job Chính tự có mục “Bắt đầu”; khi sửa chọn <b>Lưu và thêm vào Calendar</b> để ghi lại thay đổi. Job Freelance (ngày bắt đầu, ngày có ghi chú) và Kinh nghiệm hiện tự động, sửa/xóa ở trang gốc là Calendar đổi theo. Kéo thả sự kiện để đổi ngày.
           <br />
           Phím tắt: T hôm nay · J/K sau/trước · D/W/M/A đổi chế độ · C tạo
         </div>

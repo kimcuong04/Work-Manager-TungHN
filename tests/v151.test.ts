@@ -99,7 +99,7 @@ describe('Xóa nhiều mục đã chọn', () => {
     expect(records.listWarranty(ctx, year).map((w) => w.model)).toEqual(['M3']);
     expect(fs.existsSync(path.join(ctx.paths.imagesDir, img.storageKey))).toBe(false);
 
-    const j = ['J1', 'J2', 'J3'].map((n) => freelance.createFreelance(ctx, { projectName: n, hirer: '', startDate: null, statusId: null }, { noteHtml: '<div>n</div>' }));
+    const j = ['J1', 'J2', 'J3'].map((n) => freelance.createFreelance(ctx, { projectName: n, hirerId: null, startDate: null, statusId: null }, { noteHtml: '<div>n</div>' }));
     expect(await h.deleteFreelances([j[0].id, j[2].id])).toBe(2);
     expect(freelance.listFreelance(ctx).map((x) => x.projectName)).toEqual(['J2']);
     expect(ctx.db.scalar<number>('SELECT COUNT(*) FROM freelance_notes')).toBe(1);

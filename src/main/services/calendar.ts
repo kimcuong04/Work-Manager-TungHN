@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { formatDate } from '../../shared/dates';
-import type { CalendarColor, CalendarEvent, CalendarEventInput, CalendarEventKind, CalendarQuery, Project } from '../../shared/types';
+import type { CalendarColor, CalendarEvent, CalendarEventInput, CalendarEventKind, CalendarFeedItem, CalendarQuery, Project } from '../../shared/types';
 import { hasErrors, validateCalendarEventInput } from '../../shared/validation';
 import { AppError, now, str, strOrNull, todayOf, type Ctx } from '../context';
 
@@ -211,4 +211,70 @@ export function addProjectUpdateEvent(ctx: Ctx, projectId: string, name: string,
 
 export function removeProjectStartEvents(ctx: Ctx, projectId: string): void {
   ctx.db.run(`DELETE FROM calendar_events WHERE project_id = ? AND kind = 'PROJECT_START'`, [projectId]);
+}
+
+/**
+ * Xóa dự án: bỏ luôn các mục "Bắt đầu / Cập nhật dự án" của nó trên Calendar; sự kiện người dùng tự tạo có liên kết
+ * dự án thì giữ lại (chỉ gỡ liên kết).
+ */
+export function removeProjectEvents(ctx: Ctx, projectId: string): void {
+  ctx.db.run(`DELETE FROM calendar_events WHERE project_id = ? AND kind IN ('PROJECT_START', 'PROJECT_UPDATE')`, [projectId]);
+  ctx.db.run('UPDATE calendar_events SET project_id = NULL, updated_at = ? WHERE project_id = ?', [now(), projectId]);
+}
+
+function localDay(stamp: string): string {
+  const d = new Date(stamp);
+  if (Number.isNaN(d.getTime())) return String(stamp).slice(0, 10);
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+
+const snippet = (s: string | null | undefined, max = 300) => {
+  const t = (s ?? '').replace(/\s+/g, ' ').trim();
+  return t.length > max ? `${t.slice(0, max)}…` : t;
+};
+
+/**
+ * Mục Calendar của Job Freelance và Kinh nghiệm, tính trực tiếp từ dữ liệu nên sửa/xóa job hay kinh nghiệm là
+ * Calendar đổi theo ngay. Freelance: ngày bắt đầu + mỗi ngày có ghi chú. Kinh nghiệm: ngày của kinh nghiệm + ngày sửa.
+ */
+export function listCalendarFeed(ctx: Ctx, q: CalendarQuery = {}): CalendarFeedItem[] {
+  const inRange = (d: string | null | undefined): d is string => !!d && (!q.from || d >= q.from) && (!q.to || d <= q.to);
+  const out: CalendarFeedItem[] = [];
+  const jobs = ctx.db.all<Record<string, any>>(
+    `SELECT f.id, f.stt, f.project_name, f.start_date, f.created_at, f.updated_at, h.name AS hirer_name, s.name AS status_name
+     FROM freelance_jobs f LEFT JOIN freelance_hirers h ON h.id = f.hirer_id LEFT JOIN freelance_statuses s ON s.id = f.status_id`,
+  );
+  const jobById = new Map(jobs.map((j) => [j.id as string, j]));
+  const jobSub = (j: Record<string, any>) => ['Job Freelance', j.hirer_name && `Bên thuê ${j.hirer_name}`, j.status_name].filter(Boolean).join(' · ');
+  for (const j of jobs) {
+    if (inRange(j.start_date))
+      out.push({ key: `fl-start:${j.id}`, source: 'FREELANCE', kind: 'PROJECT_START', date: j.start_date, title: `${j.stt}. ${j.project_name}`, subtitle: jobSub(j), note: '', targetId: j.id });
+  }
+  const noteDays = new Set<string>();
+  for (const n of ctx.db.all<{ job_id: string; note_date: string; content_text: string }>('SELECT job_id, note_date, content_text FROM freelance_notes')) {
+    const j = jobById.get(n.job_id);
+    noteDays.add(`${n.job_id}|${n.note_date}`);
+    if (!j || !inRange(n.note_date)) continue;
+    out.push({ key: `fl-note:${n.job_id}:${n.note_date}`, source: 'FREELANCE', kind: 'PROJECT_UPDATE', date: n.note_date, title: `${j.stt}. ${j.project_name}`, subtitle: jobSub(j), note: `Ghi chú: ${snippet(n.content_text)}`, targetId: j.id });
+  }
+  for (const j of jobs) {
+    const day = localDay(j.updated_at);
+    if (day !== localDay(j.created_at) && !noteDays.has(`${j.id}|${day}`) && inRange(day))
+      out.push({ key: `fl-edit:${j.id}`, source: 'FREELANCE', kind: 'PROJECT_UPDATE', date: day, title: `${j.stt}. ${j.project_name}`, subtitle: jobSub(j), note: 'Sửa thông tin job', targetId: j.id });
+  }
+  const exps = ctx.db.all<Record<string, any>>(
+    `SELECT e.id, e.brand_id, e.experience_date, e.event, e.device_model, e.project_text, e.created_at, e.updated_at, b.name AS brand_name
+     FROM experience_records e JOIN brands b ON b.id = e.brand_id`,
+  );
+  for (const e of exps) {
+    const title = `${e.brand_name}: ${snippet(e.event, 80)}`;
+    const subtitle = ['Kinh nghiệm', e.device_model, e.project_text].filter((x) => x && String(x).trim()).join(' · ');
+    if (inRange(e.experience_date))
+      out.push({ key: `exp:${e.id}`, source: 'EXPERIENCE', kind: 'PROJECT_START', date: e.experience_date, title, subtitle, note: snippet(e.event), targetId: e.id, brandId: e.brand_id });
+    const day = localDay(e.updated_at);
+    if (day !== localDay(e.created_at) && day !== e.experience_date && inRange(day))
+      out.push({ key: `exp-edit:${e.id}`, source: 'EXPERIENCE', kind: 'PROJECT_UPDATE', date: day, title, subtitle, note: 'Đã sửa kinh nghiệm', targetId: e.id, brandId: e.brand_id });
+  }
+  return out.sort((a, b) => a.date.localeCompare(b.date) || a.title.localeCompare(b.title, 'vi'));
 }

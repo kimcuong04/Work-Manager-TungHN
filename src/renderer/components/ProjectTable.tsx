@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router';
-import { CheckCircle2, ExternalLink, FileSpreadsheet, FileText, FolderInput, FolderOpen, Maximize2, Pencil, RotateCcw, Trash2 } from 'lucide-react';
+import { CheckCircle2,
+  Copy, ExternalLink, FileSpreadsheet, FileText, FolderInput, FolderOpen, Maximize2, Pencil, RotateCcw, Trash2 } from 'lucide-react';
 import { formatDate } from '../../shared/dates';
 import { describeRemaining } from '../../shared/status';
 import { api } from '../api';
@@ -78,6 +79,7 @@ export function useProjectMenu() {
   return (p: ProjectView): MenuItem[] => [
     { label: 'Mở chi tiết', icon: <ExternalLink size={14} />, onClick: () => navigate(`/project/${p.id}`) },
     { label: 'Chỉnh sửa', icon: <Pencil size={14} />, onClick: () => actions.openEdit(p) },
+    { label: 'Duplicate', icon: <Copy size={14} />, onClick: () => actions.openDuplicate(p) },
     p.isCompleted
       ? { label: 'Bỏ hoàn thành', icon: <RotateCcw size={14} />, onClick: () => void actions.setCompleted(p, false) }
       : { label: 'Đánh dấu hoàn thành', icon: <CheckCircle2 size={14} />, onClick: () => void actions.setCompleted(p, true) },
@@ -197,6 +199,9 @@ export function ProjectPreviewPanel({ p, onClose }: { p: ProjectView; onClose: (
         <>
           <button className="btn danger left" onClick={() => void actions.remove(p)}>
             <Trash2 size={15} /> Xóa
+          </button>
+          <button className="btn" onClick={() => actions.openDuplicate(p)} title="Tạo dự án mới chép từ dự án này">
+            <Copy size={15} /> Duplicate
           </button>
           <button className="btn" onClick={() => navigate(`/project/${p.id}`)} title="Mở trang chi tiết dự án">
             <Maximize2 size={15} /> View info
