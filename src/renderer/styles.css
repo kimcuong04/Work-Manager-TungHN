@@ -3187,3 +3187,213 @@ input.select-box {
   flex-direction: column;
   gap: 8px;
 }
+
+/* ---------- Kéo đổi độ rộng cột / chiều cao dòng (useTableResize) ---------- */
+.tbl.rs-col,
+.tbl.rs-col * {
+  cursor: col-resize !important;
+}
+.tbl.rs-row,
+.tbl.rs-row * {
+  cursor: row-resize !important;
+}
+.tbl.rs-dragging {
+  user-select: none;
+}
+.tbl.tbl-sized th,
+.tbl.tbl-sized td {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.tbl.tbl-sized td {
+  overflow-wrap: anywhere;
+}
+.tbl.tbl-sized td.wrap,
+.tbl.tbl-sized td.clamp > div,
+.tbl.tbl-sized td.eq-name {
+  min-width: 0;
+  max-width: none;
+}
+.tbl tr.row-sized td.clamp > div {
+  display: block;
+  -webkit-line-clamp: unset;
+  max-height: calc(var(--row-h) - 19px);
+}
+
+/* ---------- v1.9: Kho thiết bị, màu danh mục, workspace, To-do, tô sáng tìm kiếm ---------- */
+.loan-hint {
+  margin: 0 0 10px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: var(--attention-soft, rgba(245, 158, 11, 0.12));
+  color: var(--text);
+}
+.loan-images {
+  margin-top: 8px;
+}
+.color-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 8px;
+  border: 1px solid transparent;
+  border-radius: 999px;
+}
+.color-chip .dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.color-input {
+  width: 34px;
+  height: 26px;
+  padding: 0 2px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+  cursor: pointer;
+}
+.select.status-select {
+  font-weight: 600;
+}
+.ws-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+  cursor: text;
+}
+.sidebar-head .ws-edit {
+  opacity: 0;
+  margin-left: auto;
+}
+.sidebar-head:hover .ws-edit,
+.sidebar-head .ws-edit:focus-visible {
+  opacity: 1;
+}
+.sidebar-head .ws-input {
+  height: 32px;
+  min-width: 0;
+  flex: 1;
+  font-weight: 700;
+}
+.linklike {
+  background: none;
+  border: 0;
+  padding: 0;
+  color: var(--text);
+  font: inherit;
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+}
+.linklike:hover {
+  color: var(--accent);
+  text-decoration: underline;
+}
+.todo-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.todo-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 8px;
+  border-bottom: 1px solid var(--border);
+  position: relative;
+  background: var(--surface);
+}
+.todo-item:last-child {
+  border-bottom: 0;
+}
+.todo-item.dragging {
+  opacity: 0.45;
+}
+.todo-item.drop-before {
+  box-shadow: inset 0 3px 0 var(--accent);
+}
+.todo-item.drop-after {
+  box-shadow: inset 0 -3px 0 var(--accent);
+}
+.todo-item.done .todo-title {
+  color: var(--text-muted);
+  text-decoration: line-through;
+}
+.todo-grip {
+  background: none;
+  border: 0;
+  padding: 4px 2px;
+  color: var(--text-faint);
+  cursor: grab;
+  border-radius: 6px;
+  display: inline-flex;
+}
+.todo-grip:hover,
+.todo-grip:focus-visible {
+  color: var(--text);
+  background: var(--surface-hover);
+}
+.todo-grip:active {
+  cursor: grabbing;
+}
+.todo-rank {
+  width: 22px;
+  text-align: center;
+  font-weight: 700;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+.todo-check {
+  background: none;
+  border: 0;
+  padding: 2px;
+  color: var(--text-faint);
+  cursor: pointer;
+  display: inline-flex;
+}
+.todo-check:hover {
+  color: var(--accent);
+}
+.todo-check.on {
+  color: var(--accent);
+}
+.todo-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.todo-main .small svg {
+  vertical-align: -2px;
+}
+.todo-pick-list {
+  max-height: 52vh;
+  overflow: auto;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+.todo-pick {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border);
+  cursor: pointer;
+}
+.todo-pick:last-child {
+  border-bottom: 0;
+}
+.todo-pick:hover {
+  background: var(--surface-hover);
+}
+.todo-pick.disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+::highlight(ppm-search) {
+  background-color: #fde047;
+  color: #1c1917;
+}

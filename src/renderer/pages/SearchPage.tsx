@@ -8,9 +8,11 @@ import { HitIcon, SEARCH_PLACEHOLDER, SearchDateFilter, useOpenHit, useSearchSta
 import { useAppData } from '../state/AppData';
 import { usePageTitle, useUi } from '../state/ui';
 import { resolveDateRange } from './WarrantyPage';
+import { useTableResize } from '../lib/tableResize';
 
 /** Kết quả tìm kiếm đầy đủ (Enter ở ô tìm trên topbar), chỉnh được kiểu tìm và khoảng ngày ngay tại trang. */
 export function SearchPage() {
+  const tableRef = useTableResize('search');
   usePageTitle('Tìm kiếm');
   const { today } = useAppData();
   const { toastError } = useUi();
@@ -79,7 +81,7 @@ export function SearchPage() {
         <EmptyState title="Không có kết quả" text="Thử từ khóa khác, đổi kiểu tìm hoặc bỏ lọc ngày." />
       ) : (
         <div className="table-wrap">
-          <table className="tbl">
+          <table className="tbl" ref={tableRef}>
             <thead>
               <tr>
                 <th>Loại</th>
@@ -91,7 +93,7 @@ export function SearchPage() {
             </thead>
             <tbody>
               {hits.map((h) => (
-                <tr key={`${h.kind}:${h.id}`} className="clickable" onClick={() => openHit(h)}>
+                <tr key={`${h.kind}:${h.id}`} data-row={`${h.kind}:${h.id}`} className="clickable" onClick={() => openHit(h, st.text)}>
                   <td className="nowrap">
                     <span className="row" style={{ gap: 6 }}>
                       <HitIcon kind={h.kind} /> {h.kind === 'freelance' ? 'Job Freelance' : h.kind === 'equipment' ? 'Kho thiết bị' : h.workCategory ? CATEGORY_LABEL[h.workCategory] : 'Warranty'}

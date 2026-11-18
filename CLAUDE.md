@@ -37,11 +37,17 @@ App tự cập nhật trên máy user, nên mọi thay đổi phải giữ đư�
 10. **Thư mục dự án trên máy**: `projects.folder_auto = 0` là thư mục có sẵn do người dùng liên kết — không bao giờ
    tự đổi tên/chuyển. Ngoài ra: chỉ tạo/đổi tên/chuyển trong nơi người dùng đã chọn qua hộp thoại; xóa thì chuyển vào
    Thùng rác (`shell.trashItem`), không xóa vĩnh viễn. E2E không được ghi vào clipboard thật của Windows.
-11. **Kho thiết bị** (schema 7, schema 8 thêm `description` / `handover_date` trên `equipment_items`): `equipment_items`
-   (+ `equipment_images`) và `equipment_loans` (log mượn/trả, xóa dây chuyền theo thiết bị) — không thuộc `job_years`.
-   Sale trong Kho thiết bị chỉ hiện tên, không kèm Phòng ban (khác Job Chính). Hãng / Tên SI / Sale dùng chung danh mục Job Chính, nên mọi cột
-   tham chiếu danh mục phải khai báo trong `SPECS` của `src/main/services/master.ts`. Tình trạng thiết bị chỉ tự đổi trong
-   `saveEquipmentLoan` (lần trả mới nhất có ghi Tình trạng khi trả); ngày mượn/hẹn trả hiện tại chỉ đổi khi người dùng tick.
+11. **Kho thiết bị** (schema 7–9): `equipment_items` (+ `equipment_images`, `category_id` → `equipment_categories`) và
+   `equipment_loans` (`due_date` = Ngày hẹn trả, `return_date` = Ngày trả thực tế; `equipment_loan_images`) — không thuộc
+   `job_years`. Mỗi thiết bị tối đa **một** lần mượn chưa hoàn trả (`saveEquipmentLoan` chặn); `current_borrow_date` /
+   `current_due_date` chỉ là bản sao tính lại bằng `syncCurrent` sau mỗi thay đổi lần mượn — không cho sửa trực tiếp.
+   Hãng / Tên SI / Sale dùng chung danh mục Job Chính (Sale chỉ hiện tên), nên mọi cột tham chiếu danh mục phải khai báo
+   trong `SPECS` của `src/main/services/master.ts`. Tình trạng thiết bị chỉ tự đổi trong `saveEquipmentLoan`.
+12. **To-do list** (`todo_items`, schema 9): mỗi việc trỏ tới đúng một `projects` (Pre/Post-sales) hoặc `freelance_jobs`,
+   xóa dây chuyền theo dự án/job; không trùng trong cùng ngày. Danh mục có màu khai báo ở `COLORED_MASTER_KINDS`.
+13. **Bảng & tô sáng**: bảng danh sách dùng `useTableResize(key)` (`src/renderer/lib/tableResize.ts`) — `<tr data-row={id}>`
+   để đổi chiều cao dòng, `data-col` cho tiêu đề không có chữ. Tô sáng kết quả tìm kiếm dùng CSS Custom Highlight
+   (`src/renderer/lib/highlight.ts`), **không** bọc `<mark>` vào DOM do React quản lý.
 
 ## Phát hành bản cập nhật
 

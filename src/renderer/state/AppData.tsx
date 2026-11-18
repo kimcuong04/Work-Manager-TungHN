@@ -21,7 +21,7 @@ interface AppDataValue {
   projectById: Map<string, ProjectView>;
   freelance: FreelanceJob[];
   refresh: (...parts: Part[]) => Promise<void>;
-  updateSettings: (patch: SettingsPatch) => Promise<void>;
+  updateSettings: (patch: SettingsPatch) => Promise<AppSettings>;
 }
 
 const DEFAULT_SETTINGS: AppSettings = {
@@ -33,6 +33,7 @@ const DEFAULT_SETTINGS: AppSettings = {
   xlsxMaxRows: 20000,
   autoUpdate: true,
   projectRootDir: null,
+  workspaceName: 'My Workspace',
   updatedAt: '',
 };
 
@@ -96,7 +97,9 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
   }, [settings.theme]);
 
   const updateSettings = useCallback(async (patch: SettingsPatch) => {
-    setSettings(await api.updateSettings(patch));
+    const next = await api.updateSettings(patch);
+    setSettings(next);
+    return next;
   }, []);
 
   const thresholds = useMemo(

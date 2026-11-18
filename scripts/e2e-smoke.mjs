@@ -797,13 +797,13 @@ try {
     JSON.stringify(flJobs.map((j) => [j.stt, j.projectName, j.statusName])),
   );
   const flHeads = (await win.locator('.freelance-table th').allInnerTexts()).map((t) => t.replace(/[▲▼]/g, '').trim()).filter(Boolean);
-  check('Bảng Freelance: STT / Tên dự án / Bên thuê / Ngày bắt đầu / Tình trạng / Ghi chú', flHeads.join('|') === 'STT|Tên dự án|Bên thuê|Ngày bắt đầu|Tình trạng|Ghi chú gần nhất', flHeads.join(' | '));
+  check('Bảng Freelance: STT / Tên dự án / Bên thuê / Ngày bắt đầu / Tình trạng / Thanh toán / Ghi chú', flHeads.join('|') === 'STT|Tên dự án|Bên thuê|Ngày bắt đầu|Tình trạng|Thanh toán|Ghi chú gần nhất', flHeads.join(' | '));
   const statuses = await call(win, 'listMaster', 'freelanceStatuses');
   await win.locator('.freelance-table select').first().selectOption({ label: 'Đang làm' });
   await win.waitForTimeout(400);
   check('Đổi Tình trạng ngay trên bảng', (await call(win, 'listFreelance'))[0].statusName === 'Đang làm');
   await shot(win, '31-freelance-list');
-  await win.locator('.freelance-table tbody tr').first().click();
+  await win.locator('.freelance-table tbody tr').first().locator('td').nth(1).click();
   await win.waitForSelector('text=Thông tin job');
   await win.getByRole('button', { name: /Ngày khác/ }).click();
   const yesterday = day(-1);
@@ -835,7 +835,7 @@ try {
   const st2 = (await call(win, 'listMaster', 'freelanceStatuses')).map((x) => x.name);
   check(
     'Master Data › Job Freelance › Tình trạng: thêm mới, sắp xếp lên/xuống',
-    flTabs.join('|') === 'Tình trạng|Bên thuê' && statuses.length === 5 && st2.length === 6 && st2[4] === 'Chờ nghiệm thu',
+    flTabs.join('|') === 'Tình trạng|Trạng thái thanh toán|Bên thuê' && statuses.length === 5 && st2.length === 6 && st2[4] === 'Chờ nghiệm thu',
     st2.join(' > '),
   );
   await shot(win, '33-settings-freelance-status');
@@ -1161,6 +1161,10 @@ try {
     await stubOpen(app, [docx]);
     const fDocx = await call(win, 'pickLinkFile');
     await stubOpen(app, [xlsxFile]);
+    const fXlsx = await call(win, 'pickLinkFile');
+    const zip = path.join(fixtures, 'Ban ve nen.zip');
+    fs.writeFileSync(zip, 'PK fake zip');
+    await stubOpen(app, [zip]);
     const xlsxErr = await call(win, 'pickLinkFile').then(
       () => '',
       (e) => String(e),
@@ -1173,13 +1177,14 @@ try {
     const linked = (await call(win, 'listProjects')).find((x) => x.id === dong.id);
     await shot(win, '45-project-pdf-attachment');
     check(
-      'File đính kèm nhận .docx / .pdf (vẫn từ chối file khác)',
-      fDocx?.extension === 'docx' && /docx, \.pdf/.test(xlsxErr) && linked.fileExtension === 'pdf' && (await win.locator('.file-row .file-ext', { hasText: 'pdf' }).isVisible()),
+      'File đính kèm nhận .docx / .pdf / .xlsx (vẫn từ chối file khác)',
+      fDocx?.extension === 'docx' && fXlsx?.extension === 'xlsx' && /\.pdf, \.xlsx/.test(xlsxErr) && linked.fileExtension === 'pdf' && (await win.locator('.file-row .file-ext', { hasText: 'pdf' }).isVisible()),
       `${fDocx?.name} · ${linked.fileName}`,
     );
   }
 
-  // --- v1.7: Kho thiết bị (riêng, ngoài Job Chính) ---
+  // --- v1.7–v1.9: Kho thiết bị (riêng, ngoài Job Chính) ---
+  const dmy = (isoDay) => isoDay.split('-').reverse().join('/');
   await go(win, '#/');
   await win.locator('.sidebar').getByRole('link', { name: 'Kho thiết bị' }).click();
   await win.waitForSelector('text=Kho thiết bị chưa có thiết bị nào');
@@ -1188,9 +1193,13 @@ try {
   await win.waitForSelector('.modal #eq-name');
   await win.waitForTimeout(300);
   const eqStt = await win.locator('.modal input[aria-label="STT"]').inputValue();
+  const noCurrentFields = (await win.locator('.modal #eq-borrow, .modal #eq-due').count()) === 0 && !(await win.locator('.modal').innerText()).includes('Ngày mượn hiện tại');
   await win.locator('#eq-name').fill('Camera Axis P1375-E');
-  await win.locator('.modal .form-section').first().locator('input[role="combobox"]').first().click();
-  await win.locator('.modal .form-section').first().locator('input[role="combobox"]').first().fill('Axis');
+  await win.locator('#eq-category').click();
+  await win.locator('#eq-category').fill('Camera');
+  await win.keyboard.press('Enter');
+  await win.locator('#eq-brand').click();
+  await win.locator('#eq-brand').fill('Axis');
   await win.keyboard.press('Enter');
   await win.locator('#eq-serial').fill('ACCC8E-7731');
   await win.locator('#eq-handover').fill('15/10/2026');
@@ -1200,13 +1209,14 @@ try {
   await stubOpen(app, [png]);
   await win.locator('.modal').getByRole('button', { name: 'Thêm ảnh' }).click();
   await win.waitForSelector('.modal .thumb');
+  await shot(win, '44-equipment-form');
   await win.locator('.modal-foot').getByRole('button', { name: 'Lưu' }).click();
   await win.waitForSelector('.side-panel');
   let eq = (await call(win, 'listEquipment'))[0];
   check(
-    'Thêm thiết bị: STT tự +1, Tên sp, Hãng (Master Data dùng chung), Serial, Tình trạng, ảnh',
-    eqStt === '1' && eq?.stt === 1 && eq.productName === 'Camera Axis P1375-E' && eq.brandName === 'Axis' && eq.serialNumber === 'ACCC8E-7731' && eq.images.length === 1,
-    `${eq?.stt}. ${eq?.productName} · ${eq?.brandName} · ${eq?.images.length} ảnh`,
+    'Thêm thiết bị: STT tự +1, Tên sp, Phân loại (thêm ngay trong ô chọn), Hãng, Serial, ảnh; không còn ô Ngày mượn / hẹn trả hiện tại',
+    noCurrentFields && eqStt === '1' && eq?.stt === 1 && eq.productName === 'Camera Axis P1375-E' && eq.categoryName === 'Camera' && eq.brandName === 'Axis' && eq.serialNumber === 'ACCC8E-7731' && eq.images.length === 1 && eq.currentBorrowDate === null,
+    `${eq?.stt}. ${eq?.productName} · ${eq?.categoryName} · ${eq?.brandName} · ${eq?.images.length} ảnh`,
   );
   const eqPanelTxt = await win.locator('.side-panel').innerText();
   check(
@@ -1218,6 +1228,7 @@ try {
   const eqPanel = win.locator('.side-panel');
   await eqPanel.getByRole('button', { name: 'Thêm lần mượn' }).click();
   await win.waitForSelector('.modal #loan-si');
+  const loanLabels = await win.locator('.modal .field-label, .modal label').allInnerTexts();
   await win.locator('#loan-si').click();
   await win.locator('#loan-si').fill('SI Alpha');
   await win.keyboard.press('Enter');
@@ -1227,38 +1238,80 @@ try {
   await win.keyboard.press('Enter');
   const saleInput = await win.locator('#loan-sale').inputValue();
   await win.locator('.modal textarea[aria-label="Lý do mượn"]').fill('Demo cho khách ABC');
-  await win.locator('#loan-due').fill(day(7).split('-').reverse().join('/'));
+  await win.locator('#loan-due').fill(dmy(day(7)));
   await win.locator('#loan-due').press('Tab');
+  await stubOpen(app, [png]);
+  await win.locator('.modal').getByRole('button', { name: 'Thêm ảnh' }).click();
+  await win.waitForSelector('.modal .thumb');
   await shot(win, '46-equipment-loan-form');
   await win.locator('.modal-foot').getByRole('button', { name: 'Lưu' }).click();
   await win.waitForTimeout(500);
   eq = (await call(win, 'listEquipment'))[0];
   const lentTxt = await eqPanel.innerText();
+  const loanLabelTxt = loanLabels.join('|');
   check(
-    'Ghi lần mượn (Tên SI, Sale, Ngày mượn, Lý do) → Đang cho mượn, cập nhật Ngày mượn / hẹn trả hiện tại',
-    eq.loans.length === 1 && eq.loans[0].siName === 'SI Alpha' && !!eq.loans[0].salespersonName && eq.loans[0].reason === 'Demo cho khách ABC' && eq.currentBorrowDate === day(0) && eq.currentDueDate === day(7) && /Đang cho mượn/.test(lentTxt) && /Còn 7 ngày/.test(lentTxt),
-    `${eq.loans[0]?.siName} · ${eq.loans[0]?.salespersonName} · ${eq.currentBorrowDate} → ${eq.currentDueDate}`,
+    'Thêm lần mượn: Tên SI, Sale, Ngày mượn, Ngày hẹn trả (đổi tên từ "Ngày trả"), Lý do, Ảnh → Đang cho mượn',
+    /Ngày hẹn trả/.test(loanLabelTxt) && !/Ngày trả thực tế/.test(loanLabelTxt) &&
+      eq.loans.length === 1 && eq.loans[0].siName === 'SI Alpha' && eq.loans[0].reason === 'Demo cho khách ABC' && eq.loans[0].dueDate === day(7) && eq.loans[0].returnDate === null && eq.loans[0].images.length === 1 &&
+      eq.currentBorrowDate === day(0) && eq.currentDueDate === day(7) && /Đang cho mượn/.test(lentTxt) && /Còn 7 ngày/.test(lentTxt),
+    `${eq.loans[0]?.siName} · hẹn trả ${eq.loans[0]?.dueDate} · ${eq.loans[0]?.images.length} ảnh`,
   );
   check(
     'Kho thiết bị: Sale chỉ hiện tên, không kèm Phòng ban (ô chọn và lịch sử mượn)',
     eq.loans[0].salespersonName === 'Anh Tuấn Sale' && saleInput === 'Anh Tuấn Sale' && saleOpts.some((o) => o.trim() === 'Anh Tuấn Sale') && /Anh Tuấn Sale/.test(lentTxt) && !/Kinh doanh 1/.test(lentTxt) && !saleOpts.some((o) => /Kinh doanh 1/.test(o)),
     `ô chọn "${saleInput}", gợi ý ${saleOpts.join(' | ')}`,
   );
+  const loanImgs = await eqPanel.locator('.loan-images img').count();
+  const addDisabled = await eqPanel.getByRole('button', { name: 'Thêm lần mượn' }).isDisabled();
+  const eqRow1 = win.locator('.equipment-table tbody tr', { hasText: 'ACCC8E-7731' });
+  const siCol = await eqRow1.locator('td').nth((await win.locator('.equipment-table thead th').allInnerTexts()).findIndex((h) => h.trim() === 'Tên SI mượn')).innerText();
+  const saleCol = await eqRow1.locator('td').nth((await win.locator('.equipment-table thead th').allInnerTexts()).findIndex((h) => h.trim() === 'Sale mượn')).innerText();
+  check(
+    'Panel hiện ảnh của lần mượn; bảng tách cột Tên SI mượn / Sale mượn; chưa hoàn trả thì không thêm được lần mượn mới',
+    loanImgs === 1 && addDisabled && siCol.trim() === 'SI Alpha' && saleCol.trim() === 'Anh Tuấn Sale',
+    `ảnh ${loanImgs} · SI "${siCol}" · Sale "${saleCol}" · nút Thêm lần mượn ${addDisabled ? 'bị khóa' : 'bật'}`,
+  );
+  const blocked = await call(win, 'saveEquipmentLoan', eq.id, null, { siId: null, salespersonId: null, borrowDate: day(0), dueDate: null, returnDate: null, reason: '', returnCondition: '', images: [] }).then(
+    () => '',
+    (e) => String(e),
+  );
+  check('Thêm lần mượn khi lần trước chưa hoàn trả bị chặn cả ở dữ liệu', /Đã hoàn trả/.test(blocked), blocked.slice(0, 120));
 
-  await eqPanel.getByRole('button', { name: /Ghi nhận trả lần mượn/ }).click();
-  await win.waitForSelector('.modal textarea[aria-label="Tình trạng khi trả"]');
-  const retDefault = await win.locator('#loan-return').inputValue();
-  await win.locator('.modal textarea[aria-label="Tình trạng khi trả"]').fill('Trầy nhẹ vỏ, đủ phụ kiện');
-  const clearDefault = await win.getByRole('checkbox', { name: 'Thiết bị đã về kho' }).isChecked();
+  // Quá ngày hẹn trả mà chưa bấm "Đã hoàn trả" → Quá hạn
+  await eqPanel.getByRole('button', { name: /^Sửa lần mượn/ }).click();
+  await win.waitForSelector('.modal #loan-borrow');
+  await win.locator('#loan-borrow').fill(dmy(day(-5)));
+  await win.locator('#loan-borrow').press('Tab');
+  await win.locator('#loan-due').fill(dmy(day(-1)));
+  await win.locator('#loan-due').press('Tab');
   await win.locator('.modal-foot').getByRole('button', { name: 'Lưu' }).click();
+  await win.waitForTimeout(500);
+  const overdueRow = await eqRow1.innerText();
+  const overdueN = await (async () => {
+    await win.locator('select[aria-label="Trạng thái mượn"]').selectOption('overdue');
+    const n = await win.locator('.equipment-table tbody tr.clickable').count();
+    await win.locator('select[aria-label="Trạng thái mượn"]').selectOption('all');
+    return n;
+  })();
+  check('Quá ngày hẹn trả mà chưa bấm Đã hoàn trả → trạng thái Quá hạn', /Quá hạn/.test(overdueRow) && /Quá hạn 1 ngày/.test(overdueRow) && overdueN === 1, overdueRow.replace(/\s+/g, ' ').slice(0, 140));
+
+  await eqPanel.getByRole('button', { name: /^Đã hoàn trả lần mượn/ }).click();
+  await win.waitForSelector('.modal #loan-return');
+  const retDefault = await win.locator('#loan-return').inputValue();
+  await win.locator('#loan-return').fill(dmy(day(-1)));
+  await win.locator('#loan-return').press('Tab');
+  await win.locator('.modal textarea[aria-label="Tình trạng khi trả"]').fill('Trầy nhẹ vỏ, đủ phụ kiện');
+  await shot(win, '47-equipment-return');
+  await win.locator('.modal-foot').getByRole('button', { name: 'Xác nhận hoàn trả' }).click();
   await win.waitForTimeout(500);
   eq = (await call(win, 'listEquipment'))[0];
   const backTxt = await eqPanel.innerText();
   await shot(win, '47-equipment-panel');
   check(
-    'Ghi nhận trả: Ngày trả mặc định hôm nay, thiết bị về kho, Tình trạng lấy theo lần trả cuối',
-    retDefault === day(0).split('-').reverse().join('/') && clearDefault && eq.currentBorrowDate === null && eq.condition === 'Trầy nhẹ vỏ, đủ phụ kiện' && /Trong kho/.test(backTxt) && /theo lần trả/.test(backTxt),
-    `trả ${retDefault} · ${eq.condition}`,
+    'Đã hoàn trả: Ngày trả thực tế mặc định hôm nay (sửa được), về Trong kho, Tình trạng lấy theo lần trả cuối',
+    retDefault === dmy(day(0)) && eq.loans[0].returnDate === day(-1) && eq.currentBorrowDate === null && eq.condition === 'Trầy nhẹ vỏ, đủ phụ kiện' &&
+      /Trong kho/.test(backTxt) && /Ngày trả thực tế\s+\d{2}\/\d{2}\/\d{4}/.test(backTxt) && /theo lần trả/.test(backTxt) && (await eqPanel.getByRole('button', { name: 'Thêm lần mượn' }).isEnabled()),
+    `mặc định ${retDefault} → trả ${eq.loans[0].returnDate} · ${eq.condition}`,
   );
 
   const eqRows = () => win.locator('.equipment-table tbody tr.clickable').count();
@@ -1287,10 +1340,42 @@ try {
   await win.waitForTimeout(500);
   const eqs = await call(win, 'listEquipment');
   check(
-    'Duplicate thiết bị: chép Tên sp / Hãng / Mô tả, STT tiếp theo, Serial và Ngày nhận bàn giao để trống, không chép lịch sử mượn',
-    dupEqName === 'Camera Axis P1375-E' && dupEqStt === '2' && dupSerial === '' && eqs.length === 2 && eqs[0].stt === 2 && eqs[0].brandName === 'Axis' && eqs[0].description === 'Camera bullet 4MP, kèm chân đế' && eqs[0].handoverDate === null && eqs[0].loans.length === 0,
+    'Duplicate thiết bị: chép Tên sp / Phân loại / Hãng / Mô tả, STT tiếp theo, Serial và Ngày nhận bàn giao để trống, không chép lịch sử mượn',
+    dupEqName === 'Camera Axis P1375-E' && dupEqStt === '2' && dupSerial === '' && eqs.length === 2 && eqs[0].stt === 2 && eqs[0].categoryName === 'Camera' && eqs[0].brandName === 'Axis' && eqs[0].description === 'Camera bullet 4MP, kèm chân đế' && eqs[0].handoverDate === null && eqs[0].loans.length === 0,
     `${dupEqStt}. ${dupEqName}`,
   );
+
+  // Kéo mép tiêu đề cột / mép dưới dòng để đổi kích thước (lưu lại), bấm đúp mép dòng để trả về
+  {
+    const sortBefore = await win.evaluate(() => localStorage.getItem('ppm:equipment-sort'));
+    const th = win.locator('.equipment-table th[data-col="name"]');
+    const before = await th.boundingBox();
+    await win.mouse.move(before.x + before.width - 2, before.y + before.height / 2);
+    await win.mouse.down();
+    await win.mouse.move(before.x + before.width + 60, before.y + before.height / 2, { steps: 6 });
+    await win.mouse.up();
+    const after = await th.boundingBox();
+    const sortAfter = await win.evaluate(() => localStorage.getItem('ppm:equipment-sort'));
+    const row = win.locator('.equipment-table tbody tr[data-row]').first();
+    const rb = await row.boundingBox();
+    await win.mouse.move(rb.x + 40, rb.y + rb.height - 2);
+    await win.mouse.down();
+    await win.mouse.move(rb.x + 40, rb.y + rb.height + 50, { steps: 6 });
+    await win.mouse.up();
+    const rb2 = await row.boundingBox();
+    const saved = await win.evaluate(() => JSON.parse(localStorage.getItem('ppm:tbl-size:equipment') ?? 'null'));
+    await shot(win, '49-table-resize');
+    const viewOpened = await win.locator('.modal .loan-log').count();
+    await win.mouse.dblclick(rb2.x + 40, rb2.y + rb2.height - 2);
+    await win.waitForTimeout(200);
+    const rb3 = await row.boundingBox();
+    const viewAfterDbl = await win.locator('.modal .loan-log').count();
+    check(
+      'Bảng: kéo mép cột đổi độ rộng, kéo mép dòng đổi chiều cao (lưu lại); bấm đúp mép dòng trả về, không mở View info / không sắp xếp',
+      after.width >= before.width + 50 && rb2.height >= rb.height + 40 && !!saved?.cols?.name && Object.keys(saved?.rows ?? {}).length === 1 && rb3.height < rb2.height - 30 && viewOpened === 0 && viewAfterDbl === 0 && sortAfter === sortBefore,
+      `cột ${Math.round(before.width)}→${Math.round(after.width)}px · dòng ${Math.round(rb.height)}→${Math.round(rb2.height)}→${Math.round(rb3.height)}px`,
+    );
+  }
 
   await win.locator('.equipment-table tbody tr', { hasText: 'ACCC8E-7731' }).dblclick();
   await win.waitForSelector('.modal .loan-log');
@@ -1298,8 +1383,8 @@ try {
   const viewTxt = await win.locator('.modal').innerText();
   await shot(win, '48-equipment-view-info');
   check(
-    'View info thiết bị: đủ thông tin và lịch sử mượn / trả',
-    /ACCC8E-7731/.test(viewTxt) && /lịch sử mượn \/ trả/i.test(viewTxt) && /Demo cho khách ABC/.test(viewTxt) && /Trầy nhẹ vỏ/.test(viewTxt) && /Ngày nhận bàn giao\s*15\/10\/2026/.test(viewTxt) && /Mô tả\s*Camera bullet 4MP/.test(viewTxt),
+    'View info thiết bị: đủ thông tin và lịch sử mượn / trả (kèm Ngày trả thực tế, ảnh lần mượn)',
+    /ACCC8E-7731/.test(viewTxt) && /lịch sử mượn \/ trả/i.test(viewTxt) && /Demo cho khách ABC/.test(viewTxt) && /Trầy nhẹ vỏ/.test(viewTxt) && /Ngày nhận bàn giao\s*15\/10\/2026/.test(viewTxt) && /Phân loại\s*Camera/.test(viewTxt) && /Ngày trả thực tế/.test(viewTxt) && (await win.locator('.modal .loan-images img').count()) === 1,
     viewTxt.replace(/\s+/g, ' ').slice(0, 160),
   );
   await win.locator('.modal-foot').getByRole('button', { name: 'Đóng' }).click();
@@ -1312,6 +1397,112 @@ try {
   await win.locator('.modal').getByRole('button', { name: 'Xóa', exact: true }).click();
   await win.waitForTimeout(400);
   check('Xóa thiết bị', (await eqRows()) === 1 && (await call(win, 'listEquipment')).length === 1);
+
+  // --- v1.9: Tìm kiếm trên topbar → mở đúng chỗ và tô sáng từ khóa; bấm bất kỳ đâu để bỏ ---
+  await go(win, '#/');
+  await win.waitForTimeout(300);
+  await win.locator('select[aria-label="Kiểu tìm kiếm"]').selectOption('serial');
+  await win.locator('.gsearch-input').fill('accc8e-7731');
+  await win.waitForSelector('.gsearch-results .opt');
+  await win.locator('.gsearch-results .opt', { hasText: 'Kho thiết bị' }).first().click();
+  await win.waitForFunction(() => (CSS.highlights?.get('ppm-search')?.size ?? 0) > 0, null, { timeout: 5000 }).catch(() => undefined);
+  const hl = await win.evaluate(() => {
+    const h = CSS.highlights?.get('ppm-search');
+    return { n: h?.size ?? 0, text: h ? [...h].map((r) => r.toString()).slice(0, 3) : [], hash: location.hash };
+  });
+  const hlPanel = await win.locator('.side-panel').isVisible();
+  await shot(win, '50-search-highlight');
+  await win.locator('.page-head h1').click();
+  const hlAfter = await win.evaluate(() => CSS.highlights?.get('ppm-search')?.size ?? 0);
+  check(
+    'Bấm kết quả tìm kiếm: mở đúng thiết bị, tô sáng từ khóa (không phân biệt hoa thường), bấm chỗ trống thì bỏ tô sáng',
+    hl.hash.startsWith('#/equipment') && hlPanel && hl.n >= 1 && hl.text.every((t) => t.toLowerCase() === 'accc8e-7731') && hlAfter === 0,
+    `${hl.hash} · ${hl.n} chỗ (${hl.text.join(', ')}) → sau khi bấm: ${hlAfter}`,
+  );
+  await win.locator('.gsearch-input').fill('');
+
+  // --- v1.9: Job Freelance — Trạng thái thanh toán, màu Tình trạng ---
+  await go(win, '#/settings');
+  await win.getByRole('button', { name: 'Danh mục (Master Data)' }).click();
+  await win.locator('[aria-label="Phân loại danh mục"]').getByRole('button', { name: 'Job Freelance' }).click();
+  await win.getByRole('button', { name: 'Tình trạng', exact: true }).click();
+  await win.locator('input[aria-label="Màu của Đang làm"]').fill('#0ea5e9');
+  await win.waitForTimeout(900);
+  const flStatus = (await call(win, 'listMaster', 'freelanceStatuses')).find((m) => m.name === 'Đang làm');
+  await shot(win, '51-master-status-colors');
+  const eqTabs = await (async () => {
+    await win.locator('[aria-label="Phân loại danh mục"]').getByRole('button', { name: 'Kho thiết bị' }).click();
+    await win.waitForTimeout(200);
+    return (await win.locator('.tabs.small button').allInnerTexts()).join('|');
+  })();
+  await go(win, '#/freelance');
+  await win.waitForSelector('.freelance-table');
+  const flRow = win.locator('.freelance-table tbody tr').first();
+  await flRow.locator('select[aria-label^="Tình trạng"]').selectOption({ label: 'Đang làm' });
+  await win.waitForTimeout(300);
+  await flRow.locator('select[aria-label^="Trạng thái thanh toán"]').selectOption({ label: 'Đã thanh toán' });
+  await win.waitForTimeout(400);
+  const statusStyle = await flRow.locator('select[aria-label^="Tình trạng"]').evaluate((el) => getComputedStyle(el).borderTopColor);
+  const flHeads2 = (await win.locator('.freelance-table th').allInnerTexts()).map((t) => t.replace(/[▲▼]/g, '').trim()).filter(Boolean);
+  const flJob = (await call(win, 'listFreelance')).find((j) => j.paymentStatusName === 'Đã thanh toán') ?? {};
+  await shot(win, '52-freelance-payment');
+  check(
+    'Job Freelance: cột Thanh toán (danh mục riêng, có màu), Tình trạng tô màu theo Settings; Master Data có Kho thiết bị › Phân loại',
+    flHeads2.includes('Thanh toán') && flJob.paymentStatusName === 'Đã thanh toán' && flStatus?.color === '#0ea5e9' && flJob.statusColor === '#0ea5e9' && statusStyle === 'rgb(14, 165, 233)' && eqTabs === 'Phân loại',
+    `${flJob.statusName} ${flJob.statusColor} · ${flJob.paymentStatusName} · viền ${statusStyle} · tabs ${eqTabs}`,
+  );
+
+  // --- v1.9: Đổi tên My Workspace ---
+  await win.locator('.sidebar .ws-name').dblclick();
+  await win.locator('.sidebar input[aria-label="Tên workspace"]').fill('Kho dự án Tùng');
+  await win.locator('.sidebar input[aria-label="Tên workspace"]').press('Enter');
+  await win.waitForTimeout(300);
+  const wsName = await win.locator('.sidebar .ws-name').innerText();
+  const wsSaved = (await call(win, 'getSettings')).workspaceName;
+  check('Đổi tên "My Workspace" ngay trên sidebar (lưu lại)', wsName === 'Kho dự án Tùng' && wsSaved === 'Kho dự án Tùng', `${wsName} / ${wsSaved}`);
+
+  // --- v1.9: To-do list ---
+  await win.locator('.sidebar').getByRole('link', { name: 'To-do list' }).click();
+  await win.waitForSelector('text=Chưa có việc nào cho');
+  const todoDate = await win.locator('#todo-date').inputValue();
+  await win.getByRole('button', { name: 'Thêm việc' }).first().click();
+  await win.waitForSelector('.todo-pick-list');
+  const pickTxt = await win.locator('.todo-pick-list').innerText();
+  await win.locator('.modal [aria-label="Loại job"]').getByRole('button', { name: 'Job Chính' }).click();
+  await win.locator('.todo-pick input').nth(0).check();
+  await win.locator('.todo-pick input').nth(1).check();
+  await win.locator('.modal [aria-label="Loại job"]').getByRole('button', { name: 'Job Freelance' }).click();
+  await win.locator('.todo-pick input').nth(0).check();
+  await win.locator('.modal-foot').getByRole('button', { name: /^Thêm 3 việc$/ }).click();
+  await win.waitForSelector('.todo-item');
+  let todoList = await call(win, 'listTodos', day(0));
+  check(
+    'To-do list (dưới Calendar): mặc định hôm nay, chọn dự án Job Chính (không có Warranty) và job Freelance',
+    todoDate === dmy(day(0)) && todoList.length === 3 && todoList.filter((t) => t.kind === 'MAIN').length === 2 && todoList.filter((t) => t.kind === 'FREELANCE').length === 1 && !/Warranty/.test(pickTxt),
+    todoList.map((t) => `${t.kind}:${t.title}`).join(' | '),
+  );
+  const firstBefore = todoList[0].id;
+  const third = todoList[2];
+  await win.locator(`[data-grip="${third.id}"]`).dragTo(win.locator(`li[data-todo="${firstBefore}"]`), { targetPosition: { x: 30, y: 4 } });
+  await win.waitForTimeout(500);
+  todoList = await call(win, 'listTodos', day(0));
+  const dragOk = todoList[0].id === third.id;
+  await win.locator(`[data-grip="${todoList[2].id}"]`).focus();
+  const movedId = todoList[2].id;
+  await win.keyboard.press('ArrowUp');
+  await win.waitForTimeout(400);
+  todoList = await call(win, 'listTodos', day(0));
+  check('To-do: kéo biểu tượng ☰ để đổi thứ tự ưu tiên (hoặc phím mũi tên)', dragOk && todoList[1].id === movedId, todoList.map((t) => t.title).join(' > '));
+  await win.getByRole('button', { name: `Đánh dấu đã hoàn thành: ${todoList[0].title}` }).click();
+  await win.waitForTimeout(400);
+  todoList = await call(win, 'listTodos', day(0));
+  const doneTxt = await win.locator('section', { hasText: 'Đã hoàn thành (1)' }).innerText().catch(() => '');
+  await shot(win, '53-todo-list');
+  check(
+    'To-do: đánh dấu Đã hoàn thành → chuyển sang mục Đã hoàn thành',
+    todoList.filter((t) => t.doneAt).length === 1 && todoList[2].doneAt && /Đã hoàn thành/.test(doneTxt) && (await win.locator('.todo-item.done').count()) === 1,
+    todoList.map((t) => `${t.title}${t.doneAt ? ' ✓' : ''}`).join(' > '),
+  );
 
   // --- NFR-001: 1.100 dự án — board/dashboard <= 2s, search <= 300ms ---
   const ys = await call(win, 'listYears');

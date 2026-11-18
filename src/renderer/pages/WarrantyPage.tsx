@@ -14,6 +14,7 @@ import { useLocalState, useSessionState } from '../lib/persist';
 import { useAppData } from '../state/AppData';
 import { usePageTitle, useUi } from '../state/ui';
 import { useLocation } from 'react-router';
+import { useTableResize } from '../lib/tableResize';
 
 type DateField = 'receivedDate' | 'testedDate';
 type DateMode = 'all' | 'month' | 'range' | QuickRangeKey;
@@ -648,6 +649,7 @@ function WarrantyInfoModal({
 }
 
 export function WarrantyPage({ year, crumbs }: { year: JobYear; crumbs: Crumb[] }) {
+  const tableRef = useTableResize('warranty');
   usePageTitle(`Warranty ${year.yearLabel}`);
   const { masters, refresh, today } = useAppData();
   const { confirm, toast, toastError } = useUi();
@@ -832,13 +834,14 @@ export function WarrantyPage({ year, crumbs }: { year: JobYear; crumbs: Crumb[] 
       ) : (
         <div className="split">
         <div className="table-wrap">
-          <table className="tbl">
+          <table className="tbl" ref={tableRef}>
             <thead>
               <tr>
                 {sel.active && <SelectAllHeader sel={sel} />}
                 {cols.map((c) => (
                   <th
                     key={c.key}
+                    data-col={c.key}
                     className={c.sort ? 'sortable' : ''}
                     onClick={() => c.sort && setSort({ key: c.sort, dir: sort.key === c.sort && sort.dir === 'asc' ? 'desc' : 'asc' })}
                     aria-sort={c.sort && sort.key === c.sort ? (sort.dir === 'asc' ? 'ascending' : 'descending') : undefined}
@@ -862,6 +865,7 @@ export function WarrantyPage({ year, crumbs }: { year: JobYear; crumbs: Crumb[] 
               {shown.map((r) => (
                 <tr
                   key={r.id}
+                  data-row={r.id}
                   className={`clickable ${(sel.active ? sel.selected.has(r.id) : r.id === detailId) ? 'selected' : ''}`}
                   tabIndex={0}
                   aria-selected={sel.active ? sel.selected.has(r.id) : r.id === detailId}

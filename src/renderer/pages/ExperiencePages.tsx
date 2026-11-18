@@ -14,6 +14,7 @@ import { useLocalState, useSessionState } from '../lib/persist';
 import { useAppData } from '../state/AppData';
 import { usePageTitle, useUi } from '../state/ui';
 import { DateFilterControls, resolveDateRange } from './WarrantyPage';
+import { useTableResize } from '../lib/tableResize';
 
 type DateMode = Parameters<typeof resolveDateRange>[0];
 
@@ -342,6 +343,7 @@ export function ExperienceBrandPage() {
 }
 
 function ExperienceBrandView({ brandId }: { brandId: string }) {
+  const tableRef = useTableResize('experience');
   const { masters, today, refresh } = useAppData();
   const { confirm, toast, toastError } = useUi();
   const brand = masters.brands.find((b) => b.id === brandId);
@@ -453,7 +455,7 @@ function ExperienceBrandView({ brandId }: { brandId: string }) {
       ) : (
         <div className="split">
         <div className="table-wrap">
-          <table className="tbl">
+          <table className="tbl" ref={tableRef}>
             <thead>
               <tr>
                 <th>Date</th>
@@ -474,6 +476,7 @@ function ExperienceBrandView({ brandId }: { brandId: string }) {
               {shown.map((r) => (
                 <tr
                   key={r.id}
+                  data-row={r.id}
                   className={`clickable ${r.id === detailId ? 'selected' : ''}`}
                   tabIndex={0}
                   aria-selected={r.id === detailId}

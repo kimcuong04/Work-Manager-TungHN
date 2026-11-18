@@ -169,7 +169,7 @@ function DeleteDialog({ project, onDone }: { project: Project; onDone: (deleted:
         <div>
           Xóa dự án <b>“{project.stt}. {project.projectName}”</b> khỏi ứng dụng?
         </div>
-        <div className="muted small">Ghi chú, dữ liệu Excel đã import và lịch của dự án cũng bị xóa. File liên kết (DWG/TXT/DOCX/PDF) không bị ảnh hưởng.</div>
+        <div className="muted small">Ghi chú, dữ liệu Excel đã import và lịch của dự án cũng bị xóa. File liên kết (DWG/TXT/DOCX/PDF/XLSX) không bị ảnh hưởng.</div>
         {project.folderPath ? (
           <div className="alert info small">
             <div>

@@ -4,7 +4,7 @@ import { ArrowLeft, FileSpreadsheet, Laptop, Pencil, Plus, Trash2, X } from 'luc
 import { formatDate, formatDateTime } from '../../shared/dates';
 import { isNoteEmpty, sanitizeNoteHtml } from '../../shared/noteHtml';
 import { buildHaystack, compareVi, matchesQuery, normalizeText } from '../../shared/text';
-import type { FreelanceInput, FreelanceJob } from '../../shared/types';
+import type { FreelanceInput, FreelanceJob, MasterKind } from '../../shared/types';
 import { hasErrors, validateFreelanceInput } from '../../shared/validation';
 import { api } from '../api';
 import { BulkImportWizard } from '../components/BulkImportWizard';
@@ -14,32 +14,44 @@ import { SelectAllHeader, SelectCell, SelectToggleButton, SelectionBar, useSelec
 import { DayNotes, type NoteSource } from '../components/ProjectNotes';
 import { RichNoteEditor } from '../components/RichNoteEditor';
 import { useLocalState, useSessionState } from '../lib/persist';
+import { useTableResize } from '../lib/tableResize';
 import { latestNote } from '../lib/projects';
 import { useAppData } from '../state/AppData';
 import { usePageTitle, useUi } from '../state/ui';
 
 const dash = <span className="faint">—</span>;
 
-function useStatusOptions() {
+type ColoredKind = Extract<MasterKind, 'freelanceStatuses' | 'freelancePaymentStatuses'>;
+
+function useStatusOptions(kind: ColoredKind = 'freelanceStatuses') {
   const { masters } = useAppData();
-  return masters.freelanceStatuses.map((m) => ({ id: m.id, name: m.name, inactive: !m.isActive }));
+  return masters[kind].map((m) => ({ id: m.id, name: m.name, inactive: !m.isActive, color: m.color ?? null }));
 }
 
-/** Đổi Tình trạng ngay trên bảng / trang chi tiết. */
-function StatusSelect({ job, compact }: { job: FreelanceJob; compact?: boolean }) {
+/** Viền + nền nhạt theo màu người dùng chọn cho Tình trạng / Trạng thái thanh toán (Settings › Master Data). */
+export function colorStyle(color: string | null | undefined): React.CSSProperties | undefined {
+  return color ? { borderColor: color, background: `${color}1f`, boxShadow: `inset 4px 0 0 ${color}` } : undefined;
+}
+
+/** Đổi Tình trạng hoặc Trạng thái thanh toán ngay trên bảng / trang chi tiết. */
+function StatusSelect({ job, compact, kind = 'freelanceStatuses' }: { job: FreelanceJob; compact?: boolean; kind?: ColoredKind }) {
   const { refresh } = useAppData();
   const { toastError } = useUi();
-  const options = useStatusOptions();
+  const options = useStatusOptions(kind);
+  const payment = kind === 'freelancePaymentStatuses';
+  const value = payment ? job.paymentStatusId : job.statusId;
+  const color = options.find((o) => o.id === value)?.color;
   return (
     <select
-      className="select"
-      style={compact ? { height: 30, minWidth: 130 } : { maxWidth: 240 }}
-      value={job.statusId ?? ''}
-      aria-label={`Tình trạng của ${job.projectName}`}
+      className="select status-select"
+      style={{ ...(compact ? { height: 30, minWidth: 130 } : { maxWidth: 240 }), ...colorStyle(color) }}
+      value={value ?? ''}
+      aria-label={`${payment ? 'Trạng thái thanh toán' : 'Tình trạng'} của ${job.projectName}`}
       onClick={(e) => e.stopPropagation()}
       onChange={async (e) => {
         try {
-          await api.setFreelanceStatus(job.id, e.target.value || null);
+          if (payment) await api.setFreelancePaymentStatus(job.id, e.target.value || null);
+          else await api.setFreelanceStatus(job.id, e.target.value || null);
           await refresh('freelance');
         } catch (err) {
           toastError(err);
@@ -61,16 +73,18 @@ export function FreelanceForm({ job, onClose, onSaved }: { job?: FreelanceJob; o
   const { masters, freelance, today, refresh } = useAppData();
   const { toast, toastError, confirm } = useUi();
   const statusOptions = useStatusOptions();
+  const paymentOptions = useStatusOptions('freelancePaymentStatuses');
   const isEdit = !!job;
   const [initial] = useState<FreelanceInput>(() =>
     job
-      ? { stt: job.stt, projectName: job.projectName, hirerId: job.hirerId, startDate: job.startDate, statusId: job.statusId }
+      ? { stt: job.stt, projectName: job.projectName, hirerId: job.hirerId, startDate: job.startDate, statusId: job.statusId, paymentStatusId: job.paymentStatusId }
       : {
           stt: Math.max(0, ...freelance.map((j) => j.stt)) + 1,
           projectName: '',
           hirerId: null,
           startDate: today,
           statusId: masters.freelanceStatuses.find((s) => s.isActive)?.id ?? null,
+          paymentStatusId: masters.freelancePaymentStatuses.find((s) => s.isActive)?.id ?? null,
         },
   );
   const [form, setForm] = useState<FreelanceInput>(initial);
@@ -216,6 +230,27 @@ export function FreelanceForm({ job, onClose, onSaved }: { job?: FreelanceJob; o
                 placeholder="Không bắt buộc"
               />
             </Field>
+            <Field label="Trạng thái thanh toán" htmlFor="fl-payment">
+              <SearchableSelect
+                id="fl-payment"
+                options={paymentOptions}
+                keepOrder
+                value={form.paymentStatusId ?? null}
+                onChange={(id) => set('paymentStatusId', id)}
+                onCreate={async (name) => {
+                  try {
+                    const item = await api.createMaster('freelancePaymentStatuses', name);
+                    await refresh('masters');
+                    toast('success', `Đã thêm Trạng thái thanh toán "${item.name}".`);
+                    return item.id;
+                  } catch (e) {
+                    toastError(e);
+                    return null;
+                  }
+                }}
+                placeholder="Không bắt buộc"
+              />
+            </Field>
           </div>
         </section>
 
@@ -231,22 +266,24 @@ export function FreelanceForm({ job, onClose, onSaved }: { job?: FreelanceJob; o
   );
 }
 
-type SortKey = 'stt' | 'projectName' | 'hirer' | 'startDate' | 'status';
+type SortKey = 'stt' | 'projectName' | 'hirer' | 'startDate' | 'status' | 'payment';
 const SORT_COLS: { key: SortKey; label: string }[] = [
   { key: 'stt', label: 'STT' },
   { key: 'projectName', label: 'Tên dự án' },
   { key: 'hirer', label: 'Bên thuê' },
   { key: 'startDate', label: 'Ngày bắt đầu' },
   { key: 'status', label: 'Tình trạng' },
+  { key: 'payment', label: 'Thanh toán' },
 ];
 
 interface FreelanceFilter {
   q: string;
   statuses: string[];
+  payments?: string[];
   hirers?: string[];
   years: string[];
 }
-const EMPTY: FreelanceFilter = { q: '', statuses: [], hirers: [], years: [] };
+const EMPTY: FreelanceFilter = { q: '', statuses: [], payments: [], hirers: [], years: [] };
 
 export async function confirmDeleteFreelance(job: FreelanceJob, confirm: ReturnType<typeof useUi>['confirm']): Promise<boolean> {
   return confirm({
@@ -271,8 +308,13 @@ export function FreelanceListPage() {
   const [form, setForm] = useState<{ job?: FreelanceJob } | null>(null);
   const [importing, setImporting] = useState(false);
   const statusOrder = useMemo(() => new Map(masters.freelanceStatuses.map((s, i) => [s.id, i])), [masters.freelanceStatuses]);
+  const paymentOrder = useMemo(() => new Map(masters.freelancePaymentStatuses.map((s, i) => [s.id, i])), [masters.freelancePaymentStatuses]);
+  const tableRef = useTableResize('freelance');
 
-  const indexed = useMemo(() => freelance.map((j) => ({ j, hay: buildHaystack([String(j.stt), j.projectName, j.hirer, j.statusName, j.note]) })), [freelance]);
+  const indexed = useMemo(
+    () => freelance.map((j) => ({ j, hay: buildHaystack([String(j.stt), j.projectName, j.hirer, j.statusName, j.paymentStatusName, j.note]) })),
+    [freelance],
+  );
   const yearOpts = useMemo(
     () =>
       [...new Set(freelance.map((j) => j.startDate?.slice(0, 4)).filter((y): y is string => !!y))]
@@ -287,6 +329,7 @@ export function FreelanceListPage() {
       .filter(
         ({ j, hay }) =>
           (!filter.statuses.length || (j.statusId !== null && filter.statuses.includes(j.statusId))) &&
+          (!filter.payments?.length || (j.paymentStatusId !== null && filter.payments.includes(j.paymentStatusId))) &&
           (!filter.hirers?.length || (j.hirerId !== null && filter.hirers.includes(j.hirerId))) &&
           (!filter.years.length || (!!j.startDate && filter.years.includes(j.startDate.slice(0, 4)))) &&
           matchesQuery(nq, hay),
@@ -296,13 +339,14 @@ export function FreelanceListPage() {
     return list.sort((a, b) => {
       if (sort.key === 'stt') return sign * (a.stt - b.stt);
       if (sort.key === 'status') return sign * ((statusOrder.get(a.statusId ?? '') ?? 999) - (statusOrder.get(b.statusId ?? '') ?? 999)) || b.stt - a.stt;
+      if (sort.key === 'payment') return sign * ((paymentOrder.get(a.paymentStatusId ?? '') ?? 999) - (paymentOrder.get(b.paymentStatusId ?? '') ?? 999)) || b.stt - a.stt;
       const va = sort.key === 'startDate' ? a.startDate ?? '' : a[sort.key];
       const vb = sort.key === 'startDate' ? b.startDate ?? '' : b[sort.key];
       if (!va && vb) return 1;
       if (va && !vb) return -1;
       return sign * compareVi(va, vb) || b.stt - a.stt;
     });
-  }, [indexed, filter, sort, statusOrder]);
+  }, [indexed, filter, sort, statusOrder, paymentOrder]);
 
   const shownIds = useMemo(() => shown.map((j) => j.id), [shown]);
   const sel = useSelection(shownIds);
@@ -337,7 +381,7 @@ export function FreelanceListPage() {
     }
   };
 
-  const anyFilter = !!filter.q.trim() || filter.statuses.length > 0 || (filter.hirers?.length ?? 0) > 0 || filter.years.length > 0;
+  const anyFilter = !!filter.q.trim() || filter.statuses.length > 0 || (filter.payments?.length ?? 0) > 0 || (filter.hirers?.length ?? 0) > 0 || filter.years.length > 0;
   const usedStt = useMemo(() => new Set(freelance.map((j) => j.stt)), [freelance]);
   const actions = (
     <>
@@ -359,13 +403,19 @@ export function FreelanceListPage() {
           <h1 className="row">
             <Laptop size={22} style={{ color: 'var(--accent)' }} /> Job Freelance
           </h1>
-          <div className="muted small">Bảng chung cho mọi năm · danh mục Tình trạng quản lý riêng ở Settings › Master Data › Job Freelance</div>
+          <div className="muted small">Bảng chung cho mọi năm · Tình trạng, Trạng thái thanh toán (kèm màu) quản lý ở Settings › Master Data › Job Freelance</div>
         </div>
         <div className="actions">{actions}</div>
       </div>
       <div className="toolbar">
         <SearchInput value={filter.q} onChange={(q) => setFilter({ ...filter, q })} placeholder="Tìm STT, tên dự án, bên thuê, ghi chú…" width={320} />
         <MultiSelect label="Tình trạng" options={masters.freelanceStatuses.map((m) => ({ id: m.id, name: m.name, inactive: !m.isActive }))} value={filter.statuses} onChange={(statuses) => setFilter({ ...filter, statuses })} />
+        <MultiSelect
+          label="Thanh toán"
+          options={masters.freelancePaymentStatuses.map((m) => ({ id: m.id, name: m.name, inactive: !m.isActive }))}
+          value={filter.payments ?? []}
+          onChange={(payments) => setFilter({ ...filter, payments })}
+        />
         <MultiSelect
           label="Bên thuê"
           options={masters.freelanceHirers.map((m) => ({ id: m.id, name: m.name, inactive: !m.isActive }))}
@@ -395,7 +445,7 @@ export function FreelanceListPage() {
         </div>
       ) : (
         <div className="table-wrap">
-          <table className="tbl freelance-table">
+          <table className="tbl freelance-table" ref={tableRef}>
             <thead>
               <tr>
                 {sel.active && <SelectAllHeader sel={sel} />}
@@ -409,13 +459,13 @@ export function FreelanceListPage() {
                   />
                 ))}
                 <th>Ghi chú gần nhất</th>
-                <th style={{ width: 1 }} />
+                <th style={{ width: 1 }} data-col="__actions" />
               </tr>
             </thead>
             <tbody>
               {shown.length === 0 && (
                 <tr>
-                  <td colSpan={8} className="faint" style={{ textAlign: 'center' }}>
+                  <td colSpan={9} className="faint" style={{ textAlign: 'center' }}>
                     Không có job khớp bộ lọc.
                   </td>
                 </tr>
@@ -423,6 +473,7 @@ export function FreelanceListPage() {
               {shown.map((j) => (
                 <tr
                   key={j.id}
+                  data-row={j.id}
                   className={`clickable ${sel.active && sel.selected.has(j.id) ? 'selected' : ''}`}
                   aria-selected={sel.active ? sel.selected.has(j.id) : undefined}
                   onClick={() => (sel.active ? sel.toggle(j.id) : navigate(`/freelance/${j.id}`))}
@@ -434,6 +485,9 @@ export function FreelanceListPage() {
                   <td className="nowrap">{j.startDate ? formatDate(j.startDate) : dash}</td>
                   <td>
                     <StatusSelect job={j} compact />
+                  </td>
+                  <td>
+                    <StatusSelect job={j} compact kind="freelancePaymentStatuses" />
                   </td>
                   <td className="clamp small muted">
                     <div>{latestNote(j) || dash}</div>
@@ -530,9 +584,18 @@ export function FreelanceDetailPage() {
           <h1 style={{ wordBreak: 'break-word' }}>
             {job.stt}. {job.projectName}
           </h1>
-          {job.statusName && (
-            <div className="row" style={{ marginTop: 8 }}>
-              <span className="badge accent">{job.statusName}</span>
+          {(job.statusName || job.paymentStatusName) && (
+            <div className="row" style={{ marginTop: 8, gap: 6 }}>
+              {job.statusName && (
+                <span className="badge accent" style={colorStyle(job.statusColor)}>
+                  {job.statusName}
+                </span>
+              )}
+              {job.paymentStatusName && (
+                <span className="badge" style={colorStyle(job.paymentStatusColor)}>
+                  {job.paymentStatusName}
+                </span>
+              )}
             </div>
           )}
         </div>
@@ -563,6 +626,10 @@ export function FreelanceDetailPage() {
           <span className="k">Tình trạng</span>
           <span>
             <StatusSelect job={job} />
+          </span>
+          <span className="k">Trạng thái thanh toán</span>
+          <span>
+            <StatusSelect job={job} kind="freelancePaymentStatuses" />
           </span>
         </div>
         <div className="small faint" style={{ marginTop: 14 }}>

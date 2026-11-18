@@ -11,6 +11,7 @@ import { useAppData } from '../state/AppData';
 import { useUi } from '../state/ui';
 import { EmptyState, StatusBadge } from './common';
 import { XlsxExportDialog, type ExportColumn } from './XlsxExportDialog';
+import { useTableResize } from '../lib/tableResize';
 
 /** Ghi chú tổng hợp mở đầu bằng "dd/mm/yyyy: …" (xem notes.ts); file xuất dùng mm/dd/yyyy cho đồng nhất với cột ngày. */
 function toUsDatePrefix(note: string): string {
@@ -64,6 +65,7 @@ export function monthNotesCell(rows: { noteDate: string; text: string }[]): stri
 
 /** Dashboard: tóm tắt các dự án có ngày bắt đầu và/hoặc ngày tới hạn rơi vào tháng đang xem; xuất được ra .xlsx. */
 export function MonthProjects({ scoped }: { scoped: ProjectView[] }) {
+  const tableRef = useTableResize('month-projects');
   const { today } = useAppData();
   const navigate = useNavigate();
   const thisMonth = today.slice(0, 7);
@@ -149,7 +151,7 @@ export function MonthProjects({ scoped }: { scoped: ProjectView[] }) {
             </span>
           </div>
           <div className="table-wrap" style={{ maxHeight: 520 }}>
-            <table className="tbl">
+            <table className="tbl" ref={tableRef}>
               <thead>
                 <tr>
                   <th className="num">STT</th>
@@ -163,7 +165,7 @@ export function MonthProjects({ scoped }: { scoped: ProjectView[] }) {
               </thead>
               <tbody>
                 {list.map((p) => (
-                  <tr key={p.id} className={`clickable ${p.isCompleted ? 'row-done' : ''}`} onClick={() => navigate(`/project/${p.id}`)}>
+                  <tr key={p.id} data-row={p.id} className={`clickable ${p.isCompleted ? 'row-done' : ''}`} onClick={() => navigate(`/project/${p.id}`)}>
                     <td className="num">
                       <b>{p.stt}</b>
                     </td>

@@ -4,10 +4,29 @@ export type WorkCategory = ProjectCategory | 'WARRANTY';
 export type DeadlineStatus = 'URGENT' | 'ATTENTION' | 'NEW' | 'COMPLETED';
 export type ActiveStatus = Exclude<DeadlineStatus, 'COMPLETED'>;
 export type Theme = 'light' | 'dark';
-export type MasterKind = 'clients' | 'brands' | 'salespersons' | 'siPartners' | 'departments' | 'freelanceStatuses' | 'freelanceHirers';
-export const MASTER_KINDS: MasterKind[] = ['clients', 'siPartners', 'brands', 'salespersons', 'departments', 'freelanceStatuses', 'freelanceHirers'];
+export type MasterKind =
+  | 'clients'
+  | 'brands'
+  | 'salespersons'
+  | 'siPartners'
+  | 'departments'
+  | 'freelanceStatuses'
+  | 'freelanceHirers'
+  | 'freelancePaymentStatuses'
+  | 'equipmentCategories';
+export const MASTER_KINDS: MasterKind[] = [
+  'clients',
+  'siPartners',
+  'brands',
+  'salespersons',
+  'departments',
+  'freelanceStatuses',
+  'freelanceHirers',
+  'freelancePaymentStatuses',
+  'equipmentCategories',
+];
 /** Danh mục theo phân loại trong Settings › Master Data: Job Freelance quản lý riêng, không dùng chung với Job Chính. */
-export type MasterGroup = 'MAIN' | 'FREELANCE';
+export type MasterGroup = 'MAIN' | 'FREELANCE' | 'EQUIPMENT';
 export const MASTER_GROUP: Record<MasterKind, MasterGroup> = {
   clients: 'MAIN',
   siPartners: 'MAIN',
@@ -16,9 +35,13 @@ export const MASTER_GROUP: Record<MasterKind, MasterGroup> = {
   departments: 'MAIN',
   freelanceStatuses: 'FREELANCE',
   freelanceHirers: 'FREELANCE',
+  freelancePaymentStatuses: 'FREELANCE',
+  equipmentCategories: 'EQUIPMENT',
 };
 /** Danh mục sắp xếp theo thứ tự người dùng chọn (lên/xuống) thay vì theo tên. */
-export const ORDERED_MASTER_KINDS: MasterKind[] = ['freelanceStatuses'];
+export const ORDERED_MASTER_KINDS: MasterKind[] = ['freelanceStatuses', 'freelancePaymentStatuses'];
+/** Danh mục có màu do người dùng chọn (hiển thị trên bảng / trang chi tiết). */
+export const COLORED_MASTER_KINDS: MasterKind[] = ['freelanceStatuses', 'freelancePaymentStatuses'];
 
 /**
  * Job có năm và Pre-sales / Post-sales / Warranty. Từ v1.5 Job Freelance là một bảng riêng (`freelance_jobs`),
@@ -41,11 +64,13 @@ export const MASTER_LABEL: Record<MasterKind, string> = {
   departments: 'Phòng ban',
   freelanceStatuses: 'Tình trạng',
   freelanceHirers: 'Bên thuê',
+  freelancePaymentStatuses: 'Trạng thái thanh toán',
+  equipmentCategories: 'Phân loại',
 };
 
-/** File liên kết của dự án: bản vẽ AutoCAD, văn bản, Word, PDF (chỉ lưu đường dẫn, mở bằng ứng dụng mặc định). */
-export const LINK_FILE_EXTENSIONS = ['dwg', 'txt', 'docx', 'pdf'];
-export const LINK_FILE_LABEL = '.dwg, .txt, .docx, .pdf';
+/** File liên kết của dự án: bản vẽ AutoCAD, văn bản, Word, PDF, Excel (chỉ lưu đường dẫn, mở bằng ứng dụng mặc định). */
+export const LINK_FILE_EXTENSIONS = ['dwg', 'txt', 'docx', 'pdf', 'xlsx'];
+export const LINK_FILE_LABEL = '.dwg, .txt, .docx, .pdf, .xlsx';
 export const IMAGE_EXTENSIONS = ['jpg', 'jpeg', 'png', 'webp'];
 
 export interface AppSettings {
@@ -58,6 +83,8 @@ export interface AppSettings {
   autoUpdate: boolean;
   /** Thư mục cha dùng gần nhất khi tạo thư mục dự án (mặc định cho lần sau). */
   projectRootDir: string | null;
+  /** Tên hiển thị ở đầu sidebar (mặc định "My Workspace"). */
+  workspaceName: string;
   updatedAt: string;
 }
 
@@ -87,6 +114,8 @@ export interface MasterItem {
   /** Chỉ có ở Sale: phòng ban của người đó. */
   departmentId?: string | null;
   departmentName?: string | null;
+  /** Chỉ có ở danh mục có màu: mã màu #rrggbb, null = không màu. */
+  color?: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -209,6 +238,10 @@ export interface FreelanceJob {
   startDate: string | null;
   statusId: string | null;
   statusName: string | null;
+  paymentStatusId: string | null;
+  paymentStatusName: string | null;
+  statusColor: string | null;
+  paymentStatusColor: string | null;
   /** Bản chữ thuần của mọi ngày ghi chú (mới nhất trước). */
   note: string;
   createdAt: string;
@@ -222,6 +255,8 @@ export interface FreelanceInput {
   hirerId: string | null;
   startDate: string | null;
   statusId: string | null;
+  /** Danh mục Trạng thái thanh toán của Job Freelance; bỏ trống = chưa có. */
+  paymentStatusId?: string | null;
 }
 
 export interface FreelanceSaveOptions {
@@ -448,10 +483,13 @@ export interface EquipmentLoan {
   salespersonId: string | null;
   salespersonName: string | null;
   borrowDate: string;
-  /** null = chưa trả (đang mượn). */
+  /** Ngày hẹn trả. */
+  dueDate: string | null;
+  /** Ngày trả thực tế (ghi khi bấm "Đã hoàn trả"); null = đang mượn. */
   returnDate: string | null;
   reason: string;
   returnCondition: string;
+  images: ImageRef[];
   createdAt: string;
   updatedAt: string;
 }
@@ -461,6 +499,8 @@ export interface EquipmentItem {
   id: string;
   stt: number;
   productName: string;
+  categoryId: string | null;
+  categoryName: string | null;
   brandId: string | null;
   brandName: string | null;
   serialNumber: string;
@@ -468,6 +508,7 @@ export interface EquipmentItem {
   handoverDate: string | null;
   /** Nhập tay; tự lấy theo "Tình trạng khi trả" khi ghi lần trả mới nhất. */
   condition: string;
+  /** Theo lần mượn chưa hoàn trả (null = trong kho); chỉ đọc, đổi qua lịch sử mượn/trả. */
   currentBorrowDate: string | null;
   currentDueDate: string | null;
   images: ImageRef[];
@@ -481,13 +522,12 @@ export interface EquipmentInput {
   /** undefined = tự lấy STT lớn nhất + 1; null = người dùng bỏ trống (báo lỗi). */
   stt?: number | null;
   productName: string;
+  categoryId: string | null;
   brandId: string | null;
   serialNumber: string;
   description: string;
   handoverDate: string | null;
   condition: string;
-  currentBorrowDate: string | null;
-  currentDueDate: string | null;
   images: ImageRef[];
 }
 
@@ -495,17 +535,12 @@ export interface EquipmentLoanInput {
   siId: string | null;
   salespersonId: string | null;
   borrowDate: string;
+  dueDate: string | null;
+  /** Ngày trả thực tế; null = chưa hoàn trả. */
   returnDate: string | null;
   reason: string;
   returnCondition: string;
-}
-
-/** Cập nhật thông tin "hiện tại" của thiết bị khi lưu một lần mượn/trả. */
-export interface EquipmentLoanOptions {
-  /** Lần mượn chưa trả: đặt Ngày mượn hiện tại = Ngày mượn của lần này và Ngày hẹn trả hiện tại = giá trị này. */
-  setCurrent?: { dueDate: string | null };
-  /** Lần mượn đã trả: xóa Ngày mượn / Ngày hẹn trả hiện tại (thiết bị đã về kho). */
-  clearCurrent?: boolean;
+  images: ImageRef[];
 }
 
 export interface ExperienceRecord {
@@ -704,4 +739,29 @@ export interface AppInfo {
   version: string;
   dataDir: string;
   encryption: 'os' | 'fallback';
+}
+
+export type TodoKind = 'MAIN' | 'FREELANCE';
+
+/** Một việc trong To-do list của một ngày: trỏ tới một dự án Job Chính (Pre-sales / Post-sales) hoặc một job Freelance. */
+export interface TodoItem {
+  id: string;
+  todoDate: string;
+  kind: TodoKind;
+  /** Id dự án (MAIN) hoặc job Freelance (FREELANCE). */
+  targetId: string;
+  stt: number;
+  title: string;
+  /** Pre-sales / Post-sales kèm năm, hoặc "Job Freelance". */
+  scope: string;
+  /** Tình trạng / trạng thái hiện tại của job (để nhìn nhanh). */
+  status: string | null;
+  sortOrder: number;
+  /** Thời điểm bấm "Đã hoàn thành"; null = chưa xong. */
+  doneAt: string | null;
+}
+
+export interface TodoTarget {
+  kind: TodoKind;
+  targetId: string;
 }

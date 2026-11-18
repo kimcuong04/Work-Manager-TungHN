@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { NavLink, useLocation } from 'react-router';
 import {
   BookMarked,
@@ -14,6 +14,7 @@ import {
   KeyRound,
   LayoutDashboard,
   LayoutGrid,
+  ListTodo,
   Package,
   Laptop,
   Lightbulb,
@@ -345,6 +346,52 @@ function KnowledgeNode({ openMap, toggle }: { openMap: OpenMap; toggle: (k: stri
   );
 }
 
+/** Tên workspace ở đầu sidebar: bấm đúp hoặc bút chì để đổi tên, Enter lưu, Esc hủy. */
+function WorkspaceHead() {
+  const { settings, updateSettings } = useAppData();
+  const { toastError } = useUi();
+  const [draft, setDraft] = useState<string | null>(null);
+  useEffect(() => setDraft(null), [settings.workspaceName]);
+  const save = async () => {
+    if (draft === null) return;
+    try {
+      await updateSettings({ workspaceName: draft });
+    } catch (e) {
+      toastError(e);
+    }
+    setDraft(null);
+  };
+  return (
+    <div className="sidebar-head">
+      <LayoutGrid size={22} />
+      {draft === null ? (
+        <>
+          <span className="ws-name" title={`${settings.workspaceName} — bấm đúp để đổi tên`} onDoubleClick={() => setDraft(settings.workspaceName)}>
+            {settings.workspaceName}
+          </span>
+          <button className="btn sm icon ghost ws-edit" aria-label="Đổi tên workspace" title="Đổi tên workspace" onClick={() => setDraft(settings.workspaceName)}>
+            <Pencil size={13} />
+          </button>
+        </>
+      ) : (
+        <input
+          className="input ws-input"
+          autoFocus
+          maxLength={40}
+          aria-label="Tên workspace"
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          onBlur={() => void save()}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') void save();
+            if (e.key === 'Escape') setDraft(null);
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
 export function Sidebar({ collapsed, onExpand }: { collapsed: boolean; onExpand: () => void }) {
   const [openMap, setOpenMap] = useLocalState<OpenMap>('nav-open', {});
   const toggle = (k: string, def = false) => setOpenMap((m) => ({ ...m, [k]: !(m[k] ?? def) }));
@@ -364,6 +411,9 @@ export function Sidebar({ collapsed, onExpand }: { collapsed: boolean; onExpand:
           </NavLink>
           <NavLink to="/calendar" className={({ isActive }) => `nav-row ${isActive ? 'active' : ''}`} title="Calendar">
             <CalendarClock size={18} />
+          </NavLink>
+          <NavLink to="/todo" className={({ isActive }) => `nav-row ${isActive ? 'active' : ''}`} title="To-do list">
+            <ListTodo size={18} />
           </NavLink>
           {JOB_TYPES.map((j) => {
             const Icon = JOB_ICON[j];
@@ -405,10 +455,7 @@ export function Sidebar({ collapsed, onExpand }: { collapsed: boolean; onExpand:
 
   return (
     <aside className="sidebar" aria-label="Điều hướng">
-      <div className="sidebar-head">
-        <LayoutGrid size={22} />
-        My Workspace
-      </div>
+      <WorkspaceHead />
       <nav className="sidebar-scroll">
         <NavLink to="/" end className={({ isActive }) => `nav-row ${isActive ? 'active' : ''}`}>
           <LayoutDashboard size={17} />
@@ -421,6 +468,10 @@ export function Sidebar({ collapsed, onExpand }: { collapsed: boolean; onExpand:
         <NavLink to="/calendar" className={({ isActive }) => `nav-row ${isActive ? 'active' : ''}`}>
           <CalendarClock size={17} />
           <span className="nav-label">Calendar</span>
+        </NavLink>
+        <NavLink to="/todo" className={({ isActive }) => `nav-row ${isActive ? 'active' : ''}`}>
+          <ListTodo size={17} />
+          <span className="nav-label">To-do list</span>
         </NavLink>
 
         <div className="sidebar-section">KHÔNG GIAN</div>

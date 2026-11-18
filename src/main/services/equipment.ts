@@ -1,15 +1,20 @@
 import { randomUUID } from 'node:crypto';
-import type { EquipmentInput, EquipmentItem, EquipmentLoan, EquipmentLoanInput, EquipmentLoanOptions, ImageRef } from '../../shared/types';
-import { isValidISODate } from '../../shared/dates';
+import type { EquipmentInput, EquipmentItem, EquipmentLoan, EquipmentLoanInput, ImageRef } from '../../shared/types';
+import { formatDate } from '../../shared/dates';
 import { cleanName } from '../../shared/text';
 import { hasErrors, validateEquipmentInput, validateEquipmentLoanInput } from '../../shared/validation';
-import { AppError, now, str, strOrNull, type Ctx } from '../context';
+import { AppError, now, str, strOrNull, todayOf, type Ctx } from '../context';
 import { deleteImageFiles } from '../integration/images';
 import { loadImages, syncImages, type ImageTable } from './records';
 
 const IMG: ImageTable = { table: 'equipment_images', owner: 'equipment_id' };
+const LOAN_IMG: ImageTable = { table: 'equipment_loan_images', owner: 'loan_id' };
 
-const SELECT_ITEM = 'SELECT e.*, b.name AS brand_name FROM equipment_items e LEFT JOIN brands b ON b.id = e.brand_id';
+const SELECT_ITEM = `
+SELECT e.*, b.name AS brand_name, c.name AS category_name
+FROM equipment_items e
+LEFT JOIN brands b ON b.id = e.brand_id
+LEFT JOIN equipment_categories c ON c.id = e.category_id`;
 const SELECT_LOAN = `
 SELECT l.*, si.name AS si_name, s.name AS salesperson_name
 FROM equipment_loans l
@@ -19,7 +24,7 @@ const LOAN_ORDER = 'ORDER BY l.borrow_date DESC, l.created_at DESC';
 
 const t = (s: string | null | undefined) => (s ?? '').replace(/\r\n/g, '\n').trim();
 
-function mapLoan(r: Record<string, any>): EquipmentLoan {
+function mapLoan(r: Record<string, any>, images: ImageRef[]): EquipmentLoan {
   return {
     id: r.id,
     equipmentId: r.equipment_id,
@@ -28,9 +33,11 @@ function mapLoan(r: Record<string, any>): EquipmentLoan {
     salespersonId: strOrNull(r.salesperson_id),
     salespersonName: strOrNull(r.salesperson_name),
     borrowDate: r.borrow_date,
+    dueDate: strOrNull(r.due_date),
     returnDate: strOrNull(r.return_date),
     reason: str(r.reason),
     returnCondition: str(r.return_condition),
+    images,
     createdAt: r.created_at,
     updatedAt: r.updated_at,
   };
@@ -44,10 +51,11 @@ function loadLoans(ctx: Ctx, ids: string[]): Map<string, EquipmentLoan[]> {
       ? ctx.db.all<Record<string, any>>(`${SELECT_LOAN} WHERE l.equipment_id = ? ${LOAN_ORDER}`, ids)
       : ctx.db.all<Record<string, any>>(`${SELECT_LOAN} ${LOAN_ORDER}`);
   const wanted = new Set(ids);
-  for (const r of rows) {
-    if (!wanted.has(r.equipment_id)) continue;
+  const kept = rows.filter((r) => wanted.has(r.equipment_id));
+  const images = loadImages(ctx, LOAN_IMG, kept.map((r) => r.id as string));
+  for (const r of kept) {
     const list = map.get(r.equipment_id) ?? [];
-    list.push(mapLoan(r));
+    list.push(mapLoan(r, images.get(r.id) ?? []));
     map.set(r.equipment_id, list);
   }
   return map;
@@ -58,6 +66,8 @@ function mapItem(r: Record<string, any>, images: ImageRef[], loans: EquipmentLoa
     id: r.id,
     stt: r.stt,
     productName: str(r.product_name),
+    categoryId: strOrNull(r.category_id),
+    categoryName: strOrNull(r.category_name),
     brandId: strOrNull(r.brand_id),
     brandName: strOrNull(r.brand_name),
     serialNumber: str(r.serial_number),
@@ -105,19 +115,20 @@ function check(ctx: Ctx, input: EquipmentInput) {
   const e = validateEquipmentInput(input);
   if (hasErrors(e)) throw new AppError(Object.values(e).filter(Boolean).join(' '));
   if (input.brandId && !ctx.db.scalar<number>('SELECT COUNT(*) FROM brands WHERE id = ?', [input.brandId])) throw new AppError('Hãng không tồn tại.');
+  if (input.categoryId && !ctx.db.scalar<number>('SELECT COUNT(*) FROM equipment_categories WHERE id = ?', [input.categoryId])) throw new AppError('Phân loại không tồn tại.');
 }
 
 const itemValues = (input: EquipmentInput) => [
   cleanName(input.productName),
+  input.categoryId || null,
   input.brandId || null,
   t(input.serialNumber),
   t(input.description),
   input.handoverDate || null,
   t(input.condition),
-  input.currentBorrowDate || null,
-  input.currentDueDate || null,
 ];
 
+/** Thiết bị mới luôn ở trong kho; Ngày mượn / hẹn trả hiện tại chỉ đến từ lịch sử mượn/trả. */
 export function createEquipment(ctx: Ctx, input: EquipmentInput): EquipmentItem {
   check(ctx, input);
   const stt = resolveStt(ctx, input);
@@ -125,8 +136,8 @@ export function createEquipment(ctx: Ctx, input: EquipmentInput): EquipmentItem 
   const stamp = now();
   ctx.db.tx(() => {
     ctx.db.run(
-      `INSERT INTO equipment_items (id, stt, product_name, brand_id, serial_number, description, handover_date, condition, current_borrow_date, current_due_date, created_at, updated_at)
-       VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`,
+      `INSERT INTO equipment_items (id, stt, product_name, category_id, brand_id, serial_number, description, handover_date, condition, created_at, updated_at)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?)`,
       [id, stt, ...itemValues(input), stamp, stamp],
     );
     syncImages(ctx, IMG, id, input.images ?? []);
@@ -141,7 +152,7 @@ export function updateEquipment(ctx: Ctx, id: string, input: EquipmentInput): Eq
   let removed: string[] = [];
   ctx.db.tx(() => {
     ctx.db.run(
-      `UPDATE equipment_items SET stt=?, product_name=?, brand_id=?, serial_number=?, description=?, handover_date=?, condition=?, current_borrow_date=?, current_due_date=?, updated_at=? WHERE id=?`,
+      `UPDATE equipment_items SET stt=?, product_name=?, category_id=?, brand_id=?, serial_number=?, description=?, handover_date=?, condition=?, updated_at=? WHERE id=?`,
       [stt, ...itemValues(input), now(), id],
     );
     removed = syncImages(ctx, IMG, id, input.images ?? []);
@@ -150,30 +161,53 @@ export function updateEquipment(ctx: Ctx, id: string, input: EquipmentInput): Eq
   return getEquipment(ctx, id);
 }
 
+function imageKeysOf(ctx: Ctx, ids: string[]): string[] {
+  const keys: string[] = [];
+  for (const id of ids) {
+    keys.push(...ctx.db.all<{ storage_key: string }>('SELECT storage_key FROM equipment_images WHERE equipment_id = ?', [id]).map((r) => r.storage_key));
+    keys.push(
+      ...ctx.db
+        .all<{ storage_key: string }>('SELECT i.storage_key FROM equipment_loan_images i JOIN equipment_loans l ON l.id = i.loan_id WHERE l.equipment_id = ?', [id])
+        .map((r) => r.storage_key),
+    );
+  }
+  return keys;
+}
+
 export function deleteEquipment(ctx: Ctx, id: string): void {
-  const item = getEquipment(ctx, id);
+  getEquipment(ctx, id);
+  const keys = imageKeysOf(ctx, [id]);
   ctx.db.tx(() => ctx.db.run('DELETE FROM equipment_items WHERE id = ?', [id]));
-  deleteImageFiles(ctx, item.images.map((i) => i.storageKey));
+  deleteImageFiles(ctx, keys);
 }
 
 /** Xóa nhiều thiết bị (kèm ảnh và lịch sử mượn/trả) trong một transaction; id không còn tồn tại thì bỏ qua. */
 export function deleteEquipments(ctx: Ctx, ids: string[]): number {
   const found = [...new Set(ids)].filter((id) => ctx.db.scalar<number>('SELECT COUNT(*) FROM equipment_items WHERE id = ?', [id]) > 0);
-  const images = loadImages(ctx, IMG, found);
+  const keys = imageKeysOf(ctx, found);
   ctx.db.tx(() => found.forEach((id) => ctx.db.run('DELETE FROM equipment_items WHERE id = ?', [id])));
-  deleteImageFiles(ctx, [...images.values()].flat().map((i) => i.storageKey));
+  deleteImageFiles(ctx, keys);
   return found.length;
 }
 
+/** Ngày mượn / hẹn trả hiện tại = lần mượn chưa hoàn trả mới nhất; không còn lần nào thì thiết bị ở trong kho. */
+function syncCurrent(ctx: Ctx, equipmentId: string) {
+  const open = ctx.db.get<{ borrow_date: string; due_date: string | null }>(
+    'SELECT borrow_date, due_date FROM equipment_loans WHERE equipment_id = ? AND return_date IS NULL ORDER BY borrow_date DESC, created_at DESC LIMIT 1',
+    [equipmentId],
+  );
+  ctx.db.run('UPDATE equipment_items SET current_borrow_date = ?, current_due_date = ? WHERE id = ?', [open?.borrow_date ?? null, open?.due_date ?? null, equipmentId]);
+}
+
 /**
- * Thêm (loanId = null) hoặc sửa một lần mượn/trả. Sau khi lưu:
- * - `setCurrent` (lần mượn chưa trả): Ngày mượn hiện tại = Ngày mượn của lần này, Ngày hẹn trả hiện tại = `dueDate`.
- * - `clearCurrent` (lần mượn đã trả): xóa Ngày mượn / Ngày hẹn trả hiện tại.
+ * Thêm (loanId = null) hoặc sửa một lần mượn/trả. Mỗi thiết bị chỉ có tối đa một lần mượn chưa hoàn trả: phải bấm
+ * "Đã hoàn trả" (ghi Ngày trả thực tế) cho lần trước thì mới thêm được lần mượn sau. Sau khi lưu:
+ * - Ngày mượn / hẹn trả hiện tại của thiết bị tính lại theo lần mượn chưa hoàn trả.
  * - Nếu đây là lần trả mới nhất có ghi "Tình trạng khi trả" thì Tình trạng của thiết bị lấy theo giá trị đó.
  */
-export function saveEquipmentLoan(ctx: Ctx, equipmentId: string, loanId: string | null, input: EquipmentLoanInput, opts: EquipmentLoanOptions = {}): EquipmentItem {
+export function saveEquipmentLoan(ctx: Ctx, equipmentId: string, loanId: string | null, input: EquipmentLoanInput): EquipmentItem {
   getEquipment(ctx, equipmentId);
-  const e = validateEquipmentLoanInput(input);
+  const e = validateEquipmentLoanInput(input, todayOf(ctx));
   if (hasErrors(e)) throw new AppError(Object.values(e).filter(Boolean).join(' '));
   if (input.siId && !ctx.db.scalar<number>('SELECT COUNT(*) FROM si_partners WHERE id = ?', [input.siId])) throw new AppError('Tên SI không tồn tại.');
   if (input.salespersonId && !ctx.db.scalar<number>('SELECT COUNT(*) FROM salespersons WHERE id = ?', [input.salespersonId])) throw new AppError('Sale không tồn tại.');
@@ -181,22 +215,28 @@ export function saveEquipmentLoan(ctx: Ctx, equipmentId: string, loanId: string 
     const owner = ctx.db.scalar<string>('SELECT equipment_id FROM equipment_loans WHERE id = ?', [loanId]);
     if (owner !== equipmentId) throw new AppError('Không tìm thấy lần mượn này.');
   }
-  const due = !input.returnDate ? opts.setCurrent?.dueDate ?? null : null;
-  if (due && (!isValidISODate(due) || due < input.borrowDate)) throw new AppError('Ngày hẹn trả phải là ngày hợp lệ, không trước Ngày mượn.');
+  const open = ctx.db.get<{ borrow_date: string }>(
+    'SELECT borrow_date FROM equipment_loans WHERE equipment_id = ? AND return_date IS NULL AND id <> ? ORDER BY borrow_date DESC LIMIT 1',
+    [equipmentId, loanId ?? ''],
+  );
+  if (open && (!loanId || !input.returnDate))
+    throw new AppError(
+      `Thiết bị đang được mượn từ ${formatDate(open.borrow_date)} và chưa hoàn trả. Hãy bấm “Đã hoàn trả” cho lần mượn đó trước${loanId ? '.' : ' khi thêm lần mượn mới.'}`,
+    );
   const id = loanId ?? randomUUID();
   const stamp = now();
+  let removed: string[] = [];
   ctx.db.tx(() => {
-    const values = [input.siId || null, input.salespersonId || null, input.borrowDate, input.returnDate || null, t(input.reason), t(input.returnCondition)];
+    const values = [input.siId || null, input.salespersonId || null, input.borrowDate, input.dueDate || null, input.returnDate || null, t(input.reason), t(input.returnCondition)];
     if (loanId)
-      ctx.db.run('UPDATE equipment_loans SET si_id=?, salesperson_id=?, borrow_date=?, return_date=?, reason=?, return_condition=?, updated_at=? WHERE id=?', [...values, stamp, id]);
+      ctx.db.run('UPDATE equipment_loans SET si_id=?, salesperson_id=?, borrow_date=?, due_date=?, return_date=?, reason=?, return_condition=?, updated_at=? WHERE id=?', [...values, stamp, id]);
     else
       ctx.db.run(
-        'INSERT INTO equipment_loans (id, equipment_id, si_id, salesperson_id, borrow_date, return_date, reason, return_condition, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?)',
+        'INSERT INTO equipment_loans (id, equipment_id, si_id, salesperson_id, borrow_date, due_date, return_date, reason, return_condition, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)',
         [id, equipmentId, ...values, stamp, stamp],
       );
-    if (!input.returnDate && opts.setCurrent)
-      ctx.db.run('UPDATE equipment_items SET current_borrow_date = ?, current_due_date = ? WHERE id = ?', [input.borrowDate, due, equipmentId]);
-    if (input.returnDate && opts.clearCurrent) ctx.db.run('UPDATE equipment_items SET current_borrow_date = NULL, current_due_date = NULL WHERE id = ?', [equipmentId]);
+    removed = syncImages(ctx, LOAN_IMG, id, input.images ?? []);
+    syncCurrent(ctx, equipmentId);
     const latest = ctx.db.get<{ id: string; return_condition: string }>(
       "SELECT id, return_condition FROM equipment_loans WHERE equipment_id = ? AND return_date IS NOT NULL AND TRIM(return_condition) <> '' ORDER BY return_date DESC, updated_at DESC LIMIT 1",
       [equipmentId],
@@ -204,16 +244,20 @@ export function saveEquipmentLoan(ctx: Ctx, equipmentId: string, loanId: string 
     if (latest?.id === id) ctx.db.run('UPDATE equipment_items SET condition = ? WHERE id = ?', [latest.return_condition, equipmentId]);
     ctx.db.run('UPDATE equipment_items SET updated_at = ? WHERE id = ?', [stamp, equipmentId]);
   });
+  deleteImageFiles(ctx, removed);
   return getEquipment(ctx, equipmentId);
 }
 
-/** Xóa một lần mượn/trả; thông tin hiện tại của thiết bị (Tình trạng, ngày mượn) giữ nguyên. */
+/** Xóa một lần mượn/trả (kèm ảnh); Tình trạng giữ nguyên, ngày mượn hiện tại tính lại theo lần chưa hoàn trả còn lại. */
 export function deleteEquipmentLoan(ctx: Ctx, loanId: string): EquipmentItem {
   const owner = ctx.db.scalar<string>('SELECT equipment_id FROM equipment_loans WHERE id = ?', [loanId]);
   if (!owner) throw new AppError('Không tìm thấy lần mượn này.');
+  const keys = ctx.db.all<{ storage_key: string }>('SELECT storage_key FROM equipment_loan_images WHERE loan_id = ?', [loanId]).map((r) => r.storage_key);
   ctx.db.tx(() => {
     ctx.db.run('DELETE FROM equipment_loans WHERE id = ?', [loanId]);
+    syncCurrent(ctx, owner);
     ctx.db.run('UPDATE equipment_items SET updated_at = ? WHERE id = ?', [now(), owner]);
   });
+  deleteImageFiles(ctx, keys);
   return getEquipment(ctx, owner);
 }

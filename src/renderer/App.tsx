@@ -7,6 +7,8 @@ import { readLocal, useLocalState } from './lib/persist';
 import { AiAssistantPage } from './pages/AiAssistantPage';
 import { AllProjectsPage } from './pages/AllProjectsPage';
 import { CalendarPage } from './pages/CalendarPage';
+import { TodoPage } from './pages/TodoPage';
+import { useSearchHighlight } from './lib/highlight';
 import { CategoryPage } from './pages/CategoryPage';
 import { DashboardPage } from './pages/DashboardPage';
 import { EquipmentPage } from './pages/EquipmentPage';
@@ -26,6 +28,7 @@ function Shell() {
   const { title, toastError } = useUi();
   const location = useLocation();
   const [collapsed, setCollapsed] = useLocalState('sidebar-collapsed', () => readLocal('sidebar-collapsed', window.innerWidth < 1200));
+  useSearchHighlight();
 
   if (loadError)
     return (
@@ -58,7 +61,7 @@ function Shell() {
             className="btn ghost icon"
             title={settings.theme === 'dark' ? 'Chuyển Light Mode' : 'Chuyển Dark Mode'}
             aria-label="Đổi giao diện sáng/tối"
-            onClick={() => updateSettings({ theme: settings.theme === 'dark' ? 'light' : 'dark' }).catch(toastError)}
+            onClick={() => void updateSettings({ theme: settings.theme === 'dark' ? 'light' : 'dark' }).catch(toastError)}
           >
             {settings.theme === 'dark' ? <Sun size={18} /> : <Moon size={18} />}
           </button>
@@ -85,6 +88,7 @@ function Shell() {
             <Route path="/knowledge" element={<KnowledgeHomePage />} />
             <Route path="/knowledge/:brandId" element={<KnowledgeBrandPage />} />
             <Route path="/calendar" element={<CalendarPage />} />
+            <Route path="/todo" element={<TodoPage />} />
             <Route path="/search" element={<SearchPage key={location.key} />} />
             <Route path="/ai" element={<AiAssistantPage />} />
             <Route path="/settings" element={<SettingsPage />} />

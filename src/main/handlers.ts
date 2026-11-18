@@ -21,6 +21,7 @@ import * as projects from './services/projects';
 import * as records from './services/records';
 import { globalSearch } from './services/search';
 import { getSettings, updateSettings } from './services/settings';
+import * as todos from './services/todos';
 import type { Updater } from './updater';
 
 export interface FileFilter {
@@ -93,6 +94,7 @@ export function createHandlers(ctx: Ctx, desktop: Desktop): Handlers {
     renameMaster: (kind, id, name) => master.renameMaster(ctx, kind, id, name),
     deleteMaster: (kind, id, strategy) => master.deleteMaster(ctx, kind, id, strategy),
     setMasterActive: (kind, id, active) => master.setMasterActive(ctx, kind, id, active),
+    setMasterColor: (kind, id, color) => master.setMasterColor(ctx, kind, id, color ? String(color) : null),
     setSalespersonDepartment: (id, dept) => master.setSalespersonDepartment(ctx, id, dept),
     moveMaster: (kind, id, dir) => master.moveMaster(ctx, kind, id, dir),
 
@@ -181,6 +183,7 @@ export function createHandlers(ctx: Ctx, desktop: Desktop): Handlers {
     createFreelance: (input, opts) => freelance.createFreelance(ctx, input, opts ?? {}),
     updateFreelance: (id, input, opts) => freelance.updateFreelance(ctx, id, input, opts ?? {}),
     setFreelanceStatus: (id, statusId) => freelance.setFreelanceStatus(ctx, id, statusId),
+    setFreelancePaymentStatus: (id, paymentStatusId) => freelance.setFreelancePaymentStatus(ctx, id, paymentStatusId),
     deleteFreelance: (id) => freelance.deleteFreelance(ctx, id),
     deleteFreelances: (ids) => {
       if (!Array.isArray(ids)) throw new AppError('Danh sách cần xóa không hợp lệ.');
@@ -206,7 +209,7 @@ export function createHandlers(ctx: Ctx, desktop: Desktop): Handlers {
     pickLinkFile: async () => {
       const [file] = await desktop.pickFiles({
         title: 'Chọn file đính kèm',
-        filters: [{ name: 'Bản vẽ AutoCAD / Văn bản / Word / PDF (*.dwg, *.txt, *.docx, *.pdf)', extensions: LINK_FILE_EXTENSIONS }],
+        filters: [{ name: 'Bản vẽ AutoCAD / Văn bản / Word / PDF / Excel (*.dwg, *.txt, *.docx, *.pdf, *.xlsx)', extensions: LINK_FILE_EXTENSIONS }],
       });
       if (!file) return null;
       const ext = fileExtension(file);
@@ -221,7 +224,7 @@ export function createHandlers(ctx: Ctx, desktop: Desktop): Handlers {
       const err = await desktop.openPath(p);
       if (err)
         throw new AppError(
-          `Không mở được file: ${err}. Kiểm tra đã cài và đặt ứng dụng mặc định cho đuôi .${fileExtension(p)} (ví dụ AutoCAD cho .dwg, Word cho .docx).`,
+          `Không mở được file: ${err}. Kiểm tra đã cài và đặt ứng dụng mặc định cho đuôi .${fileExtension(p)} (ví dụ AutoCAD cho .dwg, Word cho .docx, Excel cho .xlsx).`,
         );
     },
     showFileInFolder: (p) => {
@@ -267,8 +270,14 @@ export function createHandlers(ctx: Ctx, desktop: Desktop): Handlers {
       if (!Array.isArray(ids)) throw new AppError('Danh sách cần xóa không hợp lệ.');
       return equipment.deleteEquipments(ctx, ids.map(String));
     },
-    saveEquipmentLoan: (equipmentId, loanId, input, opts) => equipment.saveEquipmentLoan(ctx, String(equipmentId), loanId ? String(loanId) : null, input, opts ?? {}),
+    saveEquipmentLoan: (equipmentId, loanId, input) => equipment.saveEquipmentLoan(ctx, String(equipmentId), loanId ? String(loanId) : null, input),
     deleteEquipmentLoan: (loanId) => equipment.deleteEquipmentLoan(ctx, String(loanId)),
+
+    listTodos: (date) => todos.listTodos(ctx, String(date)),
+    addTodos: (date, targets) => todos.addTodos(ctx, String(date), targets),
+    setTodoDone: (id, done) => todos.setTodoDone(ctx, String(id), !!done),
+    reorderTodos: (date, ids) => todos.reorderTodos(ctx, String(date), ids),
+    deleteTodo: (id) => todos.deleteTodo(ctx, String(id)),
 
     pickImages: async () => {
       const files = await desktop.pickFiles({

@@ -199,6 +199,13 @@ export const BULK_FIELDS: Record<BulkTarget, BulkField[]> = {
       type: 'text',
       hint: 'Khớp theo tên; chưa có thì thêm vào danh mục',
     },
+    {
+      key: 'payment',
+      label: 'Trạng thái thanh toán',
+      aliases: ['thanh toan', 'trang thai thanh toan', 'tinh trang thanh toan', 'payment', 'payment status'],
+      type: 'text',
+      hint: 'Khớp theo tên; chưa có thì thêm vào danh mục',
+    },
     NOTE,
   ],
 };

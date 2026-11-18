@@ -72,7 +72,7 @@ export function SelectBox({ checked, indeterminate, onChange, label }: { checked
 /** Ô tick đầu bảng: tick = chọn tất cả dòng đang hiển thị, tick lại = bỏ chọn. */
 export function SelectAllHeader({ sel }: { sel: Selection }) {
   return (
-    <th className="select-col">
+    <th className="select-col" data-col="__sel">
       <SelectBox checked={sel.allOn} indeterminate={sel.someOn} onChange={() => sel.setAll(!sel.allOn)} label="Chọn tất cả" />
     </th>
   );

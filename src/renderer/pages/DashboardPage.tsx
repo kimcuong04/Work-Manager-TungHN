@@ -21,6 +21,7 @@ import { EMPTY_FILTER, type ProjectView } from '../lib/projects';
 import { useAppData } from '../state/AppData';
 import { useProjectActions } from '../state/projectActions';
 import { usePageTitle } from '../state/ui';
+import { useTableResize } from '../lib/tableResize';
 
 interface DashFilter {
   job: JobType | '';
@@ -92,7 +93,7 @@ function UrgentRow({ p }: { p: ProjectView }) {
   const openFile = useOpenFile();
   const [check] = useFileCheck(p.filePath);
   return (
-    <tr className="clickable" onClick={() => navigate(`/project/${p.id}`)}>
+    <tr className="clickable" data-row={p.id} onClick={() => navigate(`/project/${p.id}`)}>
       <td style={{ minWidth: 240 }}>
         <div style={{ fontWeight: 600 }}>{p.label}</div>
         <div className="small faint">{p.location}</div>
@@ -130,6 +131,7 @@ function UrgentRow({ p }: { p: ProjectView }) {
 }
 
 export function DashboardPage() {
+  const tableRef = useTableResize('dashboard-urgent');
   usePageTitle('Dashboard');
   const { projects, years } = useAppData();
   const { openCreate } = useProjectActions();
@@ -283,7 +285,7 @@ export function DashboardPage() {
                 <EmptyState icon={<PartyPopper size={36} />} title="Không có dự án khẩn cấp" text="Mọi việc đang trong tầm kiểm soát. Tiếp tục phát huy!" />
               ) : (
                 <div className="table-wrap" style={{ maxHeight: 520 }}>
-                  <table className="tbl">
+                  <table className="tbl" ref={tableRef}>
                     <thead>
                       <tr>
                         <th>Dự án</th>

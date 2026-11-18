@@ -12,7 +12,6 @@ import type {
   EquipmentInput,
   EquipmentItem,
   EquipmentLoanInput,
-  EquipmentLoanOptions,
   ExperienceInput,
   FreelanceInput,
   FreelanceJob,
@@ -47,6 +46,8 @@ import type {
   SearchQuery,
   XlsxExport,
   SettingsPatch,
+  TodoItem,
+  TodoTarget,
   StorageUsage,
   UpdateStatus,
   WarrantyInput,
@@ -65,6 +66,8 @@ export interface Api {
   renameMaster(kind: MasterKind, id: string, name: string): Promise<MasterItem>;
   deleteMaster(kind: MasterKind, id: string, strategy: MasterDeleteStrategy): Promise<void>;
   setMasterActive(kind: MasterKind, id: string, active: boolean): Promise<void>;
+  /** Chỉ cho danh mục có màu (Tình trạng / Trạng thái thanh toán của Job Freelance). */
+  setMasterColor(kind: MasterKind, id: string, color: string | null): Promise<MasterItem>;
   setSalespersonDepartment(id: string, departmentId: string | null): Promise<MasterItem>;
   /** Chỉ cho danh mục sắp theo thứ tự (Tình trạng Freelance). */
   moveMaster(kind: MasterKind, id: string, direction: -1 | 1): Promise<void>;
@@ -109,6 +112,7 @@ export interface Api {
   createFreelance(input: FreelanceInput, opts?: FreelanceSaveOptions): Promise<FreelanceJob>;
   updateFreelance(id: string, input: FreelanceInput, opts?: FreelanceSaveOptions): Promise<FreelanceJob>;
   setFreelanceStatus(id: string, statusId: string | null): Promise<FreelanceJob>;
+  setFreelancePaymentStatus(id: string, paymentStatusId: string | null): Promise<FreelanceJob>;
   deleteFreelance(id: string): Promise<void>;
   deleteFreelances(ids: string[]): Promise<number>;
   listFreelanceNotes(jobId: string): Promise<FreelanceNote[]>;
@@ -157,8 +161,15 @@ export interface Api {
   deleteEquipment(id: string): Promise<void>;
   deleteEquipments(ids: string[]): Promise<number>;
   /** Thêm (loanId = null) hoặc sửa một lần mượn/trả; trả về thiết bị sau khi cập nhật. */
-  saveEquipmentLoan(equipmentId: string, loanId: string | null, input: EquipmentLoanInput, opts?: EquipmentLoanOptions): Promise<EquipmentItem>;
+  saveEquipmentLoan(equipmentId: string, loanId: string | null, input: EquipmentLoanInput): Promise<EquipmentItem>;
   deleteEquipmentLoan(loanId: string): Promise<EquipmentItem>;
+
+  /** To-do list theo ngày (yyyy-mm-dd). Các hàm sửa trả về danh sách mới của ngày đó. */
+  listTodos(date: string): Promise<TodoItem[]>;
+  addTodos(date: string, targets: TodoTarget[]): Promise<TodoItem[]>;
+  setTodoDone(id: string, done: boolean): Promise<TodoItem[]>;
+  reorderTodos(date: string, ids: string[]): Promise<TodoItem[]>;
+  deleteTodo(id: string): Promise<TodoItem[]>;
 
   pickImages(): Promise<ImageRef[]>;
   /** Lấy ảnh đang có trong clipboard hệ điều hành (ảnh chụp màn hình, ảnh copy, hoặc file ảnh copy từ Explorer). */

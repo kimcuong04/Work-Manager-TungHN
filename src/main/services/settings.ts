@@ -1,4 +1,5 @@
 import { validateThresholds } from '../../shared/status';
+import { cleanName } from '../../shared/text';
 import type { AppSettings, SettingsPatch } from '../../shared/types';
 import { AppError, now, type Ctx } from '../context';
 
@@ -11,7 +12,10 @@ const KEY_MAP: Record<keyof SettingsPatch, string> = {
   xlsxMaxRows: 'xlsx_max_rows',
   autoUpdate: 'auto_update',
   projectRootDir: 'project_root_dir',
+  workspaceName: 'workspace_name',
 };
+
+export const DEFAULT_WORKSPACE_NAME = 'My Workspace';
 
 export function getSettings({ db }: Ctx): AppSettings {
   const rows = db.all<{ key: string; value: string; updated_at: string }>('SELECT * FROM app_settings');
@@ -29,11 +33,18 @@ export function getSettings({ db }: Ctx): AppSettings {
     xlsxMaxRows: num('xlsx_max_rows', 20000),
     autoUpdate: m.get('auto_update') !== 'false',
     projectRootDir: m.get('project_root_dir') || null,
+    workspaceName: m.get('workspace_name')?.trim() || DEFAULT_WORKSPACE_NAME,
     updatedAt: rows.reduce((a, r) => (r.updated_at > a ? r.updated_at : a), ''),
   };
 }
 
 export function updateSettings(ctx: Ctx, patch: SettingsPatch): AppSettings {
+  if (patch.workspaceName !== undefined) {
+    if (typeof patch.workspaceName !== 'string') throw new AppError('Tên workspace không hợp lệ.');
+    const name = cleanName(patch.workspaceName);
+    if (name.length > 40) throw new AppError('Tên workspace tối đa 40 ký tự.');
+    patch = { ...patch, workspaceName: name || DEFAULT_WORKSPACE_NAME };
+  }
   const next = { ...getSettings(ctx), ...patch };
   if (next.theme !== 'light' && next.theme !== 'dark') throw new AppError('Theme không hợp lệ.');
   if (typeof next.autoUpdate !== 'boolean') throw new AppError('Giá trị tự cập nhật không hợp lệ.');

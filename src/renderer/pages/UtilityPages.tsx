@@ -11,6 +11,7 @@ import { Modal } from '../components/Modal';
 import { useSessionState } from '../lib/persist';
 import { usePageTitle, useUi } from '../state/ui';
 import { APP_TOOLS } from '../tools/registry';
+import { useTableResize } from '../lib/tableResize';
 
 const dash = <span className="faint">—</span>;
 
@@ -159,6 +160,7 @@ function SecretCell({ entry }: { entry: PasswordEntry }) {
 }
 
 export function PasswordPage() {
+  const tableRef = useTableResize('passwords');
   usePageTitle('Password');
   const { confirm, toast, toastError } = useUi();
   const [items, setItems] = useState<PasswordEntry[] | null>(null);
@@ -214,7 +216,7 @@ export function PasswordPage() {
         </div>
       ) : (
         <div className="table-wrap">
-          <table className="tbl">
+          <table className="tbl" ref={tableRef}>
             <thead>
               <tr>
                 <th className="num">STT</th>
@@ -222,7 +224,7 @@ export function PasswordPage() {
                 <th>Username</th>
                 <th>Password</th>
                 <th>Link website</th>
-                <th style={{ width: 1 }} />
+                <th style={{ width: 1 }} data-col="__actions" />
               </tr>
             </thead>
             <tbody>
@@ -234,7 +236,7 @@ export function PasswordPage() {
                 </tr>
               )}
               {shown.map(({ x: p, stt }) => (
-                <tr key={p.id}>
+                <tr key={p.id} data-row={p.id}>
                   <td className="num">{stt}</td>
                   <td style={{ fontWeight: 600 }}>{p.siteName}</td>
                   <td>
@@ -404,6 +406,7 @@ function OnlineToolForm({ tool, onClose, onSaved }: { tool?: OnlineTool; onClose
 }
 
 export function OnlineToolsPage() {
+  const tableRef1 = useTableResize('tools');
   usePageTitle('Tool online');
   const { confirm, toast, toastError } = useUi();
   const [items, setItems] = useState<OnlineTool[] | null>(null);
@@ -457,14 +460,14 @@ export function OnlineToolsPage() {
         </div>
       ) : (
         <div className="table-wrap">
-          <table className="tbl">
+          <table className="tbl" ref={tableRef1}>
             <thead>
               <tr>
                 <th className="num">STT</th>
                 <th>Tên tool</th>
                 <th>Mục đích</th>
                 <th>Link</th>
-                <th style={{ width: 1 }} />
+                <th style={{ width: 1 }} data-col="__actions" />
               </tr>
             </thead>
             <tbody>
@@ -476,7 +479,7 @@ export function OnlineToolsPage() {
                 </tr>
               )}
               {shown.map(({ x: t, stt }) => (
-                <tr key={t.id}>
+                <tr key={t.id} data-row={t.id}>
                   <td className="num">{stt}</td>
                   <td style={{ fontWeight: 600 }}>{t.name}</td>
                   <td className="clamp">

@@ -13,6 +13,7 @@ import { useOpenFile } from './FileLink';
 import { ProjectNotesReadonly } from './ProjectNotes';
 import { SelectAllHeader, SelectCell, type Selection } from './Selection';
 import { SidePanel } from './Modal';
+import { useTableResize } from '../lib/tableResize';
 
 const PAGE = 100;
 
@@ -113,6 +114,7 @@ export function ProjectTable({
   /** Đang ở chế độ Chọn: thêm cột tick, bấm dòng = tick/bỏ tick. */
   selection?: Selection;
 }) {
+  const tableRef = useTableResize('projects');
   const picking = !!selection?.active;
   const navigate = useNavigate();
   const menu = useProjectMenu();
@@ -120,7 +122,7 @@ export function ProjectTable({
   const cols = PROJECT_COLUMNS.filter((c) => !hidden.includes(c.key));
   return (
     <div className="table-wrap project-table">
-      <table className="tbl">
+      <table className="tbl" ref={tableRef}>
         <thead>
           <tr>
             {picking && <SelectAllHeader sel={selection!} />}
@@ -133,7 +135,7 @@ export function ProjectTable({
                 onClick={c.sort ? () => onSort({ key: c.sort!, dir: sort.key === c.sort && sort.dir === 'asc' ? 'desc' : 'asc' }) : undefined}
               />
             ))}
-            <th style={{ width: 1 }} aria-label="Thao tác" />
+            <th style={{ width: 1 }} aria-label="Thao tác" data-col="__actions" />
           </tr>
         </thead>
         <tbody>
@@ -147,6 +149,7 @@ export function ProjectTable({
           {list.slice(0, limit).map((p) => (
             <tr
               key={p.id}
+              data-row={p.id}
               className={`clickable st-${p.status} ${p.isCompleted ? 'row-done' : ''} ${(picking ? selection!.selected.has(p.id) : p.id === selectedId) ? 'selected' : ''}`}
               tabIndex={0}
               aria-selected={picking ? selection!.selected.has(p.id) : p.id === selectedId}

@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { cleanName, nameKey } from '../../shared/text';
 import type { JobType, JobYear, MasterDeleteStrategy, MasterItem, MasterKind } from '../../shared/types';
-import { MASTER_LABEL, ORDERED_MASTER_KINDS } from '../../shared/types';
+import { COLORED_MASTER_KINDS, MASTER_LABEL, ORDERED_MASTER_KINDS } from '../../shared/types';
 import { validateMasterName, validateYearLabel } from '../../shared/validation';
 import { AppError, now, type Ctx } from '../context';
 
@@ -30,6 +30,8 @@ const SPECS: Record<MasterKind, MasterSpec> = {
   },
   freelanceStatuses: { table: 'freelance_statuses', usage: [{ table: 'freelance_jobs', column: 'status_id', nullable: true }] },
   freelanceHirers: { table: 'freelance_hirers', usage: [{ table: 'freelance_jobs', column: 'hirer_id', nullable: true }] },
+  freelancePaymentStatuses: { table: 'freelance_payment_statuses', usage: [{ table: 'freelance_jobs', column: 'payment_status_id', nullable: true }] },
+  equipmentCategories: { table: 'equipment_categories', usage: [{ table: 'equipment_items', column: 'category_id', nullable: true }] },
   brands: {
     table: 'brands',
     usage: [
@@ -73,6 +75,7 @@ export function listMaster(ctx: Ctx, kind: MasterKind): MasterItem[] {
       isActive: !!r.is_active,
       usageCount: r.usage_count,
       ...(dept ? { departmentId: r.department_id ?? null, departmentName: r.department_name ?? null } : {}),
+      ...(COLORED_MASTER_KINDS.includes(kind) ? { color: r.color ?? null } : {}),
       createdAt: r.created_at,
       updatedAt: r.updated_at,
     }));
@@ -122,6 +125,15 @@ export function setSalespersonDepartment(ctx: Ctx, id: string, departmentId: str
   if (departmentId) getMaster(ctx, 'departments', departmentId);
   ctx.db.tx(() => ctx.db.run('UPDATE salespersons SET department_id = ?, updated_at = ? WHERE id = ?', [departmentId, now(), id]));
   return getMaster(ctx, 'salespersons', id);
+}
+
+/** Màu của mục danh mục (chỉ danh mục có màu); null = bỏ màu. */
+export function setMasterColor(ctx: Ctx, kind: MasterKind, id: string, color: string | null): MasterItem {
+  if (!COLORED_MASTER_KINDS.includes(kind)) throw new AppError(`${MASTER_LABEL[kind]} không có màu.`);
+  if (color !== null && !/^#[0-9a-f]{6}$/i.test(String(color))) throw new AppError('Màu không hợp lệ.');
+  getMaster(ctx, kind, id);
+  ctx.db.tx(() => ctx.db.run(`UPDATE ${spec(kind).table} SET color = ?, updated_at = ? WHERE id = ?`, [color ? color.toLowerCase() : null, now(), id]));
+  return getMaster(ctx, kind, id);
 }
 
 export function setMasterActive(ctx: Ctx, kind: MasterKind, id: string, active: boolean): void {

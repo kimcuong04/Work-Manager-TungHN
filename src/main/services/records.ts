@@ -16,6 +16,7 @@ import { getYear } from './master';
 export type ImageTable =
   | { table: 'warranty_images'; owner: 'warranty_record_id' }
   | { table: 'equipment_images'; owner: 'equipment_id' }
+  | { table: 'equipment_loan_images'; owner: 'loan_id' }
   | { table: 'experience_images'; owner: 'experience_id' }
   | { table: 'knowledge_images'; owner: 'knowledge_id' };
 const WARRANTY_IMG: ImageTable = { table: 'warranty_images', owner: 'warranty_record_id' };

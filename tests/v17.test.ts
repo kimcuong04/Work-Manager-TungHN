@@ -24,11 +24,10 @@ const item = (over: Partial<EquipmentInput> = {}): EquipmentInput => ({
   productName: 'Camera P1375',
   brandId: null,
   serialNumber: '',
+  categoryId: null,
   description: '',
   handoverDate: null,
   condition: '',
-  currentBorrowDate: null,
-  currentDueDate: null,
   images: [],
   ...over,
 });
@@ -36,9 +35,11 @@ const loan = (over: Partial<EquipmentLoanInput> = {}): EquipmentLoanInput => ({
   siId: null,
   salespersonId: null,
   borrowDate: '2026-11-01',
+  dueDate: null,
   returnDate: null,
   reason: '',
   returnCondition: '',
+  images: [],
   ...over,
 });
 
@@ -59,7 +60,7 @@ describe('Kho thiết bị', () => {
   it('Tên sp và STT bắt buộc; STT tự +1, không trùng trong cả kho', () => {
     expect(validateEquipmentInput(item({ productName: '  ' })).productName).toBeTruthy();
     expect(validateEquipmentInput(item({ stt: null })).stt).toBeTruthy();
-    expect(validateEquipmentInput(item({ currentBorrowDate: '2026-11-10', currentDueDate: '2026-11-09' })).currentDueDate).toBeTruthy();
+    expect(validateEquipmentInput(item({ handoverDate: '2026-13-01' })).handoverDate).toBeTruthy();
     const a = equipment.createEquipment(ctx, item());
     const b = equipment.createEquipment(ctx, item({ productName: 'Switch 24 port' }));
     expect([a.stt, b.stt]).toEqual([1, 2]);
@@ -97,30 +98,20 @@ describe('Kho thiết bị', () => {
     expect(() => equipment.saveEquipmentLoan(ctx, a.id, null, loan({ siId: 'khong-co' }))).toThrow(/Tên SI/);
   });
 
-  it('lần mượn hiện tại cập nhật Ngày mượn / hẹn trả; ghi nhận trả thì xóa và Tình trạng lấy theo lần trả mới nhất', () => {
+  it('Tình trạng lấy theo lần trả mới nhất có ghi Tình trạng khi trả; vẫn sửa tay được', () => {
     const a = equipment.createEquipment(ctx, item({ condition: 'Mới 100%' }));
-    let r = equipment.saveEquipmentLoan(ctx, a.id, null, loan({ borrowDate: '2026-11-01' }), { setCurrent: { dueDate: '2026-11-15' } });
+    let r = equipment.saveEquipmentLoan(ctx, a.id, null, loan({ borrowDate: '2026-11-01', dueDate: '2026-11-15' }));
     expect([r.currentBorrowDate, r.currentDueDate, r.condition]).toEqual(['2026-11-01', '2026-11-15', 'Mới 100%']);
-    expect(() => equipment.saveEquipmentLoan(ctx, a.id, null, loan({ borrowDate: '2026-11-05' }), { setCurrent: { dueDate: '2026-11-01' } })).toThrow(/hẹn trả/);
-
-    const open = r.loans[0];
-    r = equipment.saveEquipmentLoan(ctx, a.id, open.id, { ...loan(), returnDate: '2026-11-12', returnCondition: 'Trầy nhẹ vỏ' }, { clearCurrent: true });
+    r = equipment.saveEquipmentLoan(ctx, a.id, r.loans[0].id, { ...loan({ dueDate: '2026-11-15' }), returnDate: '2026-11-12', returnCondition: 'Trầy nhẹ vỏ' });
     expect([r.currentBorrowDate, r.currentDueDate, r.condition]).toEqual([null, null, 'Trầy nhẹ vỏ']);
-    expect(r.loans).toHaveLength(1);
-
-    // Sửa một lần trả cũ hơn không ghi đè Tình trạng hiện tại.
+    // Ghi một lần trả cũ hơn không ghi đè Tình trạng hiện tại.
     r = equipment.saveEquipmentLoan(ctx, a.id, null, loan({ borrowDate: '2026-08-01', returnDate: '2026-08-05', returnCondition: 'Hỏng nguồn' }));
     expect(r.condition).toBe('Trầy nhẹ vỏ');
-    // Tình trạng vẫn sửa tay được.
     r = equipment.updateEquipment(ctx, a.id, { ...item(), productName: r.productName, condition: 'Đã thay vỏ' });
     expect(r.condition).toBe('Đã thay vỏ');
     // Lần trả không ghi Tình trạng khi trả thì giữ nguyên.
     r = equipment.saveEquipmentLoan(ctx, a.id, null, loan({ borrowDate: '2026-11-13', returnDate: '2026-11-14' }));
     expect(r.condition).toBe('Đã thay vỏ');
-    // Không tick → ngày hiện tại không đổi.
-    r = equipment.saveEquipmentLoan(ctx, a.id, null, loan({ borrowDate: '2026-11-16' }));
-    expect(r.currentBorrowDate).toBeNull();
-
     const n = r.loans.length;
     r = equipment.deleteEquipmentLoan(ctx, r.loans[0].id);
     expect(r.loans).toHaveLength(n - 1);

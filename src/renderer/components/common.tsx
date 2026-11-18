@@ -554,7 +554,7 @@ export function SortHeader({
   onClick?: () => void;
 }) {
   return (
-    <th className={onClick ? 'sortable' : ''} onClick={onClick} aria-sort={active ? (dir === 'asc' ? 'ascending' : 'descending') : undefined}>
+    <th className={onClick ? 'sortable' : ''} data-col={label} onClick={onClick} aria-sort={active ? (dir === 'asc' ? 'ascending' : 'descending') : undefined}>
       <span className="row" style={{ gap: 4 }}>
         {label}
         {active && <span className="sort-arrow">{dir === 'asc' ? '▲' : '▼'}</span>}

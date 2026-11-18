@@ -7,10 +7,11 @@ import { AppError, now, str, strOrNull, todayOf, type Ctx } from '../context';
 import { FREELANCE_NOTES, deleteUnreferencedImages, noteImageKeysOf, writeDayNote, type NoteWrite } from './notes';
 
 const SELECT_FREELANCE = `
-SELECT f.*, s.name AS status_name, h.name AS hirer_name
+SELECT f.*, s.name AS status_name, s.color AS status_color, h.name AS hirer_name, ps.name AS payment_status_name, ps.color AS payment_status_color
 FROM freelance_jobs f
 LEFT JOIN freelance_statuses s ON s.id = f.status_id
-LEFT JOIN freelance_hirers h ON h.id = f.hirer_id`;
+LEFT JOIN freelance_hirers h ON h.id = f.hirer_id
+LEFT JOIN freelance_payment_statuses ps ON ps.id = f.payment_status_id`;
 
 function mapJob(r: Record<string, any>): FreelanceJob {
   return {
@@ -22,6 +23,10 @@ function mapJob(r: Record<string, any>): FreelanceJob {
     startDate: strOrNull(r.start_date),
     statusId: strOrNull(r.status_id),
     statusName: strOrNull(r.status_name),
+    paymentStatusId: strOrNull(r.payment_status_id),
+    paymentStatusName: strOrNull(r.payment_status_name),
+    statusColor: strOrNull(r.status_color),
+    paymentStatusColor: strOrNull(r.payment_status_color),
     note: str(r.note),
     createdAt: r.created_at,
     updatedAt: r.updated_at,
@@ -48,6 +53,7 @@ interface Normalized {
   hirerId: string | null;
   startDate: string | null;
   statusId: string | null;
+  paymentStatusId: string | null;
 }
 
 export function normalizeFreelance(ctx: Ctx, input: FreelanceInput, currentId?: string): Normalized {
@@ -57,6 +63,9 @@ export function normalizeFreelance(ctx: Ctx, input: FreelanceInput, currentId?: 
   if (statusId && !ctx.db.scalar<number>('SELECT COUNT(*) FROM freelance_statuses WHERE id = ?', [statusId])) throw new AppError('Tình trạng không tồn tại.');
   const hirerId = strOrNull(input.hirerId);
   if (hirerId && !ctx.db.scalar<number>('SELECT COUNT(*) FROM freelance_hirers WHERE id = ?', [hirerId])) throw new AppError('Bên thuê không tồn tại.');
+  const paymentStatusId = strOrNull(input.paymentStatusId);
+  if (paymentStatusId && !ctx.db.scalar<number>('SELECT COUNT(*) FROM freelance_payment_statuses WHERE id = ?', [paymentStatusId]))
+    throw new AppError('Trạng thái thanh toán không tồn tại.');
   let stt = input.stt ?? undefined;
   if (stt === undefined) stt = currentId ? ctx.db.scalar<number>('SELECT stt FROM freelance_jobs WHERE id = ?', [currentId]) : nextFreelanceStt(ctx);
   const dup = ctx.db.get<{ project_name: string }>('SELECT project_name FROM freelance_jobs WHERE stt = ? AND id <> ?', [stt, currentId ?? '']);
@@ -67,6 +76,7 @@ export function normalizeFreelance(ctx: Ctx, input: FreelanceInput, currentId?: 
     hirerId,
     startDate: strOrNull(input.startDate),
     statusId,
+    paymentStatusId,
   };
 }
 
@@ -77,8 +87,8 @@ export function createFreelance(ctx: Ctx, input: FreelanceInput, opts: Freelance
   const stamp = now();
   ctx.db.tx(() => {
     ctx.db.run(
-      'INSERT INTO freelance_jobs (id, stt, project_name, hirer_id, start_date, status_id, note, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?)',
-      [id, f.stt, f.projectName, f.hirerId, f.startDate, f.statusId, '', stamp, stamp],
+      'INSERT INTO freelance_jobs (id, stt, project_name, hirer_id, start_date, status_id, payment_status_id, note, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?)',
+      [id, f.stt, f.projectName, f.hirerId, f.startDate, f.statusId, f.paymentStatusId, '', stamp, stamp],
     );
     if (opts.noteHtml !== undefined) writeDayNote(ctx, FREELANCE_NOTES, id, todayOf(ctx), opts.noteHtml);
   });
@@ -90,12 +100,13 @@ export function updateFreelance(ctx: Ctx, id: string, input: FreelanceInput, opt
   const f = normalizeFreelance(ctx, input, id);
   let note: NoteWrite = { changed: false, removedKeys: [], html: '' };
   ctx.db.tx(() => {
-    ctx.db.run('UPDATE freelance_jobs SET stt=?, project_name=?, hirer_id=?, start_date=?, status_id=?, updated_at=? WHERE id=?', [
+    ctx.db.run('UPDATE freelance_jobs SET stt=?, project_name=?, hirer_id=?, start_date=?, status_id=?, payment_status_id=?, updated_at=? WHERE id=?', [
       f.stt,
       f.projectName,
       f.hirerId,
       f.startDate,
       f.statusId,
+      f.paymentStatusId,
       now(),
       id,
     ]);
@@ -105,9 +116,21 @@ export function updateFreelance(ctx: Ctx, id: string, input: FreelanceInput, opt
   return getFreelance(ctx, id);
 }
 
+const inputOf = (job: FreelanceJob): FreelanceInput => ({
+  stt: job.stt,
+  projectName: job.projectName,
+  hirerId: job.hirerId,
+  startDate: job.startDate,
+  statusId: job.statusId,
+  paymentStatusId: job.paymentStatusId,
+});
+
 export function setFreelanceStatus(ctx: Ctx, id: string, statusId: string | null): FreelanceJob {
-  const job = getFreelance(ctx, id);
-  return updateFreelance(ctx, id, { stt: job.stt, projectName: job.projectName, hirerId: job.hirerId, startDate: job.startDate, statusId });
+  return updateFreelance(ctx, id, { ...inputOf(getFreelance(ctx, id)), statusId });
+}
+
+export function setFreelancePaymentStatus(ctx: Ctx, id: string, paymentStatusId: string | null): FreelanceJob {
+  return updateFreelance(ctx, id, { ...inputOf(getFreelance(ctx, id)), paymentStatusId });
 }
 
 export function deleteFreelance(ctx: Ctx, id: string): void {

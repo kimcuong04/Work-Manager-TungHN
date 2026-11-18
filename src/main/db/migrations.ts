@@ -562,6 +562,98 @@ ALTER TABLE equipment_items ADD COLUMN description TEXT NOT NULL DEFAULT '';
 ALTER TABLE equipment_items ADD COLUMN handover_date TEXT;
 `;
 
+/**
+ * v1.9: lần mượn có Ngày hẹn trả và ảnh riêng, "Ngày trả" thành Ngày trả thực tế; Phân loại thiết bị (danh mục riêng
+ * của Kho thiết bị); Trạng thái thanh toán của Job Freelance (danh mục riêng, sắp theo thứ tự); màu cho Tình trạng /
+ * Trạng thái thanh toán; To-do list theo ngày (mỗi việc là một dự án Job Chính hoặc một job Freelance).
+ */
+const V9 = `
+ALTER TABLE equipment_loans ADD COLUMN due_date TEXT;
+${IMAGE_TABLE('equipment_loan_images', 'loan_id', 'equipment_loans')}
+
+${MASTER_TABLE('equipment_categories')}
+ALTER TABLE equipment_items ADD COLUMN category_id TEXT REFERENCES equipment_categories(id);
+
+${MASTER_TABLE('freelance_payment_statuses')}
+ALTER TABLE freelance_payment_statuses ADD COLUMN color TEXT;
+ALTER TABLE freelance_jobs ADD COLUMN payment_status_id TEXT REFERENCES freelance_payment_statuses(id);
+ALTER TABLE freelance_statuses ADD COLUMN color TEXT;
+
+CREATE TABLE todo_items (
+  id TEXT PRIMARY KEY,
+  todo_date TEXT NOT NULL,
+  project_id TEXT REFERENCES projects(id) ON DELETE CASCADE,
+  freelance_job_id TEXT REFERENCES freelance_jobs(id) ON DELETE CASCADE,
+  sort_order INTEGER NOT NULL DEFAULT 0,
+  done_at TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  CHECK ((project_id IS NULL) <> (freelance_job_id IS NULL))
+);
+CREATE INDEX idx_todo_items_date ON todo_items(todo_date);
+CREATE UNIQUE INDEX ux_todo_project ON todo_items(todo_date, project_id) WHERE project_id IS NOT NULL;
+CREATE UNIQUE INDEX ux_todo_freelance ON todo_items(todo_date, freelance_job_id) WHERE freelance_job_id IS NOT NULL;
+`;
+
+const DEFAULT_STATUS_COLORS: Record<string, string> = {
+  'mới nhận': '#3b82f6',
+  'đang làm': '#f59e0b',
+  'tạm dừng': '#8b5cf6',
+  'hoàn thành': '#22c55e',
+  'đã hủy': '#ef4444',
+};
+const DEFAULT_PAYMENT_STATUSES: [string, string][] = [
+  ['Chưa thanh toán', '#ef4444'],
+  ['Đã đặt cọc', '#f59e0b'],
+  ['Đã thanh toán', '#22c55e'],
+];
+
+/**
+ * - "Ngày trả" sau hôm nay chắc chắn là ngày hẹn trả nhập nhầm ô → chuyển sang Ngày hẹn trả, lần mượn đó chưa hoàn trả.
+ * - Ngày mượn / hẹn trả hiện tại nhập tay trên thiết bị → hẹn trả của lần mượn chưa trả cùng ngày mượn, hoặc thành một
+ *   lần mượn mới nếu chưa có. Sau đó ngày hiện tại luôn tính lại từ lần mượn chưa hoàn trả.
+ */
+function backfillLoansV9(db: Db) {
+  const stamp = new Date().toISOString();
+  const d = new Date();
+  const today = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  db.run('UPDATE equipment_loans SET due_date = return_date, return_date = NULL WHERE return_date > ?', [today]);
+  const items = db.all<{ id: string; current_borrow_date: string; current_due_date: string | null }>(
+    'SELECT id, current_borrow_date, current_due_date FROM equipment_items WHERE current_borrow_date IS NOT NULL',
+  );
+  for (const it of items) {
+    const open = db.get<{ id: string; due_date: string | null }>(
+      'SELECT id, due_date FROM equipment_loans WHERE equipment_id = ? AND return_date IS NULL AND borrow_date = ? ORDER BY created_at DESC LIMIT 1',
+      [it.id, it.current_borrow_date],
+    );
+    if (open) {
+      if (!open.due_date && it.current_due_date) db.run('UPDATE equipment_loans SET due_date = ? WHERE id = ?', [it.current_due_date, open.id]);
+    } else {
+      db.run(
+        "INSERT INTO equipment_loans (id, equipment_id, borrow_date, due_date, return_date, reason, return_condition, created_at, updated_at) VALUES (?,?,?,?,NULL,'','',?,?)",
+        [randomUUID(), it.id, it.current_borrow_date, it.current_due_date, stamp, stamp],
+      );
+    }
+  }
+  db.run(`UPDATE equipment_items SET
+    current_borrow_date = (SELECT l.borrow_date FROM equipment_loans l WHERE l.equipment_id = equipment_items.id AND l.return_date IS NULL ORDER BY l.borrow_date DESC, l.created_at DESC LIMIT 1),
+    current_due_date = (SELECT l.due_date FROM equipment_loans l WHERE l.equipment_id = equipment_items.id AND l.return_date IS NULL ORDER BY l.borrow_date DESC, l.created_at DESC LIMIT 1)`);
+  DEFAULT_PAYMENT_STATUSES.forEach(([name, color], i) =>
+    db.run('INSERT INTO freelance_payment_statuses (id, name, sort_order, is_active, color, created_at, updated_at) VALUES (?,?,?,1,?,?,?)', [
+      randomUUID(),
+      name,
+      i,
+      color,
+      stamp,
+      stamp,
+    ]),
+  );
+  for (const s of db.all<{ id: string; name: string }>('SELECT id, name FROM freelance_statuses')) {
+    const color = DEFAULT_STATUS_COLORS[cleanName(s.name).toLowerCase()];
+    if (color) db.run('UPDATE freelance_statuses SET color = ? WHERE id = ?', [color, s.id]);
+  }
+}
+
 export interface Migration {
   version: number;
   up: (db: Db) => void;
@@ -621,6 +713,13 @@ export const MIGRATIONS: Migration[] = [
   {
     version: 8,
     up: (db) => db.exec(V8),
+  },
+  {
+    version: 9,
+    up: (db) => {
+      db.exec(V9);
+      backfillLoansV9(db);
+    },
   },
 ];
 

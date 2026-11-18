@@ -28,6 +28,7 @@ const MASTER_FIELDS: Record<string, string> = {
   eu: 'EU',
   status: 'Tình trạng',
   hirer: 'Bên thuê',
+  payment: 'Trạng thái thanh toán',
 };
 
 /** Chạy trước các luật của form (độ dài, quan hệ ngày…) để dòng sai bị bỏ qua thay vì làm hỏng cả lần import. */
@@ -66,6 +67,7 @@ function formErrors(target: BulkTarget, v: Record<string, BulkValue>): string[] 
             hirerId: null,
             startDate: text(v.startDate) || null,
             statusId: null,
+            paymentStatusId: null,
           })
         : validateProjectInput({
             jobYearId: 'x',
@@ -233,6 +235,7 @@ export function bulkImport(ctx: Ctx, spec: BulkImportSpec): BulkImportResult {
               hirerId: masterId('freelanceHirers', text(v.hirer)),
               startDate: text(v.startDate) || null,
               statusId: masterId('freelanceStatuses', text(v.status)),
+              paymentStatusId: masterId('freelancePaymentStatuses', text(v.payment)),
             },
             { noteHtml: note ? textToNoteHtml(note) : undefined },
           );

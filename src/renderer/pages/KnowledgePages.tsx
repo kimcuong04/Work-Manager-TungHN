@@ -15,6 +15,7 @@ import { useAppData } from '../state/AppData';
 import { usePageTitle, useUi } from '../state/ui';
 import { useOpenLocal, useOpenUrl } from './ExperiencePages';
 import { DateFilterControls, resolveDateRange, useBrandOptions } from './WarrantyPage';
+import { useTableResize } from '../lib/tableResize';
 
 /** Mục không gắn Hãng nằm ở "Kiến thức chung" (đường dẫn /knowledge/general). */
 export const GENERAL = 'general';
@@ -236,6 +237,7 @@ function KnowledgeInfoModal({ r, onClose, onEdit }: { r: KnowledgeRecord; onClos
 const hay = (r: KnowledgeRecord) => buildHaystack([r.title, r.deviceModel, r.content, r.brandName]);
 
 export function KnowledgeHomePage() {
+  const tableRef = useTableResize('knowledge-all');
   usePageTitle('Kiến thức');
   const { masters, refresh } = useAppData();
   const { prompt, toast, toastError } = useUi();
@@ -324,7 +326,7 @@ export function KnowledgeHomePage() {
             <div className="faint small">Không có mục kiến thức nào khớp “{q}”.</div>
           ) : (
             <div className="table-wrap">
-              <table className="tbl">
+              <table className="tbl" ref={tableRef}>
                 <thead>
                   <tr>
                     <th>Ngày</th>
@@ -335,7 +337,7 @@ export function KnowledgeHomePage() {
                 </thead>
                 <tbody>
                   {matches.map((r) => (
-                    <tr key={r.id} className="clickable" onClick={() => navigate(scopePath(r.brandId), { state: { select: r.id } })}>
+                    <tr key={r.id} data-row={r.id} className="clickable" onClick={() => navigate(scopePath(r.brandId), { state: { select: r.id } })}>
                       <td className="nowrap">{formatDate(r.knowledgeDate)}</td>
                       <td style={{ fontWeight: 600 }}>{r.title}</td>
                       <td className="nowrap">{scopeName(r.brandName)}</td>
@@ -381,6 +383,7 @@ export function KnowledgeBrandPage() {
 }
 
 function KnowledgeBrandView({ scope }: { scope: string }) {
+  const tableRef1 = useTableResize('knowledge');
   const { masters, today, refresh } = useAppData();
   const { confirm, toast, toastError } = useUi();
   const location = useLocation();
@@ -503,7 +506,7 @@ function KnowledgeBrandView({ scope }: { scope: string }) {
       ) : (
         <div className="split">
           <div className="table-wrap">
-            <table className="tbl">
+            <table className="tbl" ref={tableRef1}>
               <thead>
                 <tr>
                   <th>Ngày</th>
@@ -524,6 +527,7 @@ function KnowledgeBrandView({ scope }: { scope: string }) {
                 {shown.map((r) => (
                   <tr
                     key={r.id}
+                    data-row={r.id}
                     className={`clickable ${r.id === detailId ? 'selected' : ''}`}
                     tabIndex={0}
                     aria-selected={r.id === detailId}

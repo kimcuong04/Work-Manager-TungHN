@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   AlertTriangle,
   ArchiveRestore,
@@ -23,6 +23,7 @@ import { addDays, formatDate, formatDateTime } from '../../shared/dates';
 import { ACTIVE_STATUSES, DEFAULT_THRESHOLDS, computeStatus, describeRules, validateThresholds } from '../../shared/status';
 import { nameKey } from '../../shared/text';
 import {
+  COLORED_MASTER_KINDS,
   JOB_LABEL,
   JOB_TYPES,
   MASTER_LABEL,
@@ -54,11 +55,45 @@ const TABS: { key: Tab; label: string }[] = [
   { key: 'data', label: 'Dữ liệu & Backup' },
 ];
 
+function WorkspaceName() {
+  const { settings, updateSettings } = useAppData();
+  const { toast, toastError } = useUi();
+  const [name, setName] = useState(settings.workspaceName);
+  useEffect(() => setName(settings.workspaceName), [settings.workspaceName]);
+  const changed = name.trim() !== settings.workspaceName;
+  const save = async () => {
+    try {
+      const next = await updateSettings({ workspaceName: name });
+      setName(next.workspaceName);
+      toast('success', `Đã đổi tên workspace thành "${next.workspaceName}".`);
+    } catch (e) {
+      toastError(e);
+    }
+  };
+  return (
+    <form
+      className="row"
+      style={{ marginTop: 16, gap: 8, flexWrap: 'wrap' }}
+      onSubmit={(e) => {
+        e.preventDefault();
+        void save();
+      }}
+    >
+      <Field label="Tên workspace" htmlFor="ws-name" hint="Hiển thị ở đầu sidebar. Để trống = My Workspace.">
+        <input id="ws-name" className="input" style={{ width: 320 }} maxLength={40} value={name} onChange={(e) => setName(e.target.value)} />
+      </Field>
+      <button className="btn primary" type="submit" disabled={!changed} style={{ alignSelf: 'center' }}>
+        Lưu tên
+      </button>
+    </form>
+  );
+}
+
 function Appearance() {
   const { settings, updateSettings } = useAppData();
   const { toastError } = useUi();
   const card = (theme: Theme, label: string, icon: React.ReactNode, colors: [string, string, string]) => (
-    <button className={`theme-card ${settings.theme === theme ? 'on' : ''}`} onClick={() => updateSettings({ theme }).catch(toastError)} aria-pressed={settings.theme === theme}>
+    <button className={`theme-card ${settings.theme === theme ? 'on' : ''}`} onClick={() => void updateSettings({ theme }).catch(toastError)} aria-pressed={settings.theme === theme}>
       <div className="theme-preview">
         <div style={{ background: colors[0] }} />
         <div style={{ background: colors[1], padding: 10 }}>
@@ -81,6 +116,7 @@ function Appearance() {
         {card('light', 'Light Mode', <Sun size={16} />, ['#f1f3ea', '#ffffff', '#5c6b4e'])}
         {card('dark', 'Dark Mode', <Moon size={16} />, ['#17171a', '#111113', '#818cf8'])}
       </div>
+      <WorkspaceName />
     </section>
   );
 }
@@ -260,6 +296,7 @@ function MasterList({ kind }: { kind: MasterKind }) {
   const dup = newName.trim() ? items.find((i) => nameKey(i.name) === nameKey(newName)) : undefined;
   const reload = () => refresh('masters', 'projects', 'freelance');
   const ordered = ORDERED_MASTER_KINDS.includes(kind);
+  const colored = COLORED_MASTER_KINDS.includes(kind);
   const move = async (item: MasterItem, dir: -1 | 1) => {
     try {
       await api.moveMaster(kind, item.id, dir);
@@ -351,6 +388,7 @@ function MasterList({ kind }: { kind: MasterKind }) {
               <th className="num">Đang dùng</th>
               {kind === 'brands' && <th>Trạng thái</th>}
               {kind === 'salespersons' && <th>Phòng ban</th>}
+              {colored && <th>Màu</th>}
               <th style={{ width: 1 }} />
             </tr>
           </thead>
@@ -382,7 +420,9 @@ function MasterList({ kind }: { kind: MasterKind }) {
                       </button>
                     </form>
                   ) : (
-                    <span className={it.isActive ? '' : 'faint'}>{it.name}</span>
+                    <span className={it.isActive ? '' : 'faint'}>
+                      {colored ? <ColorChip name={it.name} color={it.color ?? null} /> : it.name}
+                    </span>
                   )}
                 </td>
                 <td className="num">{it.usageCount}</td>
@@ -410,6 +450,11 @@ function MasterList({ kind }: { kind: MasterKind }) {
                         </option>
                       ))}
                     </select>
+                  </td>
+                )}
+                {colored && (
+                  <td>
+                    <MasterColor kind={kind} item={it} onSaved={reload} />
                   </td>
                 )}
                 <td>
@@ -462,14 +507,68 @@ const MASTER_TABS: Record<MasterGroup, { kind: MasterKind; label: string }[]> = 
   ],
   FREELANCE: [
     { kind: 'freelanceStatuses', label: 'Tình trạng' },
+    { kind: 'freelancePaymentStatuses', label: 'Trạng thái thanh toán' },
     { kind: 'freelanceHirers', label: 'Bên thuê' },
   ],
+  EQUIPMENT: [{ kind: 'equipmentCategories', label: 'Phân loại' }],
 };
+
+const GROUP_LABEL: Record<MasterGroup, string> = { MAIN: JOB_LABEL.MAIN, FREELANCE: JOB_LABEL.FREELANCE, EQUIPMENT: 'Kho thiết bị' };
 
 const MASTER_GROUP_NOTE: Record<MasterGroup, string> = {
   MAIN: 'Danh mục của Job Chính: dự án Pre-sales / Post-sales (EU, Tên SI, Hãng, Sale), Warranty, Experience và Kiến thức. Đổi tên tự cập nhật mọi nơi (liên kết theo ID). Hãng đang được dùng chỉ có thể Deactivate.',
-  FREELANCE: 'Danh mục riêng của Job Freelance (Tình trạng, Bên thuê), không dùng chung với Job Chính dù trùng tên. Tình trạng hiển thị theo thứ tự ở đây — dùng nút lên/xuống để sắp xếp.',
+  FREELANCE:
+    'Danh mục riêng của Job Freelance (Tình trạng, Trạng thái thanh toán, Bên thuê), không dùng chung với Job Chính dù trùng tên. Tình trạng và Trạng thái thanh toán hiển thị theo thứ tự ở đây (nút lên/xuống) và theo màu bạn chọn.',
+  EQUIPMENT: 'Danh mục riêng của Kho thiết bị (Phân loại). Hãng, Tên SI, Sale của Kho thiết bị dùng chung với Job Chính — quản lý ở phân loại Job Chính.',
 };
+
+export function ColorChip({ name, color }: { name: string; color: string | null }) {
+  return (
+    <span className="color-chip" style={color ? { background: `${color}24`, borderColor: color } : undefined}>
+      <span className="dot" style={{ background: color ?? 'var(--border-strong)' }} />
+      {name}
+    </span>
+  );
+}
+
+/** Ô chọn màu cho một mục danh mục; lưu sau khi ngừng kéo trong bảng màu một lúc. */
+function MasterColor({ kind, item, onSaved }: { kind: MasterKind; item: MasterItem; onSaved: () => Promise<unknown> }) {
+  const { toastError } = useUi();
+  const [value, setValue] = useState(item.color ?? '#94a3b8');
+  const timer = useRef<number | undefined>(undefined);
+  useEffect(() => setValue(item.color ?? '#94a3b8'), [item.color]);
+  useEffect(() => () => window.clearTimeout(timer.current), []);
+  const commit = (color: string | null) => {
+    window.clearTimeout(timer.current);
+    api
+      .setMasterColor(kind, item.id, color)
+      .then(onSaved)
+      .catch(toastError);
+  };
+  return (
+    <div className="row nowrap" style={{ gap: 6 }}>
+      <input
+        type="color"
+        className="color-input"
+        value={value}
+        aria-label={`Màu của ${item.name}`}
+        onChange={(e) => {
+          const v = e.target.value;
+          setValue(v);
+          window.clearTimeout(timer.current);
+          timer.current = window.setTimeout(() => commit(v), 350);
+        }}
+      />
+      {item.color ? (
+        <button className="btn sm ghost" type="button" onClick={() => commit(null)} aria-label={`Bỏ màu của ${item.name}`}>
+          Bỏ màu
+        </button>
+      ) : (
+        <span className="small faint">Chưa chọn</span>
+      )}
+    </div>
+  );
+}
 
 function MasterData() {
   const [group, setGroup] = useSessionState<MasterGroup>('settings-master-group', 'MAIN');
@@ -485,9 +584,9 @@ function MasterData() {
         </h2>
         <span className="small muted">Phân loại</span>
         <div className="seg" role="group" aria-label="Phân loại danh mục">
-          {(['MAIN', 'FREELANCE'] as MasterGroup[]).map((g) => (
+          {(['MAIN', 'FREELANCE', 'EQUIPMENT'] as MasterGroup[]).map((g) => (
             <button key={g} className={group === g ? 'on' : ''} aria-pressed={group === g} onClick={() => setGroup(g)}>
-              {JOB_LABEL[g]}
+              {GROUP_LABEL[g]}
             </button>
           ))}
         </div>

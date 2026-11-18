@@ -140,7 +140,7 @@ export function validateWarrantyInput(input: WarrantyInput): FieldErrors {
   return e;
 }
 
-/** Kho thiết bị: STT và Tên sp là bắt buộc; các ngày nếu có thì phải hợp lệ. */
+/** Kho thiết bị: STT và Tên sp là bắt buộc; Ngày nhận bàn giao nếu có thì phải hợp lệ. */
 export function validateEquipmentInput(input: EquipmentInput): FieldErrors {
   const e: FieldErrors = {};
   if (input.stt === null) e.stt = 'Bắt buộc nhập STT.';
@@ -151,20 +151,23 @@ export function validateEquipmentInput(input: EquipmentInput): FieldErrors {
   checkLen(e, 'description', input.description ?? '', LIMITS.longText);
   checkLen(e, 'condition', input.condition ?? '', LIMITS.longText);
   if (input.handoverDate && !isValidISODate(input.handoverDate)) e.handoverDate = 'Ngày không hợp lệ (dd/mm/yyyy).';
-  if (input.currentBorrowDate && !isValidISODate(input.currentBorrowDate)) e.currentBorrowDate = 'Ngày không hợp lệ (dd/mm/yyyy).';
-  if (input.currentDueDate && !isValidISODate(input.currentDueDate)) e.currentDueDate = 'Ngày không hợp lệ (dd/mm/yyyy).';
-  else if (input.currentDueDate && input.currentBorrowDate && isValidISODate(input.currentBorrowDate) && input.currentDueDate < input.currentBorrowDate)
-    e.currentDueDate = 'Ngày hẹn trả phải lớn hơn hoặc bằng Ngày mượn.';
   return e;
 }
 
-/** Một lần mượn/trả: bắt buộc Ngày mượn; Ngày trả (nếu có) không trước Ngày mượn. */
-export function validateEquipmentLoanInput(input: EquipmentLoanInput): FieldErrors {
+/**
+ * Một lần mượn/trả: bắt buộc Ngày mượn; Ngày hẹn trả và Ngày trả thực tế (nếu có) không trước Ngày mượn.
+ * Có `today` thì Ngày trả thực tế không được sau hôm nay.
+ */
+export function validateEquipmentLoanInput(input: EquipmentLoanInput, today?: string): FieldErrors {
   const e: FieldErrors = {};
+  const borrowOk = !!input.borrowDate && isValidISODate(input.borrowDate);
   if (!input.borrowDate) e.borrowDate = 'Bắt buộc nhập Ngày mượn.';
-  else if (!isValidISODate(input.borrowDate)) e.borrowDate = 'Ngày không hợp lệ (dd/mm/yyyy).';
+  else if (!borrowOk) e.borrowDate = 'Ngày không hợp lệ (dd/mm/yyyy).';
+  if (input.dueDate && !isValidISODate(input.dueDate)) e.dueDate = 'Ngày không hợp lệ (dd/mm/yyyy).';
+  else if (input.dueDate && borrowOk && input.dueDate < input.borrowDate) e.dueDate = 'Ngày hẹn trả phải lớn hơn hoặc bằng Ngày mượn.';
   if (input.returnDate && !isValidISODate(input.returnDate)) e.returnDate = 'Ngày không hợp lệ (dd/mm/yyyy).';
-  else if (input.returnDate && input.borrowDate && input.returnDate < input.borrowDate) e.returnDate = 'Ngày trả phải lớn hơn hoặc bằng Ngày mượn.';
+  else if (input.returnDate && borrowOk && input.returnDate < input.borrowDate) e.returnDate = 'Ngày trả thực tế phải lớn hơn hoặc bằng Ngày mượn.';
+  else if (input.returnDate && today && input.returnDate > today) e.returnDate = 'Ngày trả thực tế không được sau hôm nay.';
   checkLen(e, 'reason', input.reason ?? '', LIMITS.longText);
   checkLen(e, 'returnCondition', input.returnCondition ?? '', LIMITS.longText);
   return e;

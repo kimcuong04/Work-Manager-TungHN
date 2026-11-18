@@ -123,10 +123,10 @@ describe('Validate form (FR-FORM-001)', () => {
     expect(validateProjectInput({ ...base, projectName: 'x'.repeat(201) }).projectName).toBeTruthy();
     expect(validateProjectInput({ ...base, note: 'x'.repeat(5001) }).note).toBeUndefined();
   });
-  it('TC-010: chỉ nhận .dwg/.txt/.docx/.pdf', () => {
-    for (const ext of ['dwg', 'txt', 'docx', 'pdf', 'PDF'])
+  it('TC-010: chỉ nhận .dwg/.txt/.docx/.pdf/.xlsx', () => {
+    for (const ext of ['dwg', 'txt', 'docx', 'pdf', 'PDF', 'xlsx'])
       expect(validateProjectInput({ ...base, filePath: `C:\\a.${ext}`, fileName: `a.${ext}`, fileExtension: ext }).file).toBeUndefined();
-    expect(validateProjectInput({ ...base, filePath: 'C:\\a.xlsx', fileName: 'a.xlsx', fileExtension: 'xlsx' }).file).toBeTruthy();
+    expect(validateProjectInput({ ...base, filePath: 'C:\\a.xls', fileName: 'a.xls', fileExtension: 'xls' }).file).toBeTruthy();
     expect(validateProjectInput({ ...base, filePath: 'C:\\a.exe', fileName: 'a.exe', fileExtension: 'exe' }).file).toBeTruthy();
   });
   it('FR-EXP-009: từ chối javascript: và scheme lạ', () => {

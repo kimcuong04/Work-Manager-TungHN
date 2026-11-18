@@ -8,6 +8,7 @@ import { nodePath } from '../lib/projects';
 import { DateFilterControls, resolveDateRange } from '../pages/WarrantyPage';
 import { useAppData } from '../state/AppData';
 import { useClickOutside } from './common';
+import { requestHighlight } from '../lib/highlight';
 
 type DateMode = Parameters<typeof resolveDateRange>[0];
 
@@ -55,16 +56,19 @@ export const SEARCH_PLACEHOLDER: Record<SearchMode, string> = {
 };
 
 /** Mở đúng nơi chứa kết quả: dự án / job Freelance → trang chi tiết; Warranty → bảng Warranty của năm đó với bản ghi được chọn. */
+/** Mở kết quả tìm kiếm và tô sáng `query` ở trang đích (bấm chuột bất kỳ đâu để bỏ). */
 export function useOpenHit() {
   const navigate = useNavigate();
-  return (h: SearchHit) =>
-    h.kind === 'project'
+  return (h: SearchHit, query: string) => {
+    requestHighlight(query);
+    return h.kind === 'project'
       ? navigate(`/project/${h.id}`)
       : h.kind === 'freelance'
         ? navigate(`/freelance/${h.id}`)
         : h.kind === 'equipment'
           ? navigate('/equipment', { state: { select: h.id } })
           : navigate(nodePath(h.jobType, h.jobYearId, 'WARRANTY'), { state: { select: h.id } });
+  };
 }
 
 export function HitIcon({ kind }: { kind: SearchHit['kind'] }) {
@@ -216,7 +220,7 @@ export function GlobalSearch() {
               className="opt"
               onClick={() => {
                 setOpen(false);
-                openHit(h);
+                openHit(h, st.text);
               }}
             >
               <HitIcon kind={h.kind} />
