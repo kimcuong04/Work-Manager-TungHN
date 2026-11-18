@@ -52,8 +52,7 @@ describe('Nâng cấp v1.9 → v1.10', () => {
     projects.commitImport(c1, p.id, payload('BOQ-v1.xlsx', ['P1375', 'M3086']));
     old.close();
     const db = await Db.open(file);
-    expect(SCHEMA_VERSION).toBe(10);
-    expect(db.scalar<number>('PRAGMA user_version')).toBe(10);
+    expect(db.scalar<number>('PRAGMA user_version')).toBe(SCHEMA_VERSION);
     const c2 = { ...ctx, db };
     expect(projects.listProjectImports(c2, p.id).map((i) => [i.sourceFileName, i.items.length])).toEqual([['BOQ-v1.xlsx', 2]]);
     projects.commitImport(c2, p.id, payload('BOQ-v2.xlsx', ['Q6135']));

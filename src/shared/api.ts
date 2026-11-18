@@ -168,6 +168,9 @@ export interface Api {
 
   /** To-do list theo ngày (yyyy-mm-dd). Các hàm sửa trả về danh sách mới của ngày đó. */
   listTodos(date: string): Promise<TodoItem[]>;
+  listTodosRange(from: string, to: string): Promise<TodoItem[]>;
+  addTodoTask(date: string, title: string): Promise<TodoItem[]>;
+  renameTodoTask(id: string, title: string): Promise<TodoItem[]>;
   addTodos(date: string, targets: TodoTarget[]): Promise<TodoItem[]>;
   setTodoDone(id: string, done: boolean): Promise<TodoItem[]>;
   reorderTodos(date: string, ids: string[]): Promise<TodoItem[]>;

@@ -1506,7 +1506,7 @@ try {
   await win.locator('.sidebar').getByRole('link', { name: 'To-do list' }).click();
   await win.waitForSelector('text=Chưa có việc nào cho');
   const todoDate = await win.locator('#todo-date').inputValue();
-  await win.getByRole('button', { name: 'Thêm việc' }).first().click();
+  await win.getByRole('button', { name: 'Chọn dự án / job' }).first().click();
   await win.waitForSelector('.todo-pick-list');
   const pickTxt = await win.locator('.todo-pick-list').innerText();
   await win.locator('.modal [aria-label="Loại job"]').getByRole('button', { name: 'Job Chính' }).click();
@@ -1544,6 +1544,69 @@ try {
     todoList.filter((t) => t.doneAt).length === 1 && todoList[2].doneAt && /Đã hoàn thành/.test(doneTxt) && (await win.locator('.todo-item.done').count()) === 1,
     todoList.map((t) => `${t.title}${t.doneAt ? ' ✓' : ''}`).join(' > '),
   );
+
+  // --- v1.11: To-do — việc tự nhập (chỉ có tên), xem 3 / 5 / 7 ngày ---
+  {
+    const quick = win.locator(`input[aria-label="Thêm việc mới ngày ${dmy(day(0))}"]`);
+    await quick.fill('Gọi lại khách hàng ABC');
+    await quick.press('Enter');
+    await win.waitForTimeout(400);
+    let list = await call(win, 'listTodos', day(0));
+    const task = list.find((t) => t.kind === 'TASK');
+    const cleared = (await quick.inputValue()) === '';
+    await win.locator('.todo-item .todo-title', { hasText: 'Gọi lại khách hàng ABC' }).dblclick();
+    await win.locator('input[aria-label="Tên việc"]').fill('Gọi lại khách hàng ABC lúc 15h');
+    await win.locator('input[aria-label="Tên việc"]').press('Enter');
+    await win.waitForTimeout(400);
+    list = await call(win, 'listTodos', day(0));
+    check(
+      'To-do: thêm việc mới chỉ cần Tên (Enter), đổi tên bằng bấm đúp; nằm cuối danh sách cần làm',
+      !!task && task.targetId === null && cleared && list.find((t) => t.id === task.id)?.title === 'Gọi lại khách hàng ABC lúc 15h' && list.filter((t) => !t.doneAt).at(-1)?.id === task.id,
+      list.map((t) => `${t.kind}:${t.title}${t.doneAt ? ' ✓' : ''}`).join(' | '),
+    );
+
+    const view = win.locator('[aria-label="Chế độ xem"]');
+    await view.getByRole('button', { name: '3 ngày' }).click();
+    await win.waitForSelector('.todo-day.v-column');
+    const cols3 = await win.locator('.todo-day.v-column').count();
+    const boxes3 = await Promise.all((await win.locator('.todo-day.v-column').all()).map((l) => l.boundingBox()));
+    const tomorrowInput = win.locator(`input[aria-label="Thêm việc mới ngày ${dmy(day(1))}"]`);
+    await tomorrowInput.fill('Chuẩn bị tài liệu nghiệm thu');
+    await tomorrowInput.press('Enter');
+    await win.waitForTimeout(400);
+    const range3 = await call(win, 'listTodosRange', day(0), day(2));
+    await shot(win, '55-todo-3-days');
+    check(
+      'To-do xem 3 ngày: 3 cột dọc cạnh nhau, thêm việc thẳng vào cột ngày mai',
+      cols3 === 3 && boxes3.every((b, i) => i === 0 || (Math.abs(b.y - boxes3[0].y) < 2 && b.x > boxes3[i - 1].x)) &&
+        range3.some((t) => t.todoDate === day(1) && t.title === 'Chuẩn bị tài liệu nghiệm thu') && (await win.locator('.todo-day.today').count()) === 1,
+      `${cols3} cột · ${range3.length} việc trong 3 ngày`,
+    );
+    await view.getByRole('button', { name: '5 ngày' }).click();
+    await win.waitForTimeout(400);
+    const cols5 = await win.locator('.todo-day.v-column').count();
+    const boxes5 = await Promise.all((await win.locator('.todo-day.v-column').all()).map((l) => l.boundingBox()));
+    await shot(win, '56-todo-5-days');
+    await view.getByRole('button', { name: '7 ngày' }).click();
+    await win.waitForTimeout(400);
+    const rows7 = await win.locator('.todo-day.v-row').count();
+    const boxes7 = await Promise.all((await win.locator('.todo-day.v-row').all()).map((l) => l.boundingBox()));
+    const heads7 = await win.locator('.todo-day.v-row .todo-day-head').allInnerTexts();
+    await shot(win, '57-todo-7-days');
+    check(
+      'To-do xem 5 ngày (5 cột dọc) và 7 ngày (liệt kê từng ngày từ trên xuống)',
+      cols5 === 5 && boxes5.every((b) => Math.abs(b.y - boxes5[0].y) < 2) && rows7 === 7 && boxes7.every((b, i) => i === 0 || (Math.abs(b.x - boxes7[0].x) < 2 && b.y > boxes7[i - 1].y)) &&
+        heads7[0].includes(dmy(day(0))) && heads7[6].includes(dmy(day(6))),
+      `${cols5} cột · ${rows7} ngày: ${heads7[0].replace(/\s+/g, ' ')} … ${heads7[6].replace(/\s+/g, ' ')}`,
+    );
+    await win.getByRole('button', { name: '7 ngày sau' }).click();
+    await win.waitForTimeout(300);
+    const next7 = await win.locator('.todo-day.v-row .todo-day-head').first().innerText();
+    await view.getByRole('button', { name: '1 ngày' }).click();
+    await win.getByRole('button', { name: 'Hôm nay', exact: true }).click();
+    await win.waitForTimeout(300);
+    check('To-do: nút sau / trước nhảy theo số ngày đang xem; quay lại 1 ngày', next7.includes(dmy(day(7))) && (await win.locator('#todo-date').inputValue()) === dmy(day(0)), next7.replace(/\s+/g, ' '));
+  }
 
   // --- NFR-001: 1.100 dự án — board/dashboard <= 2s, search <= 300ms ---
   const ys = await call(win, 'listYears');

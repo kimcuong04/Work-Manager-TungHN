@@ -43,8 +43,9 @@ App tự cập nhật trên máy user, nên mọi thay đổi phải giữ đư�
    `current_due_date` chỉ là bản sao tính lại bằng `syncCurrent` sau mỗi thay đổi lần mượn — không cho sửa trực tiếp.
    Hãng / Tên SI / Sale dùng chung danh mục Job Chính (Sale chỉ hiện tên), nên mọi cột tham chiếu danh mục phải khai báo
    trong `SPECS` của `src/main/services/master.ts`. Tình trạng thiết bị chỉ tự đổi trong `saveEquipmentLoan`.
-12. **To-do list** (`todo_items`, schema 9): mỗi việc trỏ tới đúng một `projects` (Pre/Post-sales) hoặc `freelance_jobs`,
-   xóa dây chuyền theo dự án/job; không trùng trong cùng ngày. Danh mục có màu khai báo ở `COLORED_MASTER_KINDS`.
+12. **To-do list** (`todo_items`, schema 9, tạo lại ở schema 11): mỗi việc là đúng một trong `project_id` (Pre/Post-sales),
+   `freelance_job_id` hoặc `title` (việc tự nhập) — CHECK trong bảng; xóa dây chuyền theo dự án/job; job không trùng trong
+   cùng ngày. Danh mục có màu khai báo ở `COLORED_MASTER_KINDS`.
 13. **Bảng & tô sáng**: bảng danh sách dùng `useTableResize(key)` (`src/renderer/lib/tableResize.ts`) — `<tr data-row={id}>`
    để đổi chiều cao dòng, `data-col` cho tiêu đề không có chữ. Tô sáng kết quả tìm kiếm dùng CSS Custom Highlight
    (`src/renderer/lib/highlight.ts`), **không** bọc `<mark>` vào DOM do React quản lý.

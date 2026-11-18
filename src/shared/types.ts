@@ -741,16 +741,17 @@ export interface AppInfo {
   encryption: 'os' | 'fallback';
 }
 
-export type TodoKind = 'MAIN' | 'FREELANCE';
+/** MAIN = dự án Pre/Post-sales, FREELANCE = job Freelance, TASK = việc tự nhập (chỉ có tên). */
+export type TodoKind = 'MAIN' | 'FREELANCE' | 'TASK';
 
-/** Một việc trong To-do list của một ngày: trỏ tới một dự án Job Chính (Pre-sales / Post-sales) hoặc một job Freelance. */
+/** Một việc trong To-do list của một ngày: một dự án Job Chính (Pre-sales / Post-sales), một job Freelance hoặc việc tự nhập. */
 export interface TodoItem {
   id: string;
   todoDate: string;
   kind: TodoKind;
-  /** Id dự án (MAIN) hoặc job Freelance (FREELANCE). */
-  targetId: string;
-  stt: number;
+  /** Id dự án (MAIN) hoặc job Freelance (FREELANCE); null với việc tự nhập. */
+  targetId: string | null;
+  stt: number | null;
   title: string;
   /** Pre-sales / Post-sales kèm năm, hoặc "Job Freelance". */
   scope: string;
@@ -762,6 +763,6 @@ export interface TodoItem {
 }
 
 export interface TodoTarget {
-  kind: TodoKind;
+  kind: Exclude<TodoKind, 'TASK'>;
   targetId: string;
 }

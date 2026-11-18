@@ -110,10 +110,12 @@ Backup/Restore trong **Settings › Dữ liệu & Backup** xuất một file `.z
   **→ Trong kho** (sau khi hoàn trả). **Tình trạng tự lấy theo “Tình trạng khi trả” của lần trả mới nhất** (vẫn sửa tay
   được). Bảng có cột riêng **Tên SI mượn** / **Sale mượn**; lọc theo trạng thái, Phân loại, Hãng, Tên SI đã mượn, Ngày mượn
   / hẹn trả hiện tại / Ngày nhận bàn giao; tìm không dấu; panel phải, View info, Duplicate, Chọn nhiều để xóa.
-- **To-do list** (dưới Calendar): chọn ngày (mặc định hôm nay, nút ngày trước/sau), **Thêm việc** chọn một hoặc nhiều dự án
-  Pre-sales / Post-sales (Job Chính, không gồm Warranty) và job Freelance; **kéo biểu tượng ☰** (hoặc phím mũi tên khi
-  đang chọn ☰) để xếp ưu tiên; bấm vòng tròn để **Đã hoàn thành** (chuyển xuống mục Đã hoàn thành, bấm lại để bỏ); bấm
-  tên để mở dự án / job. Xóa dự án / job thì việc tương ứng tự biến mất khỏi To-do list.
+- **To-do list** (dưới Calendar): chọn ngày (mặc định hôm nay); gõ **việc mới** chỉ cần Tên rồi Enter (bấm đúp để đổi tên),
+  hoặc **Chọn dự án / job** — một hoặc nhiều dự án Pre-sales / Post-sales (Job Chính, không gồm Warranty) và job Freelance.
+  Xem **1 ngày** (danh sách), **3 ngày / 5 ngày** (các cột dọc cạnh nhau, mỗi cột có ô thêm việc riêng) hoặc **7 ngày** (từng
+  ngày xếp từ trên xuống); nút trước / sau nhảy theo số ngày đang xem. **Kéo biểu tượng ☰** (hoặc phím mũi tên khi đang
+  chọn ☰) để xếp ưu tiên; bấm vòng tròn để **Đã hoàn thành** (bấm lại để bỏ); bấm tên dự án / job để mở. Xóa dự án / job
+  thì việc tương ứng tự biến mất khỏi To-do list.
 - **Bảng kéo đổi kích thước**: ở các bảng danh sách (Pre/Post-sales, Warranty, Job Freelance, Kho thiết bị, Experience,
   Kiến thức, Password, Tools, Tìm kiếm, Dashboard) kéo mép phải tiêu đề cột để đổi độ rộng, kéo mép dưới một dòng để đổi
   chiều cao; bấm đúp vào mép để trả về kích thước vừa nội dung. Kích thước được nhớ cho lần sau.

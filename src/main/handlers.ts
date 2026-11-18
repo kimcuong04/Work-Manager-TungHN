@@ -274,6 +274,9 @@ export function createHandlers(ctx: Ctx, desktop: Desktop): Handlers {
     deleteEquipmentLoan: (loanId) => equipment.deleteEquipmentLoan(ctx, String(loanId)),
 
     listTodos: (date) => todos.listTodos(ctx, String(date)),
+    listTodosRange: (from, to) => todos.listTodosRange(ctx, String(from), String(to)),
+    addTodoTask: (date, title) => todos.addTodoTask(ctx, String(date), String(title ?? '')),
+    renameTodoTask: (id, title) => todos.renameTodoTask(ctx, String(id), String(title ?? '')),
     addTodos: (date, targets) => todos.addTodos(ctx, String(date), targets),
     setTodoDone: (id, done) => todos.setTodoDone(ctx, String(id), !!done),
     reorderTodos: (date, ids) => todos.reorderTodos(ctx, String(date), ids),

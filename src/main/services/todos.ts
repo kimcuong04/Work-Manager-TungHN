@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
-import { formatDate, isValidISODate } from '../../shared/dates';
+import { diffDays, formatDate, isValidISODate } from '../../shared/dates';
+import { cleanName } from '../../shared/text';
 import { CATEGORY_LABEL, type ProjectCategory, type TodoItem, type TodoTarget } from '../../shared/types';
 import { AppError, now, type Ctx } from '../context';
 
@@ -14,6 +15,8 @@ LEFT JOIN freelance_jobs f ON f.id = t.freelance_job_id
 LEFT JOIN freelance_statuses fs ON fs.id = f.status_id`;
 
 function mapTodo(r: Record<string, any>): TodoItem {
+  if (r.title !== null && r.title !== undefined)
+    return { id: r.id, todoDate: r.todo_date, kind: 'TASK', targetId: null, stt: null, title: r.title, scope: 'Việc tự nhập', status: null, sortOrder: r.sort_order, doneAt: r.done_at ?? null };
   const main = !!r.project_id;
   return {
     id: r.id,
@@ -37,8 +40,47 @@ function checkDate(date: string) {
 export function listTodos(ctx: Ctx, date: string): TodoItem[] {
   checkDate(date);
   return ctx.db
-    .all<Record<string, any>>(`${SELECT_TODO} WHERE t.todo_date = ? ORDER BY (t.done_at IS NOT NULL), t.sort_order, t.done_at, t.created_at`, [date])
+    .all<Record<string, any>>(`${SELECT_TODO} WHERE t.todo_date = ? ${ORDER}`, [date])
     .map(mapTodo);
+}
+
+const ORDER = 'ORDER BY t.todo_date, (t.done_at IS NOT NULL), t.sort_order, t.done_at, t.created_at';
+
+/** Việc của các ngày từ `from` đến `to` (tối đa 31 ngày), theo ngày rồi theo thứ tự ưu tiên. */
+export function listTodosRange(ctx: Ctx, from: string, to: string): TodoItem[] {
+  checkDate(from);
+  checkDate(to);
+  if (to < from || diffDays(to, from) > 31) throw new AppError('Khoảng ngày của To-do list không hợp lệ.');
+  return ctx.db.all<Record<string, any>>(`${SELECT_TODO} WHERE t.todo_date BETWEEN ? AND ? ${ORDER}`, [from, to]).map(mapTodo);
+}
+
+const nextOrder = (ctx: Ctx, date: string) => ctx.db.scalar<number>('SELECT COALESCE(MAX(sort_order), -1) + 1 FROM todo_items WHERE todo_date = ? AND done_at IS NULL', [date]) ?? 0;
+
+function taskTitle(raw: string): string {
+  const title = cleanName(String(raw ?? ''));
+  if (!title) throw new AppError('Nhập tên việc.');
+  if (title.length > 300) throw new AppError('Tên việc tối đa 300 ký tự.');
+  return title;
+}
+
+/** Thêm một việc tự nhập (chỉ có tên) vào cuối danh sách chưa xong của ngày `date`. */
+export function addTodoTask(ctx: Ctx, date: string, title: string): TodoItem[] {
+  checkDate(date);
+  const name = taskTitle(title);
+  const stamp = now();
+  ctx.db.tx(() =>
+    ctx.db.run('INSERT INTO todo_items (id, todo_date, title, sort_order, created_at, updated_at) VALUES (?,?,?,?,?,?)', [randomUUID(), date, name, nextOrder(ctx, date), stamp, stamp]),
+  );
+  return listTodos(ctx, date);
+}
+
+/** Đổi tên việc tự nhập (việc trỏ tới dự án / job thì lấy tên theo dự án / job, không đổi ở đây). */
+export function renameTodoTask(ctx: Ctx, id: string, title: string): TodoItem[] {
+  const date = dateOf(ctx, id);
+  if (ctx.db.scalar<string | null>('SELECT title FROM todo_items WHERE id = ?', [id]) === null) throw new AppError('Chỉ đổi tên được việc tự nhập.');
+  const name = taskTitle(title);
+  ctx.db.tx(() => ctx.db.run('UPDATE todo_items SET title = ?, updated_at = ? WHERE id = ?', [name, now(), id]));
+  return listTodos(ctx, date);
 }
 
 /** Thêm các dự án Pre-sales / Post-sales và job Freelance vào ngày `date`; việc đã có trong ngày thì bỏ qua. */
@@ -47,7 +89,7 @@ export function addTodos(ctx: Ctx, date: string, targets: TodoTarget[]): TodoIte
   if (!Array.isArray(targets) || targets.length > 500) throw new AppError('Danh sách việc không hợp lệ.');
   const stamp = now();
   ctx.db.tx(() => {
-    let order = ctx.db.scalar<number>('SELECT COALESCE(MAX(sort_order), -1) + 1 FROM todo_items WHERE todo_date = ?', [date]) ?? 0;
+    let order = nextOrder(ctx, date);
     for (const t of targets) {
       const id = String(t?.targetId ?? '');
       if (t?.kind === 'MAIN') {
@@ -78,7 +120,7 @@ export function setTodoDone(ctx: Ctx, id: string, done: boolean): TodoItem[] {
   ctx.db.tx(() => {
     if (done) ctx.db.run('UPDATE todo_items SET done_at = COALESCE(done_at, ?), updated_at = ? WHERE id = ?', [stamp, stamp, id]);
     else {
-      const order = ctx.db.scalar<number>('SELECT COALESCE(MAX(sort_order), -1) + 1 FROM todo_items WHERE todo_date = ? AND done_at IS NULL', [date]);
+      const order = nextOrder(ctx, date);
       ctx.db.run('UPDATE todo_items SET done_at = NULL, sort_order = ?, updated_at = ? WHERE id = ?', [order, stamp, id]);
     }
   });

@@ -3464,3 +3464,92 @@ input.select-box {
 .file-row > .row {
   flex-wrap: wrap;
 }
+
+/* ---------- v1.11: To-do list — thêm nhanh, xem 3 / 5 / 7 ngày ---------- */
+.todo-quick {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+.todo-quick .input {
+  flex: 1;
+  min-width: 0;
+}
+.todo-empty {
+  padding: 8px 2px;
+}
+.todo-title {
+  font-weight: 600;
+  overflow-wrap: break-word;
+}
+.todo-edit {
+  height: 30px;
+}
+.todo-tools {
+  display: inline-flex;
+  gap: 2px;
+  flex-shrink: 0;
+}
+.todo-cols {
+  display: grid;
+  grid-template-columns: repeat(var(--todo-cols), minmax(180px, 1fr));
+  gap: 12px;
+  align-items: start;
+  overflow-x: auto;
+  padding-bottom: 4px;
+}
+.todo-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.todo-day {
+  padding: 12px;
+}
+.todo-day.today {
+  border-color: var(--accent);
+  box-shadow: inset 0 3px 0 var(--accent);
+}
+.todo-day-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 10px;
+  flex-wrap: wrap;
+}
+.todo-day.v-column .todo-item {
+  gap: 4px;
+  padding: 7px 0;
+  align-items: flex-start;
+}
+.todo-day.v-column .todo-grip {
+  padding: 2px 0;
+}
+.todo-day.v-column .todo-check {
+  padding: 1px;
+}
+.todo-day.v-column .todo-title {
+  font-size: 13px;
+}
+.todo-day.v-column .todo-meta {
+  font-size: 11.5px;
+}
+.todo-day.v-column .todo-quick {
+  gap: 4px;
+}
+.todo-day.v-column .todo-tools {
+  position: absolute;
+  right: 0;
+  top: 4px;
+  background: var(--surface);
+  opacity: 0;
+}
+.todo-day.v-column .todo-item:hover .todo-tools,
+.todo-day.v-column .todo-item:focus-within .todo-tools {
+  opacity: 1;
+}
+.todo-done-label {
+  margin: 10px 0 2px;
+  padding-top: 8px;
+  border-top: 1px dashed var(--border);
+}

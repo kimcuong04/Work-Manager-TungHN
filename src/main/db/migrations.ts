@@ -616,6 +616,32 @@ ALTER TABLE project_imports_v10 RENAME TO project_imports;
 CREATE INDEX idx_project_imports_project ON project_imports(project_id, imported_at);
 `;
 
+/**
+ * v1.11: To-do list có thêm việc tự nhập (chỉ có Tên) ngoài dự án / job Freelance — tạo lại bảng để đổi ràng buộc
+ * CHECK (SQLite không sửa được CHECK): mỗi việc là đúng một trong dự án, job Freelance hoặc tên tự nhập.
+ */
+const V11 = `
+CREATE TABLE todo_items_v11 (
+  id TEXT PRIMARY KEY,
+  todo_date TEXT NOT NULL,
+  project_id TEXT REFERENCES projects(id) ON DELETE CASCADE,
+  freelance_job_id TEXT REFERENCES freelance_jobs(id) ON DELETE CASCADE,
+  title TEXT,
+  sort_order INTEGER NOT NULL DEFAULT 0,
+  done_at TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  CHECK ((project_id IS NOT NULL) + (freelance_job_id IS NOT NULL) + (title IS NOT NULL) = 1)
+);
+INSERT INTO todo_items_v11 (id, todo_date, project_id, freelance_job_id, title, sort_order, done_at, created_at, updated_at)
+  SELECT id, todo_date, project_id, freelance_job_id, NULL, sort_order, done_at, created_at, updated_at FROM todo_items;
+DROP TABLE todo_items;
+ALTER TABLE todo_items_v11 RENAME TO todo_items;
+CREATE INDEX idx_todo_items_date ON todo_items(todo_date);
+CREATE UNIQUE INDEX ux_todo_project ON todo_items(todo_date, project_id) WHERE project_id IS NOT NULL;
+CREATE UNIQUE INDEX ux_todo_freelance ON todo_items(todo_date, freelance_job_id) WHERE freelance_job_id IS NOT NULL;
+`;
+
 const DEFAULT_STATUS_COLORS: Record<string, string> = {
   'mới nhận': '#3b82f6',
   'đang làm': '#f59e0b',
@@ -746,6 +772,10 @@ export const MIGRATIONS: Migration[] = [
     version: 10,
     foreignKeysOff: true,
     up: (db) => db.exec(V10),
+  },
+  {
+    version: 11,
+    up: (db) => db.exec(V11),
   },
 ];
 
