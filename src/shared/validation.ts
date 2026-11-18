@@ -148,7 +148,9 @@ export function validateEquipmentInput(input: EquipmentInput): FieldErrors {
   if (!cleanName(input.productName ?? '')) e.productName = 'Bắt buộc nhập Tên sp.';
   checkLen(e, 'productName', input.productName ?? '', LIMITS.projectName);
   checkLen(e, 'serialNumber', input.serialNumber ?? '', LIMITS.shortText);
+  checkLen(e, 'description', input.description ?? '', LIMITS.longText);
   checkLen(e, 'condition', input.condition ?? '', LIMITS.longText);
+  if (input.handoverDate && !isValidISODate(input.handoverDate)) e.handoverDate = 'Ngày không hợp lệ (dd/mm/yyyy).';
   if (input.currentBorrowDate && !isValidISODate(input.currentBorrowDate)) e.currentBorrowDate = 'Ngày không hợp lệ (dd/mm/yyyy).';
   if (input.currentDueDate && !isValidISODate(input.currentDueDate)) e.currentDueDate = 'Ngày không hợp lệ (dd/mm/yyyy).';
   else if (input.currentDueDate && input.currentBorrowDate && isValidISODate(input.currentBorrowDate) && input.currentDueDate < input.currentBorrowDate)

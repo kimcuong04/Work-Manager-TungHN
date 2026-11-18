@@ -17,7 +17,7 @@ import { usePageTitle, useUi } from '../state/ui';
 import { DateFilterControls, resolveDateRange, useBrandOptions } from './WarrantyPage';
 
 type LoanState = 'all' | 'lent' | 'overdue' | 'in';
-type DateField = 'currentBorrowDate' | 'currentDueDate';
+type DateField = 'currentBorrowDate' | 'currentDueDate' | 'handoverDate';
 type DateMode = Parameters<typeof resolveDateRange>[0];
 
 interface EquipmentFilter {
@@ -33,7 +33,7 @@ interface EquipmentFilter {
   to: string | null;
 }
 
-type SortKey = 'stt' | 'productName' | 'brand' | 'currentBorrowDate' | 'currentDueDate';
+type SortKey = 'stt' | 'productName' | 'brand' | 'handoverDate' | 'currentBorrowDate' | 'currentDueDate';
 
 const dash = <span className="faint">—</span>;
 
@@ -53,9 +53,7 @@ function StateBadge({ r, today }: { r: EquipmentItem; today: string }) {
 const openLoan = (r: EquipmentItem) => r.loans.find((l) => !l.returnDate) ?? null;
 const lastReturn = (r: EquipmentItem) =>
   r.loans.filter((l) => l.returnDate && l.returnCondition.trim()).sort((a, b) => (b.returnDate! < a.returnDate! ? -1 : b.returnDate! > a.returnDate! ? 1 : b.updatedAt.localeCompare(a.updatedAt)))[0] ?? null;
-const saleLabel = (l: Pick<EquipmentLoan, 'salespersonName' | 'salespersonDepartment'>) =>
-  l.salespersonName ? (l.salespersonDepartment ? `${l.salespersonName}/${l.salespersonDepartment}` : l.salespersonName) : null;
-const borrowerLabel = (l: EquipmentLoan | null) => (l ? [l.siName, saleLabel(l)].filter(Boolean).join(' · ') : '');
+const borrowerLabel = (l: EquipmentLoan | null) => (l ? [l.siName, l.salespersonName].filter(Boolean).join(' · ') : '');
 const itemTitle = (r: EquipmentItem) => `${r.stt}. ${r.productName}`;
 
 interface Column {
@@ -71,6 +69,8 @@ const COLUMNS: Column[] = [
   { key: 'name', label: 'Tên sp', sort: 'productName', cls: 'eq-name', render: (r) => <span style={{ fontWeight: 600 }}>{r.productName}</span> },
   { key: 'brand', label: 'Hãng', sort: 'brand', cls: 'nowrap', render: (r) => r.brandName ?? dash },
   { key: 'serial', label: 'Serial number', cls: 'nowrap', render: (r) => r.serialNumber || dash },
+  { key: 'description', label: 'Mô tả', cls: 'clamp', render: (r) => <div>{r.description}</div> },
+  { key: 'handover', label: 'Ngày nhận bàn giao', sort: 'handoverDate', cls: 'nowrap', render: (r) => formatDate(r.handoverDate) || dash },
   { key: 'state', label: 'Trạng thái', cls: 'nowrap', render: (r, today) => <StateBadge r={r} today={today} /> },
   { key: 'condition', label: 'Tình trạng', cls: 'clamp', render: (r) => <div>{r.condition}</div> },
   { key: 'borrow', label: 'Ngày mượn hiện tại', sort: 'currentBorrowDate', cls: 'nowrap', render: (r) => formatDate(r.currentBorrowDate) || dash },
@@ -119,7 +119,7 @@ function DueHint({ due, today }: { due: string; today: string }) {
 function useMasterOptions(kind: Extract<MasterKind, 'siPartners' | 'salespersons'>, noun: string) {
   const { masters, refresh } = useAppData();
   const { toast, toastError } = useUi();
-  const options = masters[kind].map((m) => ({ id: m.id, name: m.departmentName ? `${m.name}/${m.departmentName}` : m.name, inactive: !m.isActive }));
+  const options = masters[kind].map((m) => ({ id: m.id, name: m.name, inactive: !m.isActive }));
   const create = async (name: string) => {
     try {
       const m = await api.createMaster(kind, name);
@@ -135,7 +135,7 @@ function useMasterOptions(kind: Extract<MasterKind, 'siPartners' | 'salespersons
 }
 
 function emptyInput(): EquipmentInput {
-  return { productName: '', brandId: null, serialNumber: '', condition: '', currentBorrowDate: null, currentDueDate: null, images: [] };
+  return { productName: '', brandId: null, serialNumber: '', description: '', handoverDate: null, condition: '', currentBorrowDate: null, currentDueDate: null, images: [] };
 }
 
 function toInput(r: EquipmentItem): EquipmentInput {
@@ -144,6 +144,8 @@ function toInput(r: EquipmentItem): EquipmentInput {
     productName: r.productName,
     brandId: r.brandId,
     serialNumber: r.serialNumber,
+    description: r.description,
+    handoverDate: r.handoverDate,
     condition: r.condition,
     currentBorrowDate: r.currentBorrowDate,
     currentDueDate: r.currentDueDate,
@@ -151,9 +153,9 @@ function toInput(r: EquipmentItem): EquipmentInput {
   };
 }
 
-/** Duplicate: thêm một thiết bị cùng loại — chép Tên sp, Hãng, Tình trạng; Serial, ngày mượn, ảnh và lịch sử để trống. */
+/** Duplicate: thêm một thiết bị cùng loại — chép Tên sp, Hãng, Mô tả, Tình trạng; Serial, các ngày, ảnh và lịch sử để trống. */
 function duplicateInput(r: EquipmentItem): EquipmentInput {
-  return { ...emptyInput(), productName: r.productName, brandId: r.brandId, condition: r.condition };
+  return { ...emptyInput(), productName: r.productName, brandId: r.brandId, description: r.description, condition: r.condition };
 }
 
 function EquipmentForm({ item, template, onClose, onSaved }: { item?: EquipmentItem; template?: EquipmentItem; onClose: () => void; onSaved: (r: EquipmentItem) => void }) {
@@ -219,7 +221,7 @@ function EquipmentForm({ item, template, onClose, onSaved }: { item?: EquipmentI
         {template && (
           <div className="alert info small">
             <div>
-              Thiết bị cùng loại với <b>{itemTitle(template)}</b> — đã chép Tên sp, Hãng, Tình trạng. Nhập Serial number của thiết bị mới rồi bấm Lưu.
+              Thiết bị cùng loại với <b>{itemTitle(template)}</b> — đã chép Tên sp, Hãng, Mô tả, Tình trạng. Nhập Serial number của thiết bị mới rồi bấm Lưu.
             </div>
           </div>
         )}
@@ -240,14 +242,20 @@ function EquipmentForm({ item, template, onClose, onSaved }: { item?: EquipmentI
               <input id="eq-name" className={`input ${err('productName') ? 'invalid' : ''}`} value={form.productName} autoFocus onChange={(e) => set('productName', e.target.value)} />
             </Field>
           </div>
-          <div className="grid-2">
+          <div className="grid-3">
             <Field label="Hãng">
               <SearchableSelect options={brands.options} value={form.brandId} onChange={(v) => set('brandId', v)} onCreate={brands.create} createLabel="Thêm Hãng" placeholder="Chọn hoặc thêm Hãng" />
             </Field>
             <Field label="Serial number" error={err('serialNumber')} htmlFor="eq-serial">
               <input id="eq-serial" className="input" value={form.serialNumber} onChange={(e) => set('serialNumber', e.target.value)} />
             </Field>
+            <Field label="Ngày nhận bàn giao" error={err('handoverDate')}>
+              <DateInput id="eq-handover" value={form.handoverDate} onChange={(v) => set('handoverDate', v)} clearable />
+            </Field>
           </div>
+          <Field label="Mô tả" error={err('description')}>
+            <textarea className="textarea" rows={3} aria-label="Mô tả" value={form.description} onChange={(e) => set('description', e.target.value)} />
+          </Field>
           <Field label="Tình trạng" error={err('condition')} hint="Nhập tay; khi ghi một lần trả có “Tình trạng khi trả”, mục này tự lấy theo lần trả mới nhất.">
             <textarea className="textarea" rows={2} aria-label="Tình trạng" value={form.condition} onChange={(e) => set('condition', e.target.value)} />
           </Field>
@@ -455,7 +463,7 @@ function LoanLog({ item, onChanged }: { item: EquipmentItem; onChanged: (r: Equi
             </header>
             <div className="info-grid loan-grid">
               {field('Tên SI', l.siName)}
-              {field('Sale', saleLabel(l))}
+              {field('Sale', l.salespersonName)}
               {field('Lý do mượn', l.reason)}
               {l.returnDate && field('Tình trạng khi trả', l.returnCondition)}
             </div>
@@ -504,6 +512,8 @@ function mainRows(r: EquipmentItem, today: string): [string, React.ReactNode][] 
     ['Tên sp', <b key="name">{r.productName}</b>],
     ['Hãng', r.brandName],
     ['Serial number', r.serialNumber],
+    ['Mô tả', r.description ? <span key="desc" className="pre">{r.description}</span> : null],
+    ['Ngày nhận bàn giao', formatDate(r.handoverDate)],
     ['Trạng thái', <StateBadge key="st" r={r} today={today} />],
     ['Tình trạng', <ConditionValue key="cond" r={r} />],
     ['Ngày mượn hiện tại', formatDate(r.currentBorrowDate)],
@@ -693,6 +703,7 @@ export function EquipmentPage() {
           r.productName,
           r.brandName,
           r.serialNumber,
+          r.description,
           r.condition,
           ...r.loans.flatMap((l) => [l.siName, l.salespersonName, l.reason, l.returnCondition]),
         ]),
@@ -817,7 +828,7 @@ export function EquipmentPage() {
         </div>
       </div>
       <div className="toolbar">
-        <SearchInput value={f.q} onChange={(q) => setF({ ...f, q })} placeholder="Tìm STT, Tên sp, Hãng, Serial, Tình trạng, SI, Sale, lý do…" width={320} />
+        <SearchInput value={f.q} onChange={(q) => setF({ ...f, q })} placeholder="Tìm STT, Tên sp, Hãng, Serial, Mô tả, Tình trạng, SI, Sale, lý do…" width={320} />
         <select className="select" style={{ width: 160 }} value={f.state} onChange={(e) => setF({ ...f, state: e.target.value as LoanState })} aria-label="Trạng thái mượn">
           <option value="all">Mọi trạng thái</option>
           <option value="lent">Đang cho mượn</option>
@@ -829,6 +840,7 @@ export function EquipmentPage() {
         <select className="select" style={{ width: 190 }} value={f.dateField} onChange={(e) => setF({ ...f, dateField: e.target.value as DateField })} aria-label="Trường ngày lọc">
           <option value="currentBorrowDate">Theo Ngày mượn hiện tại</option>
           <option value="currentDueDate">Theo Ngày hẹn trả hiện tại</option>
+          <option value="handoverDate">Theo Ngày nhận bàn giao</option>
         </select>
         <DateFilterControls mode={f.mode} month={f.month} monthYear={f.monthYear} from={f.from} to={f.to} onChange={(p) => setF({ ...f, ...p })} />
         {activeFilter && (
@@ -850,7 +862,7 @@ export function EquipmentPage() {
           <EmptyState
             icon={<Package size={36} />}
             title="Kho thiết bị chưa có thiết bị nào"
-            text="Quản lý thiết bị cho SI / Sale mượn: Tên sp, Hãng, Serial, Tình trạng, ngày mượn / hẹn trả, ảnh và lịch sử từng lần mượn-trả."
+            text="Quản lý thiết bị cho SI / Sale mượn: Tên sp, Hãng, Serial, Mô tả, Ngày nhận bàn giao, Tình trạng, ngày mượn / hẹn trả, ảnh và lịch sử từng lần mượn-trả."
             action={add}
           />
         </div>

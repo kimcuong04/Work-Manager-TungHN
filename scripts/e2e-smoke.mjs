@@ -1193,6 +1193,9 @@ try {
   await win.locator('.modal .form-section').first().locator('input[role="combobox"]').first().fill('Axis');
   await win.keyboard.press('Enter');
   await win.locator('#eq-serial').fill('ACCC8E-7731');
+  await win.locator('#eq-handover').fill('15/10/2026');
+  await win.locator('#eq-handover').press('Tab');
+  await win.locator('.modal textarea[aria-label="Mô tả"]').fill('Camera bullet 4MP, kèm chân đế');
   await win.locator('.modal textarea[aria-label="Tình trạng"]').fill('Mới, đủ phụ kiện');
   await stubOpen(app, [png]);
   await win.locator('.modal').getByRole('button', { name: 'Thêm ảnh' }).click();
@@ -1205,6 +1208,12 @@ try {
     eqStt === '1' && eq?.stt === 1 && eq.productName === 'Camera Axis P1375-E' && eq.brandName === 'Axis' && eq.serialNumber === 'ACCC8E-7731' && eq.images.length === 1,
     `${eq?.stt}. ${eq?.productName} · ${eq?.brandName} · ${eq?.images.length} ảnh`,
   );
+  const eqPanelTxt = await win.locator('.side-panel').innerText();
+  check(
+    'Thiết bị có Mô tả và Ngày nhận bàn giao gắn trực tiếp, hiện ở panel phải',
+    eq.description === 'Camera bullet 4MP, kèm chân đế' && eq.handoverDate === '2026-10-15' && eq.loans.length === 0 && /Camera bullet 4MP/.test(eqPanelTxt) && /15\/10\/2026/.test(eqPanelTxt),
+    `${eq.description} · ${eq.handoverDate}`,
+  );
 
   const eqPanel = win.locator('.side-panel');
   await eqPanel.getByRole('button', { name: 'Thêm lần mượn' }).click();
@@ -1213,8 +1222,10 @@ try {
   await win.locator('#loan-si').fill('SI Alpha');
   await win.keyboard.press('Enter');
   await win.locator('#loan-sale').click();
-  await win.locator('#loan-sale').fill('Nguyễn Văn A');
+  await win.locator('#loan-sale').fill('Anh Tuấn Sale');
+  const saleOpts = await win.locator('[role="option"]').allInnerTexts();
   await win.keyboard.press('Enter');
+  const saleInput = await win.locator('#loan-sale').inputValue();
   await win.locator('.modal textarea[aria-label="Lý do mượn"]').fill('Demo cho khách ABC');
   await win.locator('#loan-due').fill(day(7).split('-').reverse().join('/'));
   await win.locator('#loan-due').press('Tab');
@@ -1227,6 +1238,11 @@ try {
     'Ghi lần mượn (Tên SI, Sale, Ngày mượn, Lý do) → Đang cho mượn, cập nhật Ngày mượn / hẹn trả hiện tại',
     eq.loans.length === 1 && eq.loans[0].siName === 'SI Alpha' && !!eq.loans[0].salespersonName && eq.loans[0].reason === 'Demo cho khách ABC' && eq.currentBorrowDate === day(0) && eq.currentDueDate === day(7) && /Đang cho mượn/.test(lentTxt) && /Còn 7 ngày/.test(lentTxt),
     `${eq.loans[0]?.siName} · ${eq.loans[0]?.salespersonName} · ${eq.currentBorrowDate} → ${eq.currentDueDate}`,
+  );
+  check(
+    'Kho thiết bị: Sale chỉ hiện tên, không kèm Phòng ban (ô chọn và lịch sử mượn)',
+    eq.loans[0].salespersonName === 'Anh Tuấn Sale' && saleInput === 'Anh Tuấn Sale' && saleOpts.some((o) => o.trim() === 'Anh Tuấn Sale') && /Anh Tuấn Sale/.test(lentTxt) && !/Kinh doanh 1/.test(lentTxt) && !saleOpts.some((o) => /Kinh doanh 1/.test(o)),
+    `ô chọn "${saleInput}", gợi ý ${saleOpts.join(' | ')}`,
   );
 
   await eqPanel.getByRole('button', { name: /Ghi nhận trả lần mượn/ }).click();
@@ -1271,8 +1287,8 @@ try {
   await win.waitForTimeout(500);
   const eqs = await call(win, 'listEquipment');
   check(
-    'Duplicate thiết bị: chép Tên sp / Hãng, STT tiếp theo, Serial để trống, không chép lịch sử mượn',
-    dupEqName === 'Camera Axis P1375-E' && dupEqStt === '2' && dupSerial === '' && eqs.length === 2 && eqs[0].stt === 2 && eqs[0].brandName === 'Axis' && eqs[0].loans.length === 0,
+    'Duplicate thiết bị: chép Tên sp / Hãng / Mô tả, STT tiếp theo, Serial và Ngày nhận bàn giao để trống, không chép lịch sử mượn',
+    dupEqName === 'Camera Axis P1375-E' && dupEqStt === '2' && dupSerial === '' && eqs.length === 2 && eqs[0].stt === 2 && eqs[0].brandName === 'Axis' && eqs[0].description === 'Camera bullet 4MP, kèm chân đế' && eqs[0].handoverDate === null && eqs[0].loans.length === 0,
     `${dupEqStt}. ${dupEqName}`,
   );
 
@@ -1283,7 +1299,7 @@ try {
   await shot(win, '48-equipment-view-info');
   check(
     'View info thiết bị: đủ thông tin và lịch sử mượn / trả',
-    /ACCC8E-7731/.test(viewTxt) && /lịch sử mượn \/ trả/i.test(viewTxt) && /Demo cho khách ABC/.test(viewTxt) && /Trầy nhẹ vỏ/.test(viewTxt),
+    /ACCC8E-7731/.test(viewTxt) && /lịch sử mượn \/ trả/i.test(viewTxt) && /Demo cho khách ABC/.test(viewTxt) && /Trầy nhẹ vỏ/.test(viewTxt) && /Ngày nhận bàn giao\s*15\/10\/2026/.test(viewTxt) && /Mô tả\s*Camera bullet 4MP/.test(viewTxt),
     viewTxt.replace(/\s+/g, ' ').slice(0, 160),
   );
   await win.locator('.modal-foot').getByRole('button', { name: 'Đóng' }).click();

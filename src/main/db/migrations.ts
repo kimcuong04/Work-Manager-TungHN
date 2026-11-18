@@ -556,6 +556,12 @@ CREATE TABLE equipment_loans (
 CREATE INDEX idx_equipment_loans_item ON equipment_loans(equipment_id);
 `;
 
+/** v1.8: Kho thiết bị có Mô tả và Ngày nhận bàn giao gắn trực tiếp vào thiết bị. */
+const V8 = `
+ALTER TABLE equipment_items ADD COLUMN description TEXT NOT NULL DEFAULT '';
+ALTER TABLE equipment_items ADD COLUMN handover_date TEXT;
+`;
+
 export interface Migration {
   version: number;
   up: (db: Db) => void;
@@ -611,6 +617,10 @@ export const MIGRATIONS: Migration[] = [
   {
     version: 7,
     up: (db) => db.exec(V7),
+  },
+  {
+    version: 8,
+    up: (db) => db.exec(V8),
   },
 ];
 

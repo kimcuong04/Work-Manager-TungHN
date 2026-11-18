@@ -24,6 +24,8 @@ const item = (over: Partial<EquipmentInput> = {}): EquipmentInput => ({
   productName: 'Camera P1375',
   brandId: null,
   serialNumber: '',
+  description: '',
+  handoverDate: null,
   condition: '',
   currentBorrowDate: null,
   currentDueDate: null,
@@ -47,8 +49,7 @@ describe('Nâng cấp v1.6 → v1.7', () => {
     old.tx(() => old.run("INSERT INTO freelance_jobs (id, stt, project_name, created_at, updated_at) VALUES ('f1', 1, 'Logo', 't', 't')"));
     old.close();
     const db = await Db.open(file);
-    expect(SCHEMA_VERSION).toBe(7);
-    expect(db.scalar<number>('PRAGMA user_version')).toBe(7);
+    expect(db.scalar<number>('PRAGMA user_version')).toBe(SCHEMA_VERSION);
     expect(db.scalar<number>('SELECT COUNT(*) FROM freelance_jobs')).toBe(1);
     expect(equipment.listEquipment({ ...ctx, db })).toEqual([]);
   });

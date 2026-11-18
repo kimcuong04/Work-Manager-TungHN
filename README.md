@@ -99,12 +99,14 @@ Backup/Restore trong **Settings › Dữ liệu & Backup** xuất một file `.z
   năm, tìm không dấu. Dữ liệu Freelance cũ (Pre/Post-sales) được chuyển sang bảng này khi cập nhật lên v1.5; Warranty
   Freelance cũ chuyển sang Warranty Job Chính cùng năm.
 - **Kho thiết bị**: bảng riêng (không thuộc Job Chính) cho thiết bị cho mượn — STT (tự +1, không trùng), **Tên sp**
-  (bắt buộc), Hãng (danh mục dùng chung với Job Chính), Serial number, **Tình trạng**, Ngày mượn hiện tại, Ngày hẹn trả
-  hiện tại, ảnh. Mỗi thiết bị có **lịch sử mượn / trả**: Tên SI, Sale (danh mục dùng chung), Ngày mượn, Ngày trả, Lý do
-  mượn, Tình trạng khi trả. Thêm lần mượn có thể đặt luôn Ngày mượn / hẹn trả hiện tại; *Ghi nhận trả* đưa thiết bị về
-  kho; **Tình trạng tự lấy theo “Tình trạng khi trả” của lần trả mới nhất** (vẫn sửa tay được). Trạng thái Đang cho mượn /
-  Quá hạn trả / Trong kho; lọc theo trạng thái, Hãng, Tên SI đã mượn, Ngày mượn / hẹn trả hiện tại; tìm không dấu;
-  panel phải, View info, Duplicate (thiết bị cùng loại), Chọn nhiều để xóa; Tìm kiếm trên topbar ra cả thiết bị.
+  (bắt buộc), Hãng (danh mục dùng chung với Job Chính), Serial number, **Mô tả**, **Ngày nhận bàn giao** (hai mục này gắn
+  trực tiếp vào thiết bị, không nằm trong lịch sử mượn), **Tình trạng**, Ngày mượn hiện tại, Ngày hẹn trả hiện tại, ảnh.
+  Mỗi thiết bị có **lịch sử mượn / trả**: Tên SI, Sale (danh mục dùng chung, chỉ hiện tên — không kèm Phòng ban), Ngày
+  mượn, Ngày trả, Lý do mượn, Tình trạng khi trả. Thêm lần mượn có thể đặt luôn Ngày mượn / hẹn trả hiện tại; *Ghi nhận
+  trả* đưa thiết bị về kho; **Tình trạng tự lấy theo “Tình trạng khi trả” của lần trả mới nhất** (vẫn sửa tay được).
+  Trạng thái Đang cho mượn / Quá hạn trả / Trong kho; lọc theo trạng thái, Hãng, Tên SI đã mượn, Ngày mượn / hẹn trả hiện
+  tại / Ngày nhận bàn giao; tìm không dấu (cả Mô tả); panel phải, View info, Duplicate (thiết bị cùng loại, chép cả Mô
+  tả), Chọn nhiều để xóa; Tìm kiếm trên topbar ra cả thiết bị.
 - **Import .xlsx hàng loạt** cho Pre-sales / Post-sales / Warranty (theo năm) và Job Freelance: tự nhận diện dòng header
   và cột theo tên tiêu đề, chỉnh mapping từng cột, xem trước (dòng lỗi được đánh dấu và bỏ qua), Tên SI / Hãng / Sale /
   EU / Tình trạng khớp theo tên, chưa có thì thêm vào danh mục; Pre/Post-sales tạo luôn thư mục dự án nếu chọn. File không có

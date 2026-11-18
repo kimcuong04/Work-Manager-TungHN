@@ -447,7 +447,6 @@ export interface EquipmentLoan {
   siName: string | null;
   salespersonId: string | null;
   salespersonName: string | null;
-  salespersonDepartment: string | null;
   borrowDate: string;
   /** null = chưa trả (đang mượn). */
   returnDate: string | null;
@@ -465,6 +464,8 @@ export interface EquipmentItem {
   brandId: string | null;
   brandName: string | null;
   serialNumber: string;
+  description: string;
+  handoverDate: string | null;
   /** Nhập tay; tự lấy theo "Tình trạng khi trả" khi ghi lần trả mới nhất. */
   condition: string;
   currentBorrowDate: string | null;
@@ -482,6 +483,8 @@ export interface EquipmentInput {
   productName: string;
   brandId: string | null;
   serialNumber: string;
+  description: string;
+  handoverDate: string | null;
   condition: string;
   currentBorrowDate: string | null;
   currentDueDate: string | null;

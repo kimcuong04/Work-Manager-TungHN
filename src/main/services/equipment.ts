@@ -11,11 +11,10 @@ const IMG: ImageTable = { table: 'equipment_images', owner: 'equipment_id' };
 
 const SELECT_ITEM = 'SELECT e.*, b.name AS brand_name FROM equipment_items e LEFT JOIN brands b ON b.id = e.brand_id';
 const SELECT_LOAN = `
-SELECT l.*, si.name AS si_name, s.name AS salesperson_name, d.name AS department_name
+SELECT l.*, si.name AS si_name, s.name AS salesperson_name
 FROM equipment_loans l
 LEFT JOIN si_partners si ON si.id = l.si_id
-LEFT JOIN salespersons s ON s.id = l.salesperson_id
-LEFT JOIN departments d ON d.id = s.department_id`;
+LEFT JOIN salespersons s ON s.id = l.salesperson_id`;
 const LOAN_ORDER = 'ORDER BY l.borrow_date DESC, l.created_at DESC';
 
 const t = (s: string | null | undefined) => (s ?? '').replace(/\r\n/g, '\n').trim();
@@ -28,7 +27,6 @@ function mapLoan(r: Record<string, any>): EquipmentLoan {
     siName: strOrNull(r.si_name),
     salespersonId: strOrNull(r.salesperson_id),
     salespersonName: strOrNull(r.salesperson_name),
-    salespersonDepartment: strOrNull(r.department_name),
     borrowDate: r.borrow_date,
     returnDate: strOrNull(r.return_date),
     reason: str(r.reason),
@@ -63,6 +61,8 @@ function mapItem(r: Record<string, any>, images: ImageRef[], loans: EquipmentLoa
     brandId: strOrNull(r.brand_id),
     brandName: strOrNull(r.brand_name),
     serialNumber: str(r.serial_number),
+    description: str(r.description),
+    handoverDate: strOrNull(r.handover_date),
     condition: str(r.condition),
     currentBorrowDate: strOrNull(r.current_borrow_date),
     currentDueDate: strOrNull(r.current_due_date),
@@ -107,6 +107,17 @@ function check(ctx: Ctx, input: EquipmentInput) {
   if (input.brandId && !ctx.db.scalar<number>('SELECT COUNT(*) FROM brands WHERE id = ?', [input.brandId])) throw new AppError('Hãng không tồn tại.');
 }
 
+const itemValues = (input: EquipmentInput) => [
+  cleanName(input.productName),
+  input.brandId || null,
+  t(input.serialNumber),
+  t(input.description),
+  input.handoverDate || null,
+  t(input.condition),
+  input.currentBorrowDate || null,
+  input.currentDueDate || null,
+];
+
 export function createEquipment(ctx: Ctx, input: EquipmentInput): EquipmentItem {
   check(ctx, input);
   const stt = resolveStt(ctx, input);
@@ -114,9 +125,9 @@ export function createEquipment(ctx: Ctx, input: EquipmentInput): EquipmentItem 
   const stamp = now();
   ctx.db.tx(() => {
     ctx.db.run(
-      `INSERT INTO equipment_items (id, stt, product_name, brand_id, serial_number, condition, current_borrow_date, current_due_date, created_at, updated_at)
-       VALUES (?,?,?,?,?,?,?,?,?,?)`,
-      [id, stt, cleanName(input.productName), input.brandId || null, t(input.serialNumber), t(input.condition), input.currentBorrowDate || null, input.currentDueDate || null, stamp, stamp],
+      `INSERT INTO equipment_items (id, stt, product_name, brand_id, serial_number, description, handover_date, condition, current_borrow_date, current_due_date, created_at, updated_at)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`,
+      [id, stt, ...itemValues(input), stamp, stamp],
     );
     syncImages(ctx, IMG, id, input.images ?? []);
   });
@@ -130,8 +141,8 @@ export function updateEquipment(ctx: Ctx, id: string, input: EquipmentInput): Eq
   let removed: string[] = [];
   ctx.db.tx(() => {
     ctx.db.run(
-      `UPDATE equipment_items SET stt=?, product_name=?, brand_id=?, serial_number=?, condition=?, current_borrow_date=?, current_due_date=?, updated_at=? WHERE id=?`,
-      [stt, cleanName(input.productName), input.brandId || null, t(input.serialNumber), t(input.condition), input.currentBorrowDate || null, input.currentDueDate || null, now(), id],
+      `UPDATE equipment_items SET stt=?, product_name=?, brand_id=?, serial_number=?, description=?, handover_date=?, condition=?, current_borrow_date=?, current_due_date=?, updated_at=? WHERE id=?`,
+      [stt, ...itemValues(input), now(), id],
     );
     removed = syncImages(ctx, IMG, id, input.images ?? []);
   });
