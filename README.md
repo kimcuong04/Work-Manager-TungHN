@@ -150,7 +150,9 @@ Backup/Restore trong **Settings › Dữ liệu & Backup** xuất một file `.z
 - **Project Detail**: thông tin, thời hạn & ưu tiên, file liên kết .dwg/.txt/.docx/.pdf/.xlsx (mở bằng ứng dụng mặc định của Windows,
   cảnh báo khi mất liên kết, chọn lại/gỡ), **Ghi chú theo ngày** (mỗi ngày một mục, định dạng tự do: đậm/nghiêng/màu/
   danh sách/bảng, dán ảnh Ctrl+V; sửa được ghi chú ngày cũ), **Import .xlsx** chỉ lấy bảng **Thông tin các thiết bị**
-  (tự nhận diện + mapping cột, preview, lưu mapping tái sử dụng, không ghi đè âm thầm).
+  (tự nhận diện + mapping cột, preview, lưu mapping tái sử dụng, không ghi đè âm thầm). **Import thêm xlsx** để có nhiều
+  bảng thiết bị trong một dự án; mỗi bảng ghi ngày giờ import và hiện dạng cây **Ngày › từng bảng** (bấm mũi tên để ẩn /
+  hiện, mặc định chỉ mở bảng mới nhất); mỗi bảng có **Import lại** (chỉ thay bảng đó) và nút gỡ riêng.
 - **Warranty**: bảng riêng theo Job/Năm, có **STT** (tự +1 trong năm, sửa được) và Case no (nhập tự do), bấm một dòng mở panel chi tiết bên cạnh (vẫn cuộn/chọn dòng khác được), nút
   **View info** xem đầy đủ trên màn hình lớn (có Edit, chuyển bản trước/sau), form đầy đủ trường, Pass che mặc định + mã hóa (Windows DPAPI),
   lọc khoảng ngày / theo tháng / quick filter, chọn Ngày nhận hoặc Ngày test, lọc Hãng, search, sort, ẩn/hiện cột, ảnh.

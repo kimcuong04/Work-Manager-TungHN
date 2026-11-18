@@ -77,8 +77,7 @@ describe('Nâng cấp v1.8 → v1.9', () => {
     });
     old.close();
     const db = await Db.open(file);
-    expect(SCHEMA_VERSION).toBe(9);
-    expect(db.scalar<number>('PRAGMA user_version')).toBe(9);
+    expect(db.scalar<number>('PRAGMA user_version')).toBe(SCHEMA_VERSION);
     const c2 = { ...ctx, db };
     const [c, b, a] = equipment.listEquipment(c2);
     expect([a.currentBorrowDate, a.currentDueDate, a.loans[0].dueDate, a.loans[0].returnDate]).toEqual(['2026-01-02', '2099-01-10', '2099-01-10', null]);

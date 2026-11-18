@@ -3397,3 +3397,70 @@ input.select-box {
   background-color: #fde047;
   color: #1c1917;
 }
+
+/* ---------- v1.10: cây các bảng import thiết bị theo ngày ---------- */
+.import-tree {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  overflow: hidden;
+}
+.import-day + .import-day {
+  border-top: 1px solid var(--border);
+}
+.tree-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  width: 100%;
+  padding: 10px 12px;
+  background: none;
+  border: 0;
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.tree-toggle:hover {
+  background: var(--surface-hover);
+}
+.import-day > .tree-toggle {
+  background: var(--surface-2);
+}
+.tree-chevron {
+  flex-shrink: 0;
+  color: var(--text-muted);
+  transition: transform 0.15s ease;
+}
+.tree-chevron.open {
+  transform: rotate(90deg);
+}
+.import-day-body {
+  padding: 4px 0 8px 22px;
+}
+.import-entry + .import-entry {
+  border-top: 1px dashed var(--border);
+}
+.import-entry-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding-right: 10px;
+}
+.import-entry-head .tree-toggle {
+  padding: 8px 10px;
+  border-radius: 8px;
+}
+.import-entry-body {
+  padding: 4px 12px 12px 34px;
+}
+/* Thẻ hẹp (File & Attachments): chữ giữ đủ rộng, nút xuống dòng thay vì tràn ra ngoài. */
+.file-row {
+  flex-wrap: wrap;
+}
+.file-row > .grow {
+  flex: 1 1 170px;
+}
+.file-row > .row {
+  flex-wrap: wrap;
+}

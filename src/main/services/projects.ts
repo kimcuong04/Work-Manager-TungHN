@@ -422,9 +422,7 @@ export function moveProject(ctx: Ctx, id: string, jobYearId: string, category: P
 
 /* ---------------- Import XLSX ---------------- */
 
-export function getProjectImport(ctx: Ctx, projectId: string): ProjectImport | null {
-  const imp = ctx.db.get<Record<string, any>>('SELECT * FROM project_imports WHERE project_id = ?', [projectId]);
-  if (!imp) return null;
+function mapImport(ctx: Ctx, imp: Record<string, any>): ProjectImport {
   return {
     id: imp.id,
     projectId: imp.project_id,
@@ -445,6 +443,19 @@ export function getProjectImport(ctx: Ctx, projectId: string): ProjectImport | n
   };
 }
 
+/** Các bảng thiết bị đã import của dự án, mới nhất trước (mỗi lần import / import thêm là một bảng, có ngày import). */
+export function listProjectImports(ctx: Ctx, projectId: string): ProjectImport[] {
+  return ctx.db
+    .all<Record<string, any>>('SELECT * FROM project_imports WHERE project_id = ? ORDER BY imported_at DESC, rowid DESC', [projectId])
+    .map((r) => mapImport(ctx, r));
+}
+
+function getImport(ctx: Ctx, projectId: string, importId: string): ProjectImport {
+  const r = ctx.db.get<Record<string, any>>('SELECT * FROM project_imports WHERE id = ? AND project_id = ?', [importId, projectId]);
+  if (!r) throw new AppError('Không tìm thấy bảng import này (có thể đã bị gỡ).');
+  return mapImport(ctx, r);
+}
+
 function validatePayload(p: ImportPayload) {
   if (!p || typeof p.sourceFileName !== 'string') throw new AppError('Dữ liệu import không hợp lệ.');
   if (!Array.isArray(p.info) || !Array.isArray(p.requirements) || !Array.isArray(p.items))
@@ -454,14 +465,18 @@ function validatePayload(p: ImportPayload) {
   if (!hasData) throw new AppError('Không có dữ liệu nào được map. Hãy kiểm tra lại vùng dữ liệu và mapping.');
 }
 
-/** Ghi toàn bộ trong một transaction: lỗi giữa chừng thì dữ liệu import cũ được giữ nguyên. */
-export function commitImport(ctx: Ctx, projectId: string, payload: ImportPayload): ProjectImport {
+/**
+ * Thêm một bảng import mới cho dự án; có `replaceImportId` thì thay đúng bảng đó (Import lại). Ghi toàn bộ trong một
+ * transaction: lỗi giữa chừng thì các bảng import cũ được giữ nguyên.
+ */
+export function commitImport(ctx: Ctx, projectId: string, payload: ImportPayload, replaceImportId: string | null = null): ProjectImport {
   getProject(ctx, projectId);
   validatePayload(payload);
+  if (replaceImportId) getImport(ctx, projectId, replaceImportId);
   const importId = randomUUID();
   const stamp = now();
   ctx.db.tx(() => {
-    ctx.db.run('DELETE FROM project_imports WHERE project_id = ?', [projectId]);
+    if (replaceImportId) ctx.db.run('DELETE FROM project_imports WHERE id = ? AND project_id = ?', [replaceImportId, projectId]);
     ctx.db.run('INSERT INTO project_imports VALUES (?,?,?,?,?,?,?)', [
       importId, projectId, payload.sourceFileName, payload.sourcePath, JSON.stringify(payload.sheetNames ?? []), stamp, 'IMPORTED',
     ]);
@@ -487,13 +502,15 @@ export function commitImport(ctx: Ctx, projectId: string, payload: ImportPayload
     }
     ctx.db.run('UPDATE projects SET updated_at = ? WHERE id = ?', [stamp, projectId]);
   });
-  return getProjectImport(ctx, projectId)!;
+  return getImport(ctx, projectId, importId);
 }
 
-export function removeImport(ctx: Ctx, projectId: string): void {
+/** Gỡ một bảng import khỏi dự án (dự án và file .xlsx gốc không bị ảnh hưởng). */
+export function removeImport(ctx: Ctx, projectId: string, importId: string): void {
   getProject(ctx, projectId);
+  getImport(ctx, projectId, importId);
   ctx.db.tx(() => {
-    ctx.db.run('DELETE FROM project_imports WHERE project_id = ?', [projectId]);
+    ctx.db.run('DELETE FROM project_imports WHERE id = ? AND project_id = ?', [importId, projectId]);
     ctx.db.run('UPDATE projects SET updated_at = ? WHERE id = ?', [now(), projectId]);
   });
 }

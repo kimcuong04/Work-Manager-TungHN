@@ -595,6 +595,27 @@ CREATE UNIQUE INDEX ux_todo_project ON todo_items(todo_date, project_id) WHERE p
 CREATE UNIQUE INDEX ux_todo_freelance ON todo_items(todo_date, freelance_job_id) WHERE freelance_job_id IS NOT NULL;
 `;
 
+/**
+ * v1.10: một dự án có nhiều bảng thiết bị import (mỗi lần "Import thêm" là một bảng, ghi ngày import) — bỏ UNIQUE
+ * trên project_id bằng cách tạo lại bảng (SQLite không xóa được ràng buộc); bảng con tham chiếu theo id nên giữ nguyên.
+ */
+const V10 = `
+CREATE TABLE project_imports_v10 (
+  id TEXT PRIMARY KEY,
+  project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+  source_file_name TEXT NOT NULL,
+  source_path TEXT,
+  sheet_names TEXT NOT NULL,
+  imported_at TEXT NOT NULL,
+  status TEXT NOT NULL
+);
+INSERT INTO project_imports_v10 (id, project_id, source_file_name, source_path, sheet_names, imported_at, status)
+  SELECT id, project_id, source_file_name, source_path, sheet_names, imported_at, status FROM project_imports;
+DROP TABLE project_imports;
+ALTER TABLE project_imports_v10 RENAME TO project_imports;
+CREATE INDEX idx_project_imports_project ON project_imports(project_id, imported_at);
+`;
+
 const DEFAULT_STATUS_COLORS: Record<string, string> = {
   'mới nhận': '#3b82f6',
   'đang làm': '#f59e0b',
@@ -720,6 +741,11 @@ export const MIGRATIONS: Migration[] = [
       db.exec(V9);
       backfillLoansV9(db);
     },
+  },
+  {
+    version: 10,
+    foreignKeysOff: true,
+    up: (db) => db.exec(V10),
   },
 ];
 

@@ -150,26 +150,27 @@ describe('Project (FR-PROJ, FR-NAV-007, FR-XLSX-006/007/009)', () => {
     const y2025 = master.createYear(ctx, 'MAIN', '2025');
     const moved = projects.moveProject(ctx, p.id, y2025.id, 'POST_SALES');
     expect(moved).toMatchObject({ jobType: 'MAIN', yearLabel: '2025', workCategory: 'POST_SALES', id: p.id });
-    expect(projects.getProjectImport(ctx, p.id)?.items).toHaveLength(1);
+    expect(projects.listProjectImports(ctx, p.id)[0]?.items).toHaveLength(1);
   });
-  it('TC-XLSX-006/007: import mới thay thế; import lỗi giữ nguyên dữ liệu cũ', () => {
+  it('TC-XLSX-006/007: Import lại thay đúng bảng đó; import lỗi giữ nguyên dữ liệu cũ', () => {
     const p = projects.createProject(ctx, input());
-    projects.commitImport(ctx, p.id, payload('a.xlsx'));
-    projects.commitImport(ctx, p.id, { ...payload('b.xlsx'), items: [{ model: 'M2', brand: '', description: '' }, { model: 'M3', brand: '', description: '' }] });
-    expect(projects.getProjectImport(ctx, p.id)).toMatchObject({ sourceFileName: 'b.xlsx' });
+    const a = projects.commitImport(ctx, p.id, payload('a.xlsx'));
+    projects.commitImport(ctx, p.id, { ...payload('b.xlsx'), items: [{ model: 'M2', brand: '', description: '' }, { model: 'M3', brand: '', description: '' }] }, a.id);
+    expect(projects.listProjectImports(ctx, p.id)).toMatchObject([{ sourceFileName: 'b.xlsx' }]);
     expect(() => projects.commitImport(ctx, p.id, { ...payload('c.xlsx'), info: [], requirements: [], items: [] })).toThrow();
     const bad = { ...payload('d.xlsx'), items: [{ model: 'ok', brand: '', description: '' }, null as never] };
     expect(() => projects.commitImport(ctx, p.id, bad)).toThrow();
-    const imp = projects.getProjectImport(ctx, p.id)!;
+    const [imp, ...rest] = projects.listProjectImports(ctx, p.id);
+    expect(rest).toEqual([]);
     expect(imp.sourceFileName).toBe('b.xlsx');
     expect(imp.items.map((i) => i.model)).toEqual(['M2', 'M3']);
     expect(projects.savedMappings(ctx, 'sig')).toHaveLength(1);
   });
   it('TC-XLSX-009: gỡ dữ liệu import không xóa Project', () => {
     const p = projects.createProject(ctx, input());
-    projects.commitImport(ctx, p.id, payload('a.xlsx'));
-    projects.removeImport(ctx, p.id);
-    expect(projects.getProjectImport(ctx, p.id)).toBeNull();
+    const a = projects.commitImport(ctx, p.id, payload('a.xlsx'));
+    projects.removeImport(ctx, p.id, a.id);
+    expect(projects.listProjectImports(ctx, p.id)).toEqual([]);
     expect(projects.getProject(ctx, p.id).hasImport).toBe(false);
   });
   it('xóa Project: Experience giữ project_text snapshot', () => {

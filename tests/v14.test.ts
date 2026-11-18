@@ -107,7 +107,7 @@ describe('Nâng cấp dữ liệu v1.3 → v1.4 (tạo lại bảng projects)', 
     ]);
     expect(notes.listProjectNotes(c, 'p1')).toHaveLength(1);
     expect(calendar.listCalendarEvents(c, { projectId: 'p1' })).toHaveLength(1);
-    expect(projects.getProjectImport(c, 'p2')!.items[0].model).toBe('DS-2CD');
+    expect(projects.listProjectImports(c, 'p2')[0].items[0].model).toBe('DS-2CD');
     expect(db.all('PRAGMA foreign_key_check')).toEqual([]);
     // Xóa dự án sau khi nâng cấp vẫn xóa dây chuyền đúng (khóa ngoại của bảng con còn trỏ đúng bảng mới).
     projects.deleteProject(c, 'p1');

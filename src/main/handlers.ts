@@ -246,9 +246,9 @@ export function createHandlers(ctx: Ctx, desktop: Desktop): Handlers {
       const data = readWorkbook(p, s.xlsxMaxMb, s.xlsxMaxRows);
       return { ...data, savedMappings: projects.savedMappings(ctx, data.signature) };
     },
-    getProjectImport: (id) => projects.getProjectImport(ctx, id),
-    commitImport: (id, payload) => projects.commitImport(ctx, id, payload),
-    removeImport: (id) => projects.removeImport(ctx, id),
+    listProjectImports: (id) => projects.listProjectImports(ctx, String(id)),
+    commitImport: (id, payload, replaceImportId) => projects.commitImport(ctx, String(id), payload, replaceImportId ? String(replaceImportId) : null),
+    removeImport: (id, importId) => projects.removeImport(ctx, String(id), String(importId)),
 
     listWarranty: (yearId) => records.listWarranty(ctx, yearId),
     createWarranty: (input) => records.createWarranty(ctx, input),

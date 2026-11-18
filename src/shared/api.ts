@@ -141,9 +141,11 @@ export interface Api {
 
   pickWorkbook(): Promise<string | null>;
   readWorkbook(path: string): Promise<WorkbookData>;
-  getProjectImport(projectId: string): Promise<ProjectImport | null>;
-  commitImport(projectId: string, payload: ImportPayload): Promise<ProjectImport>;
-  removeImport(projectId: string): Promise<void>;
+  /** Các bảng thiết bị import của dự án, mới nhất trước. */
+  listProjectImports(projectId: string): Promise<ProjectImport[]>;
+  /** Thêm bảng import mới; có `replaceImportId` thì thay đúng bảng đó. */
+  commitImport(projectId: string, payload: ImportPayload, replaceImportId?: string | null): Promise<ProjectImport>;
+  removeImport(projectId: string, importId: string): Promise<void>;
 
   listWarranty(jobYearId: string): Promise<WarrantyRecord[]>;
   createWarranty(input: WarrantyInput): Promise<WarrantyRecord>;

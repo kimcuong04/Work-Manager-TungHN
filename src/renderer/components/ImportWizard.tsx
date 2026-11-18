@@ -1,12 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { AlertTriangle, FileSpreadsheet, Info, RefreshCw, Wand2 } from 'lucide-react';
-import type { WorkbookData, WorkbookSheet } from '../../shared/types';
+import type { ProjectImport, WorkbookData, WorkbookSheet } from '../../shared/types';
 import { ITEM_FIELDS, autoDetect, buildImport, cellText, colName, configFromMappings, configToMappings, detectTableEnd, getSheet, type ImportConfig } from '../../shared/xlsxMapping';
 import { api, errorMessage } from '../api';
 import { useUi } from '../state/ui';
 import { formatBytes } from './common';
 import { ImportedContent } from './ImportedContent';
 import { Modal } from './Modal';
+import { formatDateTime } from '../../shared/dates';
 
 export function ColSelect({
   sheet,
@@ -75,7 +76,20 @@ function itemsOnly(c: ImportConfig): ImportConfig {
  * Luồng import: Chọn file → Đọc workbook → Chọn sheet/vùng + map cột thiết bị → Preview → Xác nhận.
  * Chỉ ghi khi người dùng xác nhận; lỗi giữa chừng không đụng dữ liệu import cũ.
  */
-export function ImportWizard({ projectId, hasExisting, onClose, onDone }: { projectId: string; hasExisting: boolean; onClose: () => void; onDone: () => void }) {
+export function ImportWizard({
+  projectId,
+  hasExisting,
+  replaceImport,
+  onClose,
+  onDone,
+}: {
+  projectId: string;
+  hasExisting: boolean;
+  /** Import lại: thay đúng bảng này; bỏ trống = thêm một bảng mới (Import thêm). */
+  replaceImport?: ProjectImport | null;
+  onClose: () => void;
+  onDone: (saved: ProjectImport) => void;
+}) {
   const { confirm, toast, toastError } = useUi();
   const [phase, setPhase] = useState<'loading' | 'map' | 'error'>('loading');
   const [error, setError] = useState<string | null>(null);
@@ -127,7 +141,7 @@ export function ImportWizard({ projectId, hasExisting, onClose, onDone }: { proj
 
   if (phase !== 'map' || !wb || !config || !built)
     return (
-      <Modal size="sm" title="Import .xlsx" onClose={onClose}>
+      <Modal size="sm" title={replaceImport ? 'Import lại .xlsx' : hasExisting ? 'Import thêm .xlsx' : 'Import .xlsx'} onClose={onClose}>
         {phase === 'loading' && <div className="empty">Đang đọc workbook…</div>}
         {phase === 'error' && (
           <div className="stack">
@@ -136,7 +150,7 @@ export function ImportWizard({ projectId, hasExisting, onClose, onDone }: { proj
               <div>
                 <b>Không import được.</b>
                 <div>{error}</div>
-                {hasExisting && <div className="small">Dữ liệu import hiện tại của Project vẫn được giữ nguyên.</div>}
+                {hasExisting && <div className="small">Các bảng import hiện có của Project vẫn được giữ nguyên.</div>}
               </div>
             </div>
             <div className="row" style={{ justifyContent: 'flex-end' }}>
@@ -160,10 +174,10 @@ export function ImportWizard({ projectId, hasExisting, onClose, onDone }: { proj
   const commit = async () => {
     if (!hasData) return;
     if (
-      hasExisting &&
+      replaceImport &&
       !(await confirm({
-        title: 'Thay thế dữ liệu import?',
-        message: 'Project này đã có bảng thiết bị import. Bảng hiện tại sẽ được thay thế hoàn toàn bằng dữ liệu mới. Tiếp tục?',
+        title: 'Import lại bảng này?',
+        message: `Bảng "${replaceImport.sourceFileName}" (import ${formatDateTime(replaceImport.importedAt)}) sẽ được thay hoàn toàn bằng dữ liệu mới. Các bảng import khác giữ nguyên. Tiếp tục?`,
         confirmText: 'Thay thế',
         danger: true,
       }))
@@ -171,7 +185,9 @@ export function ImportWizard({ projectId, hasExisting, onClose, onDone }: { proj
       return;
     setSaving(true);
     try {
-      await api.commitImport(projectId, {
+      const saved = await api.commitImport(
+        projectId,
+        {
         sourceFileName: wb.fileName,
         sourcePath: wb.filePath,
         sheetNames: [config.items.sheet],
@@ -180,9 +196,11 @@ export function ImportWizard({ projectId, hasExisting, onClose, onDone }: { proj
         requirements: [],
         items: built.items,
         mappings: saveMapping ? configToMappings(config) : [],
-      });
-      toast('success', `Đã import ${built.items.length} thiết bị từ ${wb.fileName}.`);
-      onDone();
+        },
+        replaceImport?.id ?? null,
+      );
+      toast('success', replaceImport ? `Đã import lại ${built.items.length} thiết bị từ ${wb.fileName}.` : `Đã thêm bảng ${built.items.length} thiết bị từ ${wb.fileName}.`);
+      onDone(saved);
       onClose();
     } catch (e) {
       toastError(e);
@@ -196,7 +214,7 @@ export function ImportWizard({ projectId, hasExisting, onClose, onDone }: { proj
       size="xl"
       title={
         <span className="row">
-          <FileSpreadsheet size={18} /> Import .xlsx — {wb.fileName}
+          <FileSpreadsheet size={18} /> {replaceImport ? 'Import lại' : hasExisting ? 'Import thêm' : 'Import'} .xlsx — {wb.fileName}
         </span>
       }
       onClose={onClose}

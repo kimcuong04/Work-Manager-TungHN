@@ -48,6 +48,8 @@ App tự cập nhật trên máy user, nên mọi thay đổi phải giữ đư�
 13. **Bảng & tô sáng**: bảng danh sách dùng `useTableResize(key)` (`src/renderer/lib/tableResize.ts`) — `<tr data-row={id}>`
    để đổi chiều cao dòng, `data-col` cho tiêu đề không có chữ. Tô sáng kết quả tìm kiếm dùng CSS Custom Highlight
    (`src/renderer/lib/highlight.ts`), **không** bọc `<mark>` vào DOM do React quản lý.
+14. **Bảng import thiết bị** (schema 10): một dự án có nhiều `project_imports` (không còn UNIQUE trên `project_id`);
+   `commitImport(projectId, payload, replaceImportId)` thêm bảng mới hoặc thay đúng một bảng, `removeImport` gỡ một bảng.
 
 ## Phát hành bản cập nhật
 

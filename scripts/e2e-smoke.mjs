@@ -362,6 +362,47 @@ try {
   check('Import XLSX thành công (3 thiết bị)', (await win.getByText('COLDSTORE 2U').isVisible()) && (await win.locator('.req-round').count()) === 0);
   await shot(win, '07-project-detail-imported');
 
+  // --- v1.10: Import thêm nhiều bảng xlsx, mỗi bảng ghi ngày import, hiển thị dạng cây thu gọn ---
+  {
+    const pid = created[2].id;
+    await stubOpen(app, [xlsxFile]);
+    await win.getByRole('button', { name: 'Import thêm xlsx' }).click();
+    await win.waitForSelector('.wizard', { timeout: 10000 });
+    const addTitle = await win.locator('.modal-head, .modal h2').first().innerText().catch(() => '');
+    await win.getByRole('button', { name: 'Xác nhận Import' }).click();
+    await win.waitForTimeout(600);
+    let imps = await call(win, 'listProjectImports', pid);
+    const dayTxt = await win.locator('.import-day > .tree-toggle').first().innerText();
+    const openTables = await win.locator('.import-entry-body').count();
+    await shot(win, '54-project-imports-tree');
+    check(
+      'Import thêm xlsx: thêm bảng thứ hai, bảng cũ giữ nguyên, nhóm theo ngày import (cây có mũi tên)',
+      imps.length === 2 && /Import thêm/.test(addTitle) && /2 bảng/.test(dayTxt) && openTables === 2 && (await win.locator('.import-entry').count()) === 2,
+      `${imps.length} bảng · "${dayTxt.replace(/\s+/g, ' ')}" · đang mở ${openTables}`,
+    );
+    await win.locator('.import-entry .tree-toggle').nth(1).click();
+    const afterOne = await win.locator('.import-entry-body').count();
+    await win.locator('.import-day > .tree-toggle').first().click();
+    const afterDay = await win.locator('.import-entry').count();
+    await win.locator('.import-day > .tree-toggle').first().click();
+    check('Bấm mũi tên để ẩn / hiện từng bảng và cả ngày', afterOne === 1 && afterDay === 0 && (await win.locator('.import-entry').count()) === 2, `${afterOne} / ${afterDay}`);
+
+    const older = imps[1];
+    await stubOpen(app, [xlsxFile]);
+    await win.getByRole('button', { name: new RegExp(`^Import lại bảng .*`) }).nth(1).click();
+    await win.waitForSelector('.wizard', { timeout: 10000 });
+    await win.getByRole('button', { name: 'Xác nhận Import' }).click();
+    await win.locator('.modal').getByRole('button', { name: 'Thay thế' }).click();
+    await win.waitForTimeout(600);
+    imps = await call(win, 'listProjectImports', pid);
+    const replacedOk = imps.length === 2 && !imps.some((i) => i.id === older.id);
+    await win.getByRole('button', { name: /^Gỡ bảng / }).first().click();
+    await win.locator('.modal').getByRole('button', { name: 'Gỡ bảng' }).click();
+    await win.waitForTimeout(500);
+    imps = await call(win, 'listProjectImports', pid);
+    check('Import lại chỉ thay đúng bảng đó; Gỡ một bảng giữ các bảng còn lại', replacedOk && imps.length === 1 && (await win.getByText('COLDSTORE 2U').first().isVisible()), `còn ${imps.length} bảng`);
+  }
+
   // --- Mở file DWG: không có ứng dụng .dwg thì báo lỗi có hướng xử lý (AC-010) ---
   await go(win, `#/project/${(await call(win, 'listProjects')).find((p) => p.filePath).id}`);
   await win.waitForTimeout(500);

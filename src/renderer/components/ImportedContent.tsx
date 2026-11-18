@@ -1,12 +1,14 @@
 import type { ImportedItem } from '../../shared/types';
 
-/** Dữ liệu import từ Excel: chỉ hiển thị bảng thông tin các thiết bị. */
-export function ImportedContent({ items, compact }: { items: ImportedItem[]; compact?: boolean }) {
+/** Dữ liệu import từ Excel: chỉ hiển thị bảng thông tin các thiết bị; `bare` = bỏ tiêu đề (đã có ở cây import). */
+export function ImportedContent({ items, compact, bare }: { items: ImportedItem[]; compact?: boolean; bare?: boolean }) {
   return (
     <section>
-      <h3 className="card-title" style={{ fontSize: 14 }}>
-        Thông tin các thiết bị <span className="badge">{items.length}</span>
-      </h3>
+      {!bare && (
+        <h3 className="card-title" style={{ fontSize: 14 }}>
+          Thông tin các thiết bị <span className="badge">{items.length}</span>
+        </h3>
+      )}
       {items.length === 0 ? (
         <div className="faint small">Không có dòng thiết bị.</div>
       ) : (
