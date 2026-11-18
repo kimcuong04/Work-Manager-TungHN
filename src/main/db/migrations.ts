@@ -642,6 +642,23 @@ CREATE UNIQUE INDEX ux_todo_project ON todo_items(todo_date, project_id) WHERE p
 CREATE UNIQUE INDEX ux_todo_freelance ON todo_items(todo_date, freelance_job_id) WHERE freelance_job_id IS NOT NULL;
 `;
 
+/** v1.12: dự án liên kết nhiều file (trước đây một file trong projects.file_*, giờ giữ lại làm bản sao của file đầu tiên). */
+const V12 = `
+CREATE TABLE project_files (
+  id TEXT PRIMARY KEY,
+  project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+  file_path TEXT NOT NULL,
+  file_name TEXT NOT NULL,
+  file_extension TEXT NOT NULL,
+  sort_order INTEGER NOT NULL DEFAULT 0,
+  created_at TEXT NOT NULL
+);
+CREATE INDEX idx_project_files_project ON project_files(project_id, sort_order);
+INSERT INTO project_files (id, project_id, file_path, file_name, file_extension, sort_order, created_at)
+  SELECT lower(hex(randomblob(16))), id, file_path, COALESCE(NULLIF(file_name, ''), file_path), COALESCE(file_extension, ''), 0, updated_at
+  FROM projects WHERE file_path IS NOT NULL AND file_path <> '';
+`;
+
 const DEFAULT_STATUS_COLORS: Record<string, string> = {
   'mới nhận': '#3b82f6',
   'đang làm': '#f59e0b',
@@ -776,6 +793,10 @@ export const MIGRATIONS: Migration[] = [
   {
     version: 11,
     up: (db) => db.exec(V11),
+  },
+  {
+    version: 12,
+    up: (db) => db.exec(V12),
   },
 ];
 

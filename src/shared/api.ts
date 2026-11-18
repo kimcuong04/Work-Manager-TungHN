@@ -135,6 +135,10 @@ export interface Api {
   deleteOnlineTool(id: string): Promise<void>;
 
   pickLinkFile(): Promise<LinkedFile | null>;
+  /** Chọn một hoặc nhiều file liên kết cùng lúc. */
+  pickLinkFiles(): Promise<LinkedFile[]>;
+  /** Thay toàn bộ danh sách file liên kết của dự án. */
+  setProjectFiles(projectId: string, files: LinkedFile[]): Promise<Project>;
   checkFile(path: string): Promise<FileCheck>;
   openFile(path: string): Promise<void>;
   showFileInFolder(path: string): Promise<void>;

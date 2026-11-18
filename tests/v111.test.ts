@@ -21,8 +21,7 @@ describe('Nâng cấp v1.10 → v1.11', () => {
     todos.addTodos(c1, TEST_TODAY, [{ kind: 'FREELANCE', targetId: j.id }]);
     old.close();
     const db = await Db.open(file);
-    expect(SCHEMA_VERSION).toBe(11);
-    expect(db.scalar<number>('PRAGMA user_version')).toBe(11);
+    expect(db.scalar<number>('PRAGMA user_version')).toBe(SCHEMA_VERSION);
     const c2 = { ...ctx, db };
     expect(todos.listTodos(c2, TEST_TODAY).map((t) => [t.kind, t.title])).toEqual([['FREELANCE', 'Logo']]);
     expect(todos.addTodoTask(c2, TEST_TODAY, 'Gọi lại khách').map((t) => [t.kind, t.title])).toEqual([

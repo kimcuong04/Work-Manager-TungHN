@@ -36,6 +36,22 @@ export function decodeEntities(s: string): string {
 const escAttr = (s: string) => s.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 const escText = (s: string) => s.replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
+/** Ảnh trong ghi chú: độ rộng (px) khi người dùng kéo / nhập tỉ lệ, và căn lề. */
+export const IMAGE_WIDTH_MIN = 16;
+export const IMAGE_WIDTH_MAX = 4000;
+export const IMAGE_SCALE_MIN = 0.05;
+export const IMAGE_SCALE_MAX = 5;
+export type ImageAlign = 'left' | 'center' | 'right';
+export const IMAGE_ALIGNS: ImageAlign[] = ['left', 'center', 'right'];
+
+/** Tỉ lệ ảnh nhập tay: số thập phân (dấu chấm hoặc phẩy), tối đa 2 chữ số sau dấu, trong [0.05, 5]; sai thì null. */
+export function parseImageScale(raw: string): number | null {
+  const s = String(raw ?? '').trim().replace(',', '.');
+  if (!/^\d{1,2}(\.\d{1,2})?$/.test(s)) return null;
+  const n = Number(s);
+  return n >= IMAGE_SCALE_MIN && n <= IMAGE_SCALE_MAX ? n : null;
+}
+
 export function noteImageSrc(key: string): string {
   return `ppm-img://full/${encodeURIComponent(key)}`;
 }
@@ -72,7 +88,14 @@ function cleanAttrs(tag: string, original: string, raw: string): string | null {
   for (const m of raw.matchAll(ATTR_RE)) attrs[m[1].toLowerCase()] = decodeEntities(m[2] ?? m[3] ?? m[4] ?? '');
   if (tag === 'img') {
     const key = imageKeyFrom(attrs.src, attrs['data-key']);
-    return key ? ` src="${escAttr(noteImageSrc(key))}" data-key="${escAttr(key)}" alt=""` : null;
+    if (!key) return null;
+    let img = ` src="${escAttr(noteImageSrc(key))}" data-key="${escAttr(key)}" alt=""`;
+    const width = Number(attrs.width);
+    if (/^\d{2,4}$/.test(attrs.width ?? '') && width >= IMAGE_WIDTH_MIN && width <= IMAGE_WIDTH_MAX) img += ` width="${width}"`;
+    const scale = parseImageScale(attrs['data-scale'] ?? '');
+    if (scale !== null && scale !== 1) img += ` data-scale="${scale}"`;
+    if (IMAGE_ALIGNS.includes(attrs['data-align'] as ImageAlign)) img += ` data-align="${attrs['data-align']}"`;
+    return img;
   }
   let out = '';
   if (tag === 'a') {

@@ -4,6 +4,7 @@ import { projectFolderName } from '../../shared/folderName';
 import { cleanName } from '../../shared/text';
 import type {
   ImportPayload,
+  LinkedFile,
   NamedRef,
   Project,
   ProjectCategory,
@@ -48,7 +49,21 @@ function brandsByProject(ctx: Ctx, projectId?: string): Map<string, NamedRef[]> 
   return m;
 }
 
-function mapProject(r: Record<string, any>, brands: NamedRef[]): Project {
+function filesByProject(ctx: Ctx, projectId?: string): Map<string, LinkedFile[]> {
+  const rows = ctx.db.all<{ project_id: string; file_path: string; file_name: string; file_extension: string }>(
+    `SELECT project_id, file_path, file_name, file_extension FROM project_files ${projectId ? 'WHERE project_id = ?' : ''} ORDER BY sort_order, created_at`,
+    projectId ? [projectId] : [],
+  );
+  const m = new Map<string, LinkedFile[]>();
+  for (const r of rows) {
+    const list = m.get(r.project_id) ?? [];
+    list.push({ path: r.file_path, name: r.file_name, extension: r.file_extension });
+    m.set(r.project_id, list);
+  }
+  return m;
+}
+
+function mapProject(r: Record<string, any>, brands: NamedRef[], files: LinkedFile[]): Project {
   return {
     id: r.id,
     stt: r.stt,
@@ -70,9 +85,10 @@ function mapProject(r: Record<string, any>, brands: NamedRef[]): Project {
     folderPath: strOrNull(r.folder_path),
     folderAuto: r.folder_auto === undefined || r.folder_auto === null ? true : !!r.folder_auto,
     note: str(r.note),
-    filePath: strOrNull(r.file_path),
-    fileName: strOrNull(r.file_name),
-    fileExtension: strOrNull(r.file_extension),
+    files,
+    filePath: files[0]?.path ?? null,
+    fileName: files[0]?.name ?? null,
+    fileExtension: files[0]?.extension ?? null,
     priorityPoint: r.priority_point,
     isCompleted: !!r.is_completed,
     completedAt: strOrNull(r.completed_at),
@@ -84,13 +100,14 @@ function mapProject(r: Record<string, any>, brands: NamedRef[]): Project {
 
 export function listProjects(ctx: Ctx): Project[] {
   const brands = brandsByProject(ctx);
-  return ctx.db.all(`${SELECT_PROJECT} ORDER BY p.stt`).map((r) => mapProject(r, brands.get(r.id as string) ?? []));
+  const files = filesByProject(ctx);
+  return ctx.db.all(`${SELECT_PROJECT} ORDER BY p.stt`).map((r) => mapProject(r, brands.get(r.id as string) ?? [], files.get(r.id as string) ?? []));
 }
 
 export function getProject(ctx: Ctx, id: string): Project {
   const r = ctx.db.get(`${SELECT_PROJECT} WHERE p.id = ?`, [id]);
   if (!r) throw new AppError('Không tìm thấy dự án (có thể đã bị xóa).');
-  return mapProject(r, brandsByProject(ctx, id).get(id) ?? []);
+  return mapProject(r, brandsByProject(ctx, id).get(id) ?? [], filesByProject(ctx, id).get(id) ?? []);
 }
 
 /** STT đánh riêng cho từng danh sách (năm × Pre-sales/Post-sales): STT lớn nhất trong danh sách đó + 1. */
@@ -116,9 +133,7 @@ interface Normalized {
   brandIds: string[];
   salespersonId: string | null;
   note: string;
-  filePath: string | null;
-  fileName: string | null;
-  fileExtension: string | null;
+  files: LinkedFile[];
   priorityPoint: number;
   folderParent: string | null | undefined;
   folderLink: string | null;
@@ -153,17 +168,7 @@ function normalizeInput(ctx: Ctx, input: ProjectInput, currentId?: string): Norm
       `STT ${stt} đã được dùng cho dự án "${dup.project_name}" trong cùng danh sách. Hãy chọn STT khác (gợi ý: ${nextProjectStt(ctx, input.jobYearId, input.workCategory)}).`,
     );
 
-  let filePath = strOrNull(input.filePath);
-  let fileName = strOrNull(input.fileName);
-  let ext = strOrNull(input.fileExtension);
-  if (filePath) {
-    ext = fileExtension(filePath);
-    if (!LINK_FILE_EXTENSIONS.includes(ext)) throw new AppError(`Chỉ hỗ trợ file ${LINK_FILE_LABEL}.`);
-    fileName = fileName || filePath.split(/[\\/]/).pop() || filePath;
-  } else {
-    fileName = null;
-    ext = null;
-  }
+  const files = normalizeFiles(input.files ?? (strOrNull(input.filePath) ? [{ path: input.filePath!, name: input.fileName ?? '', extension: '' }] : []));
   return {
     stt: stt!,
     jobYearId: input.jobYearId,
@@ -176,13 +181,59 @@ function normalizeInput(ctx: Ctx, input: ProjectInput, currentId?: string): Norm
     brandIds,
     salespersonId,
     note: (input.note ?? '').replace(/\r\n/g, '\n'),
-    filePath,
-    fileName,
-    fileExtension: ext,
+    files,
     priorityPoint: input.priorityPoint,
     folderParent: input.folderParent === undefined ? undefined : strOrNull(input.folderParent),
     folderLink: strOrNull(input.folderLink),
   };
+}
+
+/** Chuẩn hóa danh sách file liên kết: đúng đuôi cho phép, bỏ trùng đường dẫn (không phân biệt hoa thường). */
+function normalizeFiles(list: LinkedFile[]): LinkedFile[] {
+  if (!Array.isArray(list)) throw new AppError('Danh sách file liên kết không hợp lệ.');
+  if (list.length > 50) throw new AppError('Tối đa 50 file liên kết cho một dự án.');
+  const seen = new Set<string>();
+  const out: LinkedFile[] = [];
+  for (const f of list) {
+    const filePath = strOrNull(f?.path);
+    if (!filePath) continue;
+    const ext = fileExtension(filePath);
+    if (!LINK_FILE_EXTENSIONS.includes(ext)) throw new AppError(`Chỉ hỗ trợ file ${LINK_FILE_LABEL}.`);
+    const key = filePath.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push({ path: filePath, name: strOrNull(f.name) ?? filePath.split(/[\\/]/).pop() ?? filePath, extension: ext });
+  }
+  return out;
+}
+
+/** Ghi danh sách file liên kết; cột projects.file_* giữ bản sao file đầu tiên cho dữ liệu cũ. */
+function writeFiles(ctx: Ctx, projectId: string, files: LinkedFile[]) {
+  ctx.db.run('DELETE FROM project_files WHERE project_id = ?', [projectId]);
+  const stamp = now();
+  files.forEach((f, i) =>
+    ctx.db.run('INSERT INTO project_files (id, project_id, file_path, file_name, file_extension, sort_order, created_at) VALUES (?,?,?,?,?,?,?)', [
+      randomUUID(),
+      projectId,
+      f.path,
+      f.name,
+      f.extension,
+      i,
+      stamp,
+    ]),
+  );
+  ctx.db.run('UPDATE projects SET file_path = ?, file_name = ?, file_extension = ? WHERE id = ?', [files[0]?.path ?? null, files[0]?.name ?? null, files[0]?.extension ?? null, projectId]);
+}
+
+/** Thay danh sách file liên kết của dự án (thêm / gỡ / thay từng file ở trang chi tiết). */
+export function setProjectFiles(ctx: Ctx, id: string, list: LinkedFile[]): Project {
+  getProject(ctx, id);
+  const files = normalizeFiles(list);
+  ctx.db.tx(() => {
+    writeFiles(ctx, id, files);
+    ctx.db.run('UPDATE projects SET updated_at = ? WHERE id = ?', [now(), id]);
+  });
+  return getProject(ctx, id);
 }
 
 function masterName(ctx: Ctx, table: string, id: string | null): string {
@@ -231,12 +282,13 @@ export function createProject(ctx: Ctx, raw: ProjectInput, opts: ProjectSaveOpti
     ctx.db.tx(() => {
       ctx.db.run(
         `INSERT INTO projects (id, stt, job_year_id, work_category, received_date, due_date, project_name, client_id, si_id,
-          salesperson_id, note, file_path, file_name, file_extension, folder_path, priority_point,
-          is_completed, completed_at, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,'',?,?,?,?,?,?,?,?,?)`,
+          salesperson_id, note, folder_path, priority_point,
+          is_completed, completed_at, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,'',?,?,?,?,?,?)`,
         [id, p.stt, p.jobYearId, p.workCategory, p.receivedDate, p.dueDate, p.projectName, p.clientId, p.siId,
-          p.salespersonId, p.filePath, p.fileName, p.fileExtension, p.folderLink ?? folder?.path ?? null, p.priorityPoint,
+          p.salespersonId, p.folderLink ?? folder?.path ?? null, p.priorityPoint,
           completed, completed ? stamp : null, stamp, stamp],
       );
+      writeFiles(ctx, id, p.files);
       if (p.folderLink) ctx.db.run('UPDATE projects SET folder_auto = 0 WHERE id = ?', [id]);
       writeBrands(ctx, id, p.brandIds);
       if (p.receivedDate) addProjectStartEvent(ctx, id, p.projectName, p.receivedDate);
@@ -284,11 +336,12 @@ export function updateProject(ctx: Ctx, id: string, raw: ProjectInput, opts: Pro
     ctx.db.tx(() => {
       ctx.db.run(
         `UPDATE projects SET stt=?, job_year_id=?, work_category=?, received_date=?, due_date=?, project_name=?, client_id=?, si_id=?,
-          salesperson_id=?, file_path=?, file_name=?, file_extension=?, folder_path=?, priority_point=?, updated_at=?
+          salesperson_id=?, folder_path=?, priority_point=?, updated_at=?
          WHERE id=?`,
         [p.stt, p.jobYearId, p.workCategory, p.receivedDate, p.dueDate, p.projectName, p.clientId, p.siId,
-          p.salespersonId, p.filePath, p.fileName, p.fileExtension, folderPath, p.priorityPoint, now(), id],
+          p.salespersonId, folderPath, p.priorityPoint, now(), id],
       );
+      writeFiles(ctx, id, p.files);
       writeBrands(ctx, id, p.brandIds);
       syncProjectStartEvent(ctx, before, p);
       if (opts.noteHtml !== undefined) note = writeNote(ctx, id, today, opts.noteHtml);
@@ -376,7 +429,7 @@ export function deleteProject(ctx: Ctx, id: string): void {
 export function deleteProjects(ctx: Ctx, ids: string[]): number {
   const list = [...new Set(ids)].map((id) => {
     const r = ctx.db.get(`${SELECT_PROJECT} WHERE p.id = ?`, [id]);
-    return r ? mapProject(r, []) : null;
+    return r ? mapProject(r, [], []) : null;
   });
   const found = list.filter((p): p is Project => !!p);
   if (ids.length === 1 && !found.length) throw new AppError('Không tìm thấy dự án (có thể đã bị xóa).');

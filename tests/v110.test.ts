@@ -48,8 +48,14 @@ describe('Nâng cấp v1.9 → v1.10', () => {
     const old = await Db.open(file, MIGRATIONS.slice(0, 9));
     const c1 = { ...ctx, db: old };
     const y = master.listYears(c1).find((x) => x.jobType === 'MAIN')!.id;
-    const p = projects.createProject(c1, input({ jobYearId: y }));
-    projects.commitImport(c1, p.id, payload('BOQ-v1.xlsx', ['P1375', 'M3086']));
+    // Dữ liệu cũ ghi bằng SQL: code mới đọc / ghi các bảng chưa có ở schema 9.
+    old.tx(() => {
+      old.run("INSERT INTO projects (id, stt, job_year_id, work_category, project_name, note, priority_point, created_at, updated_at) VALUES ('p1', 1, ?, 'PRE_SALES', 'Dự án', '', 3, 't', 't')", [y]);
+      old.run("INSERT INTO project_imports VALUES ('i1', 'p1', 'BOQ-v1.xlsx', NULL, '[\"Equipment\"]', '2026-11-01T00:00:00.000Z', 'IMPORTED')");
+      old.run("INSERT INTO imported_items VALUES ('it1', 'i1', 'P1375', 'Axis', '', 0)");
+      old.run("INSERT INTO imported_items VALUES ('it2', 'i1', 'M3086', 'Axis', '', 1)");
+    });
+    const p = { id: 'p1' };
     old.close();
     const db = await Db.open(file);
     expect(db.scalar<number>('PRAGMA user_version')).toBe(SCHEMA_VERSION);

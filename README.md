@@ -79,8 +79,8 @@ Backup/Restore trong **Settings › Dữ liệu & Backup** xuất một file `.z
 ## Chức năng chính
 
 - **Dashboard**: KPI theo trạng thái, ring chart 3 trạng thái hoạt động, danh sách khẩn cấp (mở chi tiết/mở file),
-  **Dự án trong tháng** (STT / Tên / Hãng / Tên SI / Sale / Ngày bắt đầu / Trạng thái; chuyển tháng; **xuất .xlsx** chọn
-  cột; cột ngày ghi thành ô ngày Excel dạng mm/dd/yyyy; cột *Ghi chú trong tháng* gộp các ghi chú theo ngày của đúng
+  **Dự án trong tháng** (STT / Tên / Hãng / Tên SI / Sale / Ngày bắt đầu / Trạng thái; chuyển tháng; **xuất .xlsx** — tick các
+  dự án cần xuất, không tick thì xuất tất cả; chọn cột; cột ngày ghi thành ô ngày Excel dạng mm/dd/yyyy; cột *Ghi chú trong tháng* gộp các ghi chú theo ngày của đúng
   tháng đó vào một ô — `• Ngày dd/mm/yyyy` rồi các dòng `- nội dung`, chỉ lấy chữ), lọc theo Năm/Nhóm (dự án Job Chính); bấm KPI/biểu đồ để mở
   *Tất cả mục* với bộ lọc tương ứng.
 - **Calendar** (kiểu Google Calendar): xem Ngày / Tuần / Tháng / Lịch trình. Dự án mới tự có mục *Bắt đầu dự án* ở ngày
@@ -135,8 +135,8 @@ Backup/Restore trong **Settings › Dữ liệu & Backup** xuất một file `.z
   cuộn được); chuyển sang **Tiến độ** để xem board.
 - **Thông tin dự án**: **STT** (tự +1 và không trùng **trong từng danh sách** năm × Pre-sales/Post-sales — Pre-sales và
   Post-sales có dãy số riêng) và **Tên dự án** là bắt buộc; Tên SI, Hãng (chọn nhiều), Sale
-  (kèm Phòng ban), EU, Ngày bắt đầu, Ngày tới hạn, Priority không bắt buộc. File liên kết (**.dwg, .txt, .docx, .pdf, .xlsx**)
-  nằm trong mục thu gọn "File liên kết".
+  (kèm Phòng ban), EU, Ngày bắt đầu, Ngày tới hạn, Priority không bắt buộc. File liên kết (**.dwg, .txt, .docx, .pdf, .xlsx**,
+  **nhiều file** cho một dự án — chọn nhiều file một lần) nằm trong mục thu gọn "File liên kết".
 - **Thư mục dự án trên máy** (không bắt buộc): khi tạo dự án, tick **Tạo thư mục mới** thì chọn nơi lưu (lần sau mặc định
   nơi đã chọn) và app tự tạo thư mục `STT.Tên dự án_Tên SI_Hãng`, đổi tên theo khi sửa các trường đó; bỏ tick thì có thể
   **liên kết thư mục có sẵn** (app không tự đổi tên thư mục đó) hoặc để trống rồi đặt sau ở trang chi tiết (Tạo thư mục… /
@@ -149,9 +149,10 @@ Backup/Restore trong **Settings › Dữ liệu & Backup** xuất một file `.z
 - **Board 4 cột** Khẩn cấp / Cần chú ý / Mới tiếp nhận / Đã hoàn thành — trạng thái luôn tính tự động từ ngày tới hạn
   và ngưỡng. Kéo thả chỉ bật khi bấm *Chỉnh sửa Board* và chỉ dùng để hoàn thành / bỏ hoàn thành (có xác nhận).
 - **Tìm kiếm không dấu** (`thiet ke` ↔ `Thiết kế`), lọc nhiều EU/Tên SI/Hãng/Sale, sắp xếp; bộ lọc giữ trong phiên.
-- **Project Detail**: thông tin, thời hạn & ưu tiên, file liên kết .dwg/.txt/.docx/.pdf/.xlsx (mở bằng ứng dụng mặc định của Windows,
-  cảnh báo khi mất liên kết, chọn lại/gỡ), **Ghi chú theo ngày** (mỗi ngày một mục, định dạng tự do: đậm/nghiêng/màu/
-  danh sách/bảng, dán ảnh Ctrl+V; sửa được ghi chú ngày cũ), **Import .xlsx** chỉ lấy bảng **Thông tin các thiết bị**
+- **Project Detail**: thông tin, thời hạn & ưu tiên, **nhiều file liên kết** .dwg/.txt/.docx/.pdf/.xlsx (Thêm file, mở bằng
+  ứng dụng mặc định của Windows, cảnh báo khi mất liên kết, thay / gỡ từng file), **Ghi chú theo ngày** (mỗi ngày một mục, định dạng tự do: đậm/nghiêng/màu/
+  danh sách/bảng, dán ảnh Ctrl+V; ảnh lớn tự thu vừa khung; **bấm ảnh rồi kéo góc** để phóng to / thu nhỏ, **chuột phải vào
+  ảnh** để nhập tỉ lệ (1 = cỡ gốc, tối đa 2 chữ số thập phân) và căn trái / giữa / phải; sửa được ghi chú ngày cũ), **Import .xlsx** chỉ lấy bảng **Thông tin các thiết bị**
   (tự nhận diện + mapping cột, preview, lưu mapping tái sử dụng, không ghi đè âm thầm). **Import thêm xlsx** để có nhiều
   bảng thiết bị trong một dự án; mỗi bảng ghi ngày giờ import và hiện dạng cây **Ngày › từng bảng** (bấm mũi tên để ẩn /
   hiện, mặc định chỉ mở bảng mới nhất); mỗi bảng có **Import lại** (chỉ thay bảng đó) và nút gỡ riêng.

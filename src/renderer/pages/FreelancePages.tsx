@@ -30,7 +30,8 @@ function useStatusOptions(kind: ColoredKind = 'freelanceStatuses') {
 
 /** Viền + nền nhạt theo màu người dùng chọn cho Tình trạng / Trạng thái thanh toán (Settings › Master Data). */
 export function colorStyle(color: string | null | undefined): React.CSSProperties | undefined {
-  return color ? { borderColor: color, background: `${color}1f`, boxShadow: `inset 4px 0 0 ${color}` } : undefined;
+  // Nền phải đục (trộn với màu nền app): nền trong suốt khiến danh sách xổ xuống của <select> hiện nền trắng, chữ sáng.
+  return color ? { borderColor: color, background: `color-mix(in srgb, ${color} 16%, var(--surface))`, color: 'var(--text)', boxShadow: `inset 4px 0 0 ${color}` } : undefined;
 }
 
 /** Đổi Tình trạng hoặc Trạng thái thanh toán ngay trên bảng / trang chi tiết. */

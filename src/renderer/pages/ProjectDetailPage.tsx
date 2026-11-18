@@ -13,7 +13,7 @@ import {
 } from 'lucide-react';
 import { formatDate, formatDateTime } from '../../shared/dates';
 import { describeRemaining } from '../../shared/status';
-import { CATEGORY_LABEL, JOB_LABEL, type Project, type ProjectImport, type ProjectInput } from '../../shared/types';
+import { CATEGORY_LABEL, JOB_LABEL, type LinkedFile, type ProjectImport } from '../../shared/types';
 import { api } from '../api';
 import { Breadcrumbs, EmptyState, PriorityBadge, StatusBadge, shortenPath } from '../components/common';
 import { FileStatusRow } from '../components/FileLink';
@@ -25,26 +25,6 @@ import { nodePath, salesLabel } from '../lib/projects';
 import { useAppData } from '../state/AppData';
 import { useProjectActions } from '../state/projectActions';
 import { usePageTitle, useUi } from '../state/ui';
-
-function toInput(p: Project): ProjectInput {
-  return {
-    stt: p.stt,
-    siId: p.siId,
-    brandIds: p.brands.map((b) => b.id),
-    jobYearId: p.jobYearId,
-    workCategory: p.workCategory,
-    receivedDate: p.receivedDate,
-    dueDate: p.dueDate,
-    projectName: p.projectName,
-    clientId: p.clientId,
-    salespersonId: p.salespersonId,
-    note: p.note,
-    filePath: p.filePath,
-    fileName: p.fileName,
-    fileExtension: p.fileExtension,
-    priorityPoint: p.priorityPoint,
-  };
-}
 
 export function ProjectDetailPage() {
   const { id = '' } = useParams();
@@ -85,23 +65,40 @@ export function ProjectDetailPage() {
       />
     );
 
-  const updateFile = async (file: { path: string; name: string; extension: string } | null) => {
+  const saveFiles = async (files: LinkedFile[], msg: string) => {
     try {
-      await api.updateProject(p.id, { ...toInput(p), filePath: file?.path ?? null, fileName: file?.name ?? null, fileExtension: file?.extension ?? null });
+      await api.setProjectFiles(p.id, files);
       await refresh('projects');
-      toast('success', file ? 'Đã cập nhật file liên kết.' : 'Đã gỡ liên kết file (file gốc không bị xóa).');
+      toast('success', msg);
     } catch (e) {
       toastError(e);
     }
   };
-
-  const replaceFile = async () => {
+  const addFiles = async () => {
     try {
-      const f = await api.pickLinkFile();
-      if (f) await updateFile(f);
+      const picked = await api.pickLinkFiles();
+      const seen = new Set(p.files.map((f) => f.path.toLowerCase()));
+      const fresh = picked.filter((f) => !seen.has(f.path.toLowerCase()));
+      if (picked.length && !fresh.length) toast('info', 'File đã chọn đều đã có trong danh sách.');
+      if (fresh.length) await saveFiles([...p.files, ...fresh], `Đã thêm ${fresh.length} file liên kết.`);
     } catch (e) {
       toastError(e);
     }
+  };
+  const replaceFileAt = async (i: number) => {
+    try {
+      const f = await api.pickLinkFile();
+      if (f) await saveFiles(p.files.map((x, j) => (j === i ? f : x)), 'Đã thay file liên kết.');
+    } catch (e) {
+      toastError(e);
+    }
+  };
+  const removeFileAt = async (i: number) => {
+    if (!(await confirm({ title: 'Gỡ liên kết file', message: `Gỡ liên kết "${p.files[i].name}" khỏi dự án? File gốc trên máy không bị xóa.`, confirmText: 'Gỡ liên kết' }))) return;
+    await saveFiles(
+      p.files.filter((_, j) => j !== i),
+      'Đã gỡ liên kết file (file gốc không bị xóa).',
+    );
   };
 
   const crumbs = [
@@ -225,25 +222,16 @@ export function ProjectDetailPage() {
           <h2 className="card-title">File &amp; Attachments</h2>
           <div className="stack" style={{ gap: 10 }}>
             <ProjectFolderRow p={p} />
-            {p.filePath ? (
-              <FileStatusRow
-                file={{ path: p.filePath, name: p.fileName ?? '', extension: p.fileExtension ?? '' }}
-                saved
-                onReplace={replaceFile}
-                onRemove={async () => {
-                  if (await confirm({ title: 'Gỡ liên kết file', message: 'Gỡ liên kết file khỏi dự án? File gốc trên máy không bị xóa.', confirmText: 'Gỡ liên kết' }))
-                    await updateFile(null);
-                }}
-              />
-            ) : (
-              <div className="row">
-                <FileText size={16} className="faint" />
-                <span className="muted small grow">Chưa liên kết file (DWG, TXT, DOCX, PDF, XLSX).</span>
-                <button className="btn sm" onClick={replaceFile}>
-                  <Upload size={14} /> Chọn file
-                </button>
-              </div>
-            )}
+            {p.files.map((f, i) => (
+              <FileStatusRow key={f.path} file={f} saved onReplace={() => void replaceFileAt(i)} onRemove={() => void removeFileAt(i)} />
+            ))}
+            <div className="row">
+              <FileText size={16} className="faint" />
+              <span className="muted small grow">{p.files.length ? `${p.files.length} file liên kết` : 'Chưa liên kết file (DWG, TXT, DOCX, PDF, XLSX).'}</span>
+              <button className="btn sm" onClick={() => void addFiles()}>
+                <Upload size={14} /> {p.files.length ? 'Thêm file' : 'Chọn file'}
+              </button>
+            </div>
             {imp && (
               <div className="file-row">
                 <div className="file-ext">

@@ -51,6 +51,10 @@ export function validateProjectInput(input: ProjectInput): FieldErrors {
     e.priorityPoint = 'Priority Point phải từ 1 đến 5.';
   if (input.fileExtension && !LINK_FILE_EXTENSIONS.includes(input.fileExtension.toLowerCase()))
     e.file = `Chỉ hỗ trợ file ${LINK_FILE_LABEL}.`;
+  if (input.files) {
+    if (!Array.isArray(input.files) || input.files.length > 50) e.file = 'Tối đa 50 file liên kết cho một dự án.';
+    else if (input.files.some((f) => !f?.path || !LINK_FILE_EXTENSIONS.includes(fileExtension(f.path)))) e.file = `Chỉ hỗ trợ file ${LINK_FILE_LABEL}.`;
+  }
   return e;
 }
 

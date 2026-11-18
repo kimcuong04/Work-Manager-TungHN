@@ -164,6 +164,8 @@ export interface Project {
   salespersonId: string | null;
   salespersonName: string | null;
   note: string;
+  /** Các file liên kết (theo thứ tự); filePath / fileName / fileExtension là file đầu tiên (null nếu không có). */
+  files: LinkedFile[];
   filePath: string | null;
   fileName: string | null;
   fileExtension: string | null;
@@ -192,9 +194,11 @@ export interface ProjectInput {
   folderLink?: string | null;
   salespersonId: string | null;
   note: string;
-  filePath: string | null;
-  fileName: string | null;
-  fileExtension: string | null;
+  /** Danh sách file liên kết (thay toàn bộ). Bỏ trống thì dùng filePath (một file) như client cũ. */
+  files?: LinkedFile[];
+  filePath?: string | null;
+  fileName?: string | null;
+  fileExtension?: string | null;
   priorityPoint: number;
 }
 

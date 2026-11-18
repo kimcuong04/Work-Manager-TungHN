@@ -79,7 +79,7 @@ function ProjectCard({
       ? { label: 'Bỏ hoàn thành', icon: <RotateCcw size={14} />, onClick: () => void actions.setCompleted(p, false) }
       : { label: 'Đánh dấu hoàn thành', icon: <CheckCircle2 size={14} />, onClick: () => void actions.setCompleted(p, true) },
     { label: 'Di chuyển…', icon: <FolderInput size={14} />, onClick: () => actions.openMove(p) },
-    ...(p.filePath ? [{ label: `Mở file ${p.fileName ?? ''}`, icon: <FileText size={14} />, onClick: () => void openFile(p.filePath!) }] : []),
+    ...p.files.slice(0, 8).map((f) => ({ label: `Mở file ${f.name}`, icon: <FileText size={14} />, onClick: () => void openFile(f.path) })),
     { label: '', onClick: () => {}, separator: true },
     { label: 'Xóa dự án', icon: <Trash2 size={14} />, danger: true, onClick: () => void actions.remove(p) },
   ];
@@ -112,10 +112,11 @@ function ProjectCard({
             {p.salespersonName}
           </span>
         )}
-        {p.filePath && (
-          <span className="icon-chip" title={p.fileName ?? ''}>
+        {p.files.length > 0 && (
+          <span className="icon-chip" title={p.files.map((f) => f.name).join('\n')}>
             <FileText size={12} />
             {p.fileExtension?.toUpperCase()}
+            {p.files.length > 1 ? ` +${p.files.length - 1}` : ''}
           </span>
         )}
         {p.hasImport && (

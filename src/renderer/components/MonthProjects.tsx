@@ -10,6 +10,7 @@ import { api } from '../api';
 import { useAppData } from '../state/AppData';
 import { useUi } from '../state/ui';
 import { EmptyState, StatusBadge } from './common';
+import { SelectBox } from './Selection';
 import { XlsxExportDialog, type ExportColumn } from './XlsxExportDialog';
 import { useTableResize } from '../lib/tableResize';
 
@@ -73,6 +74,7 @@ export function MonthProjects({ scoped }: { scoped: ProjectView[] }) {
   const [basis, setBasis] = useSessionState<Basis>('dash-month-basis', 'any');
   const [exporting, setExporting] = useState(false);
   const [monthNotes, setMonthNotes] = useState<Map<string, string> | null>(null);
+  const [picked, setPicked] = useState<Set<string>>(new Set());
   const { toastError } = useUi();
   const [y, m] = ym.split('-').map(Number);
   const { from, to } = monthRange(y, m);
@@ -86,6 +88,16 @@ export function MonthProjects({ scoped }: { scoped: ProjectView[] }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [scoped, basis, from, to],
   );
+  // Chỉ tính các dự án đã tick còn nằm trong danh sách đang xem; không tick dự án nào = xuất tất cả.
+  const chosen = list.filter((p) => picked.has(p.id));
+  const exportRows = chosen.length ? chosen : list;
+  const allOn = list.length > 0 && chosen.length === list.length;
+  const togglePick = (id: string) =>
+    setPicked((s) => {
+      const next = new Set(s);
+      if (!next.delete(id)) next.add(id);
+      return next;
+    });
   // Ghi chú theo ngày của đúng tháng đang xem, gộp sẵn thành nội dung một ô cho từng dự án.
   const openExport = async () => {
     try {
@@ -130,8 +142,13 @@ export function MonthProjects({ scoped }: { scoped: ProjectView[] }) {
               </option>
             ))}
           </select>
-          <button className="btn sm" disabled={!list.length} onClick={() => void openExport()} title="Xuất danh sách ra file Excel">
-            <FileDown size={14} /> Xuất xlsx
+          <button
+            className="btn sm"
+            disabled={!list.length}
+            onClick={() => void openExport()}
+            title={chosen.length ? `Xuất ${chosen.length} dự án đã chọn ra file Excel` : 'Chưa chọn dự án nào: xuất tất cả dự án trong tháng'}
+          >
+            <FileDown size={14} /> {chosen.length ? `Xuất ${chosen.length} dự án đã chọn` : 'Xuất xlsx (tất cả)'}
           </button>
         </span>
       </h2>
@@ -149,11 +166,30 @@ export function MonthProjects({ scoped }: { scoped: ProjectView[] }) {
             <span>
               <b>{done}</b> đã hoàn thành
             </span>
+            <span className="grow" />
+            {chosen.length > 0 ? (
+              <span>
+                Đã chọn <b>{chosen.length}</b> dự án để xuất ·{' '}
+                <button className="link-btn" onClick={() => setPicked(new Set())}>
+                  Bỏ chọn
+                </button>
+              </span>
+            ) : (
+              <span>Tick các dự án cần xuất (không tick = xuất tất cả)</span>
+            )}
           </div>
           <div className="table-wrap" style={{ maxHeight: 520 }}>
             <table className="tbl" ref={tableRef}>
               <thead>
                 <tr>
+                  <th className="select-col" data-col="__sel">
+                    <SelectBox
+                      checked={allOn}
+                      indeterminate={chosen.length > 0 && !allOn}
+                      onChange={() => setPicked(allOn ? new Set() : new Set(list.map((p) => p.id)))}
+                      label="Chọn tất cả dự án trong tháng"
+                    />
+                  </th>
                   <th className="num">STT</th>
                   <th>Tên dự án</th>
                   <th>Hãng</th>
@@ -165,7 +201,10 @@ export function MonthProjects({ scoped }: { scoped: ProjectView[] }) {
               </thead>
               <tbody>
                 {list.map((p) => (
-                  <tr key={p.id} data-row={p.id} className={`clickable ${p.isCompleted ? 'row-done' : ''}`} onClick={() => navigate(`/project/${p.id}`)}>
+                  <tr key={p.id} data-row={p.id} className={`clickable ${p.isCompleted ? 'row-done' : ''} ${picked.has(p.id) ? 'selected' : ''}`} onClick={() => navigate(`/project/${p.id}`)}>
+                    <td className="select-col" onClick={(e) => e.stopPropagation()}>
+                      <SelectBox checked={picked.has(p.id)} onChange={() => togglePick(p.id)} label={`Chọn ${p.stt}. ${p.projectName} để xuất`} />
+                    </td>
                     <td className="num">
                       <b>{p.stt}</b>
                     </td>
@@ -194,12 +233,12 @@ export function MonthProjects({ scoped }: { scoped: ProjectView[] }) {
       )}
       {exporting && monthNotes && (
         <XlsxExportDialog
-          title={`Xuất dự án tháng ${m}/${y}`}
+          title={chosen.length ? `Xuất ${chosen.length} dự án đã chọn — tháng ${m}/${y}` : `Xuất dự án tháng ${m}/${y}`}
           columns={[
             ...EXPORT_COLUMNS,
             { key: 'monthNotes', label: `Ghi chú trong tháng ${m}/${y}`, type: 'multiline', value: (p) => monthNotes.get(p.id) ?? '' },
           ]}
-          rows={list}
+          rows={exportRows}
           fileName={`Du-an-thang-${String(m).padStart(2, '0')}-${y}`}
           sheetName={`Tháng ${m}-${y}`}
           onClose={() => {

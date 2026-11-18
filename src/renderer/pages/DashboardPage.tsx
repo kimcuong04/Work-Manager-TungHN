@@ -113,8 +113,9 @@ function UrgentRow({ p }: { p: ProjectView }) {
         <div className="row" style={{ gap: 4 }}>
           {p.filePath &&
             (check?.accessible ? (
-              <button className="btn sm" title={`Mở ${p.fileName}`} onClick={() => openFile(p.filePath!)}>
+              <button className="btn sm" title={`Mở ${p.fileName}${p.files.length > 1 ? ` (còn ${p.files.length - 1} file khác ở trang chi tiết)` : ''}`} onClick={() => openFile(p.filePath!)}>
                 <FileText size={13} /> {p.fileExtension?.toUpperCase()}
+                {p.files.length > 1 ? ` +${p.files.length - 1}` : ''}
               </button>
             ) : (
               <span className="icon-chip bad" title={check?.message}>

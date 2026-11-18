@@ -101,24 +101,38 @@ export function FileStatusRow({
   );
 }
 
-export function FileLinkField({ value, onChange }: { value: LinkedFile | null; onChange: (f: LinkedFile | null) => void }) {
+/** Danh sách file liên kết trong form dự án: thêm nhiều file một lần, thay hoặc gỡ từng file. */
+export function FileListField({ value, onChange }: { value: LinkedFile[]; onChange: (files: LinkedFile[]) => void }) {
   const { toastError } = useUi();
-  const pick = async () => {
+  const add = async () => {
     try {
-      const f = await api.pickLinkFile();
-      if (f) onChange(f);
+      const picked = await api.pickLinkFiles();
+      const seen = new Set(value.map((f) => f.path.toLowerCase()));
+      const fresh = picked.filter((f) => !seen.has(f.path.toLowerCase()));
+      if (fresh.length) onChange([...value, ...fresh]);
     } catch (e) {
       toastError(e);
     }
   };
-  if (!value)
-    return (
+  const replace = async (i: number) => {
+    try {
+      const f = await api.pickLinkFile();
+      if (f) onChange(value.map((x, j) => (j === i ? f : x)));
+    } catch (e) {
+      toastError(e);
+    }
+  };
+  return (
+    <div className="stack" style={{ gap: 8 }}>
+      {value.map((f, i) => (
+        <FileStatusRow key={f.path} file={f} saved={false} onReplace={() => void replace(i)} onRemove={() => onChange(value.filter((_, j) => j !== i))} />
+      ))}
       <div className="row">
-        <button type="button" className="btn" onClick={pick}>
-          <Upload size={15} /> Chọn file .dwg / .txt / .docx / .pdf / .xlsx
+        <button type="button" className="btn" onClick={() => void add()}>
+          <Upload size={15} /> {value.length ? 'Thêm file' : 'Chọn file .dwg / .txt / .docx / .pdf / .xlsx'}
         </button>
-        <span className="field-hint">Chỉ lưu đường dẫn, không copy hay upload file.</span>
+        <span className="field-hint">Chọn được nhiều file một lần. Chỉ lưu đường dẫn, không copy hay upload file.</span>
       </div>
-    );
-  return <FileStatusRow file={value} saved={false} onReplace={pick} onRemove={() => onChange(null)} />;
+    </div>
+  );
 }

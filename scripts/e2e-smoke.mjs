@@ -325,6 +325,48 @@ try {
   const boldCount = await win.locator('.note-entry .note-content b').count();
   const noteImgs = await win.locator('.note-entry .note-content img').count();
   check('Ghi chú hôm nay: chữ đậm + ảnh dán Ctrl+V được lưu', boldCount >= 1 && noteImgs === 1, `${boldCount} đoạn đậm, ${noteImgs} ảnh`);
+  // --- v1.12: ảnh trong ghi chú — kéo góc đổi cỡ, chuột phải nhập tỉ lệ, căn lề ---
+  {
+    const todayLbl = day(0).split('-').reverse().join('/');
+    await win.getByRole('button', { name: `Sửa ghi chú ngày ${todayLbl}` }).click();
+    const edImg = win.locator('.note-editing .note-editor img').first();
+    await edImg.waitFor();
+    await win.waitForTimeout(300);
+    await edImg.click();
+    await win.waitForSelector('.note-editing .img-handle');
+    await win.locator('.note-editing .note-editor').evaluate((el) => el.scrollIntoView({ block: 'end' }));
+    await win.waitForTimeout(200);
+    const w0 = (await edImg.boundingBox()).width;
+    const hb = await win.locator('.note-editing .img-handle').boundingBox();
+    await win.mouse.move(hb.x + hb.width / 2, hb.y + hb.height / 2);
+    await win.mouse.down();
+    await win.mouse.move(hb.x - 120, hb.y + hb.height / 2, { steps: 8 });
+    await win.mouse.up();
+    const w1 = (await edImg.boundingBox()).width;
+    const dragAttr = await edImg.getAttribute('width');
+    await edImg.click({ button: 'right' });
+    await win.waitForSelector('.img-menu');
+    const scaleInput = win.locator('.img-menu input[aria-label="Tỉ lệ ảnh"]');
+    await scaleInput.fill('0.123');
+    await win.locator('.img-menu').getByRole('button', { name: 'Áp dụng' }).click();
+    const errTxt = await win.locator('.img-menu .field-error').innerText().catch(() => '');
+    await scaleInput.fill('0,5');
+    await win.locator('.img-menu').getByRole('button', { name: 'Áp dụng' }).click();
+    await win.locator('.img-menu').getByRole('button', { name: 'Căn giữa' }).click();
+    const nat = await edImg.evaluate((i) => i.naturalWidth);
+    const wAttr = await edImg.getAttribute('width');
+    await shot(win, '58-note-image-resize');
+    await win.locator('.note-editing').getByRole('button', { name: 'Lưu', exact: true }).click();
+    await win.waitForTimeout(600);
+    const savedNote = (await call(win, 'listProjectNotes', created[0].id)).find((n) => n.noteDate === day(0));
+    const shownAlign = await win.locator('.note-entry .note-content img').first().getAttribute('data-align');
+    check(
+      'Ảnh trong ghi chú: kéo góc để thu nhỏ, chuột phải nhập tỉ lệ (tối đa 2 chữ số thập phân), căn giữa — được lưu',
+      w1 < w0 - 80 && !!dragAttr && /2 chữ số/.test(errTxt) && Number(wAttr) === Math.round(nat * 0.5) &&
+        /data-scale="0.5"/.test(savedNote?.html ?? '') && /data-align="center"/.test(savedNote?.html ?? '') && shownAlign === 'center',
+      `kéo ${Math.round(w0)}→${Math.round(w1)}px · tỉ lệ 0.5 = ${wAttr}px (gốc ${nat}px)`,
+    );
+  }
   await call(win, 'saveProjectNote', created[0].id, { noteDate: day(-3), html: '<div>Gửi báo giá lần 1</div>' });
   await win.reload();
   await win.waitForSelector('.sidebar');
@@ -568,7 +610,7 @@ try {
   const monthCard = win.locator('.card', { hasText: 'Dự án trong tháng' });
   const monthRows = await monthCard.locator('tbody tr').count();
   check('Dashboard có panel "Dự án trong tháng" dưới Dự án khẩn cấp', monthRows > 0, `${monthRows} dự án`);
-  const monthHeads = (await monthCard.locator('th').allInnerTexts()).map((t) => t.trim());
+  const monthHeads = (await monthCard.locator('th').allInnerTexts()).map((t) => t.trim()).filter(Boolean);
   check('Dự án trong tháng: STT / Tên dự án / Hãng / Tên SI / Sale / Ngày bắt đầu / Trạng thái', monthHeads.join('|') === 'STT|Tên dự án|Hãng|Tên SI|Sale|Ngày bắt đầu|Trạng thái', monthHeads.join(' | '));
   await shot(win, '03b-dashboard-month');
   const xlsxOut = path.join(root, 'du-an-thang.xlsx');
@@ -608,7 +650,25 @@ try {
       dateCells.length >= monthRows && dateCells.every((x) => x.t === 'n' && /^\d{2}\/\d{2}\/\d{4}$/.test(x.w) && known.has(x.w)),
       dateCells.slice(0, 4).map((x) => x.w).join(', '),
     );
+  }  // --- v1.12: tick dự án để xuất; không tick = xuất tất cả ---
+  {
+    const boxes = monthCard.locator('tbody input[type="checkbox"]');
+    await boxes.nth(0).check();
+    await boxes.nth(1).check();
+    const stayed = await win.evaluate(() => location.hash);
+    const xlsxPick = path.join(root, 'du-an-thang-da-chon.xlsx');
+    await stubSave(app, xlsxPick);
+    await monthCard.getByRole('button', { name: /Xuất 2 dự án đã chọn/ }).click();
+    await win.waitForSelector('.modal .export-cols');
+    await shot(win, '59-month-export-picked');
+    await win.getByRole('button', { name: /Xuất \.xlsx/ }).click();
+    await win.waitForTimeout(600);
+    const picked = fs.existsSync(xlsxPick) ? XLSX.utils.sheet_to_json(Object.values(XLSX.read(fs.readFileSync(xlsxPick)).Sheets)[0], { header: 1 }) : [];
+    await monthCard.getByRole('button', { name: 'Bỏ chọn' }).click();
+    const allBtn = await monthCard.getByRole('button', { name: /Xuất xlsx \(tất cả\)/ }).count();
+    check('Dự án trong tháng: tick dự án → chỉ xuất các dự án đó; bỏ tick → xuất tất cả', picked.length === 3 && allBtn === 1 && stayed === '#/', `${picked.length - 1} dòng đã xuất`);
   }
+
 
   // --- v1.4: Xóa dự án — Hủy / Xóa / Xóa cả folder local ---
   await app.evaluate(({ shell }) => {
@@ -1222,6 +1282,22 @@ try {
       fDocx?.extension === 'docx' && fXlsx?.extension === 'xlsx' && /\.pdf, \.xlsx/.test(xlsxErr) && linked.fileExtension === 'pdf' && (await win.locator('.file-row .file-ext', { hasText: 'pdf' }).isVisible()),
       `${fDocx?.name} · ${linked.fileName}`,
     );
+    // v1.12: nhiều file cho một dự án
+    await stubOpen(app, [docx, xlsxFile]);
+    await win.locator('section', { hasText: 'File & Attachments' }).getByRole('button', { name: 'Thêm file' }).click();
+    await win.waitForTimeout(500);
+    const three = (await call(win, 'listProjects')).find((x) => x.id === dong.id).files;
+    const rows3 = await win.locator('section', { hasText: 'File & Attachments' }).locator('.file-row', { has: win.locator('.file-ext') }).count();
+    await shot(win, '60-project-multi-files');
+    await win.locator('.file-row', { hasText: 'Thuyết minh kỹ thuật.docx' }).getByRole('button', { name: 'Gỡ liên kết' }).click();
+    await win.locator('.modal').getByRole('button', { name: 'Gỡ liên kết' }).click();
+    await win.waitForTimeout(500);
+    const two = (await call(win, 'listProjects')).find((x) => x.id === dong.id).files;
+    check(
+      'Dự án liên kết nhiều file (thêm nhiều file một lần, gỡ từng file)',
+      three.map((f) => f.extension).join(',') === 'pdf,docx,xlsx' && rows3 >= 3 && two.map((f) => f.extension).join(',') === 'pdf,xlsx',
+      `${three.map((f) => f.name).join(', ')} → ${two.map((f) => f.name).join(', ')}`,
+    );
   }
 
   // --- v1.7–v1.9: Kho thiết bị (riêng, ngoài Job Chính) ---
@@ -1484,6 +1560,33 @@ try {
   await flRow.locator('select[aria-label^="Trạng thái thanh toán"]').selectOption({ label: 'Đã thanh toán' });
   await win.waitForTimeout(400);
   const statusStyle = await flRow.locator('select[aria-label^="Tình trạng"]').evaluate((el) => getComputedStyle(el).borderTopColor);
+  const contrast = await flRow.locator('select[aria-label^="Tình trạng"]').evaluate((el) => {
+    const ctx2 = document.createElement('canvas').getContext('2d');
+    const rgb = (c) => {
+      ctx2.clearRect(0, 0, 1, 1);
+      ctx2.fillStyle = '#000';
+      ctx2.fillStyle = c;
+      ctx2.fillRect(0, 0, 1, 1);
+      const d = ctx2.getImageData(0, 0, 1, 1).data;
+      return [d[0], d[1], d[2], d[3]];
+    };
+    const lum = ([r, g, b]) => {
+      const f = (v) => ((v /= 255) <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4);
+      return 0.2126 * f(r) + 0.7152 * f(g) + 0.0722 * f(b);
+    };
+    const ratio = (a, b) => {
+      const [x, y] = [lum(rgb(a)), lum(rgb(b))].sort((m, n) => n - m);
+      return (x + 0.05) / (y + 0.05);
+    };
+    const o = getComputedStyle(el.options[1]);
+    const sel = getComputedStyle(el);
+    return { select: ratio(sel.color, sel.backgroundColor), option: ratio(o.color, o.backgroundColor), selAlpha: rgb(sel.backgroundColor)[3], optAlpha: rgb(o.backgroundColor)[3] };
+  });
+  check(
+    'Ô Tình trạng Freelance: chữ tương phản rõ với nền (cả ô chọn lẫn danh sách xổ xuống), nền không trong suốt',
+    contrast.select >= 4.5 && contrast.option >= 4.5 && contrast.selAlpha === 255 && contrast.optAlpha === 255,
+    `ô ${contrast.select.toFixed(1)}:1 · danh sách ${contrast.option.toFixed(1)}:1`,
+  );
   const flHeads2 = (await win.locator('.freelance-table th').allInnerTexts()).map((t) => t.replace(/[▲▼]/g, '').trim()).filter(Boolean);
   const flJob = (await call(win, 'listFreelance')).find((j) => j.paymentStatusName === 'Đã thanh toán') ?? {};
   await shot(win, '52-freelance-payment');

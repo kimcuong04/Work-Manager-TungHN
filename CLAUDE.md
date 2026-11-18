@@ -51,6 +51,9 @@ App tự cập nhật trên máy user, nên mọi thay đổi phải giữ đư�
    (`src/renderer/lib/highlight.ts`), **không** bọc `<mark>` vào DOM do React quản lý.
 14. **Bảng import thiết bị** (schema 10): một dự án có nhiều `project_imports` (không còn UNIQUE trên `project_id`);
    `commitImport(projectId, payload, replaceImportId)` thêm bảng mới hoặc thay đúng một bảng, `removeImport` gỡ một bảng.
+15. **File liên kết** (schema 12): danh sách ở `project_files`; cột `projects.file_*` chỉ là bản sao file đầu tiên (giữ cho
+   dữ liệu cũ) — luôn ghi qua `writeFiles`. `openFile` chỉ mở đường dẫn có trong `project_files`. Ảnh trong ghi chú chỉ
+   được giữ `width` / `data-scale` / `data-align` (lọc trong `noteHtml.ts`); chỉnh ảnh ở `NoteImageTools.tsx`.
 
 ## Phát hành bản cập nhật
 

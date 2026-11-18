@@ -10,7 +10,6 @@ import {
   JOB_TYPES,
   PROJECT_CATEGORIES,
   type JobType,
-  type LinkedFile,
   type MasterKind,
   type Project,
   type ProjectCategory,
@@ -22,7 +21,7 @@ import { api } from '../api';
 import { useAppData } from '../state/AppData';
 import { useUi } from '../state/ui';
 import { DateInput, Field, MultiSearchSelect, PriorityPicker, SearchableSelect, StatusBadge, shortenPath } from './common';
-import { FileLinkField } from './FileLink';
+import { FileListField } from './FileLink';
 import { Modal } from './Modal';
 import { RichNoteEditor } from './RichNoteEditor';
 
@@ -46,9 +45,7 @@ function initialInput(project: Project | undefined, defaults: ProjectDefaults | 
       brandIds: template.brands.map((b) => b.id),
       salespersonId: template.salespersonId,
       note: '',
-      filePath: template.filePath,
-      fileName: template.fileName,
-      fileExtension: template.fileExtension,
+      files: template.files,
       priorityPoint: template.priorityPoint,
       folderParent: null,
       folderLink: null,
@@ -66,9 +63,7 @@ function initialInput(project: Project | undefined, defaults: ProjectDefaults | 
       brandIds: project.brands.map((b) => b.id),
       salespersonId: project.salespersonId,
       note: project.note,
-      filePath: project.filePath,
-      fileName: project.fileName,
-      fileExtension: project.fileExtension,
+      files: project.files,
       priorityPoint: project.priorityPoint,
       folderParent: undefined,
     };
@@ -84,9 +79,7 @@ function initialInput(project: Project | undefined, defaults: ProjectDefaults | 
     brandIds: [],
     salespersonId: null,
     note: '',
-    filePath: null,
-    fileName: null,
-    fileExtension: null,
+    files: [],
     priorityPoint: 3,
     folderParent: null,
   };
@@ -127,7 +120,7 @@ export function ProjectForm({
   const [touched, setTouched] = useState<Record<string, boolean>>({});
   const [submitted, setSubmitted] = useState(false);
   const [saving, setSaving] = useState<false | 'save' | 'calendar'>(false);
-  const [moreOpen, setMoreOpen] = useState(() => !!project?.filePath);
+  const [moreOpen, setMoreOpen] = useState(() => !!project?.files.length);
 
   // Dự án mới: nơi lưu thư mục dùng lần trước; STT gợi ý = STT lớn nhất của danh sách (năm × nhóm) đang chọn + 1,
   // đổi năm/nhóm thì gợi ý lại (trừ khi người dùng đã tự sửa STT).
@@ -254,7 +247,6 @@ export function ProjectForm({
 
   const opts = (kind: MasterKind) => masters[kind].map((m) => ({ id: m.id, name: m.name, inactive: !m.isActive }));
   const jobYears = years.filter((y) => y.jobType === jobType);
-  const linked: LinkedFile | null = form.filePath ? { path: form.filePath, name: form.fileName ?? '', extension: form.fileExtension ?? '' } : null;
   const dueValid = !!form.dueDate && !errors.dueDate;
   const overdue = dueValid && (remainingDays(form.dueDate, today) ?? 0) < 0;
   // Nhập mới với hạn đã qua = việc đã xong (nhập bù) → lưu ở trạng thái Đã hoàn thành.
@@ -563,14 +555,11 @@ export function ProjectForm({
 
         <section className="form-section">
           <button type="button" className="section-toggle" onClick={() => setMoreOpen((o) => !o)} aria-expanded={moreOpen}>
-            <ChevronDown size={15} className={moreOpen ? '' : 'rot-90'} /> File liên kết (DWG/TXT/DOCX/PDF/XLSX)
+            <ChevronDown size={15} className={moreOpen ? '' : 'rot-90'} /> File liên kết (DWG/TXT/DOCX/PDF/XLSX){form.files?.length ? ` · ${form.files.length} file` : ''}
           </button>
           {moreOpen && (
             <div className="stack" style={{ marginTop: 12 }}>
-              <FileLinkField
-                value={linked}
-                onChange={(f) => setForm((x) => ({ ...x, filePath: f?.path ?? null, fileName: f?.name ?? null, fileExtension: f?.extension ?? null }))}
-              />
+              <FileListField value={form.files ?? []} onChange={(files) => setForm((x) => ({ ...x, files }))} />
               {errors.file && <div className="field-error">{errors.file}</div>}
             </div>
           )}

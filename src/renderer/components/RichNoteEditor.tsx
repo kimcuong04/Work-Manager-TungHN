@@ -19,6 +19,7 @@ import type { ImageRef } from '../../shared/types';
 import { api, droppedPaths } from '../api';
 import { useUi } from '../state/ui';
 import { useClickOutside } from './common';
+import { NoteImageTools } from './NoteImageTools';
 
 const TEXT_COLORS = [
   { label: 'Mặc định', value: '' },
@@ -59,7 +60,7 @@ const imagesHtml = (imgs: ImageRef[]) => imgs.map((i) => `<img src="${noteImageS
 export function RichNoteEditor({
   initialHtml,
   onChange,
-  placeholder = 'Viết ghi chú… (dán ảnh Ctrl+V hoặc kéo thả ảnh vào đây)',
+  placeholder = 'Viết ghi chú… (dán ảnh Ctrl+V hoặc kéo thả ảnh vào đây; bấm ảnh để kéo đổi cỡ, chuột phải để nhập tỉ lệ / căn lề)',
   autoFocus,
   minHeight = 160,
   onSubmit,
@@ -72,6 +73,7 @@ export function RichNoteEditor({
   onSubmit?: () => void;
 }) {
   const ref = useRef<HTMLDivElement>(null);
+  const bodyRef = useRef<HTMLDivElement>(null);
   const savedRange = useRef<Range | null>(null);
   const colorRef = useRef<HTMLDivElement>(null);
   const [active, setActive] = useState<Active>({});
@@ -271,8 +273,9 @@ export function RichNoteEditor({
         </button>
         {busy && <span className="small faint" style={{ alignSelf: 'center', marginLeft: 6 }}>Đang chèn ảnh…</span>}
       </div>
-      <div className="note-editor-body">
+      <div className="note-editor-body" ref={bodyRef}>
         {empty && <div className="note-placeholder">{placeholder}</div>}
+        <NoteImageTools editor={ref} body={bodyRef} onChange={emit} />
         <div
           ref={ref}
           className="note-editor note-rich"

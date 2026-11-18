@@ -87,7 +87,7 @@ export function useProjectMenu() {
       : { label: 'Đánh dấu hoàn thành', icon: <CheckCircle2 size={14} />, onClick: () => void actions.setCompleted(p, true) },
     { label: 'Di chuyển…', icon: <FolderInput size={14} />, onClick: () => actions.openMove(p) },
     ...(p.folderPath ? [{ label: 'Mở thư mục dự án', icon: <FolderOpen size={14} />, onClick: () => void api.openProjectFolder(p.id).catch(toastError) }] : []),
-    ...(p.filePath ? [{ label: `Mở file ${p.fileName ?? ''}`, icon: <FileText size={14} />, onClick: () => void openFile(p.filePath!) }] : []),
+    ...p.files.slice(0, 8).map((f) => ({ label: `Mở file ${f.name}`, icon: <FileText size={14} />, onClick: () => void openFile(f.path) })),
     { label: '', onClick: () => {}, separator: true },
     { label: 'Xóa dự án', icon: <Trash2 size={14} />, danger: true, onClick: () => void actions.remove(p) },
   ];
@@ -253,12 +253,16 @@ export function ProjectPreviewPanel({ p, onClose }: { p: ProjectView; onClose: (
             </button>
           ) : null,
         )}
-        {p.filePath &&
+        {p.files.length > 0 &&
           row(
-            'File',
-            <button className="link-btn" title={p.filePath} onClick={() => void openFile(p.filePath!)}>
-              <FileText size={13} /> {p.fileName}
-            </button>,
+            p.files.length > 1 ? `File (${p.files.length})` : 'File',
+            <div className="stack" style={{ gap: 2 }}>
+              {p.files.map((f) => (
+                <button key={f.path} className="link-btn" title={f.path} onClick={() => void openFile(f.path)}>
+                  <FileText size={13} /> {f.name}
+                </button>
+              ))}
+            </div>,
           )}
       </div>
       <div className="row" style={{ marginTop: 18, marginBottom: 8 }}>

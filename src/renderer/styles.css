@@ -395,6 +395,14 @@ a.btn {
   background: var(--surface);
   outline: none;
 }
+.select {
+  color: var(--text);
+}
+.select option,
+.select optgroup {
+  color: var(--text);
+  background-color: var(--surface);
+}
 .textarea {
   height: auto;
   min-height: 80px;
@@ -3552,4 +3560,69 @@ input.select-box {
   margin: 10px 0 2px;
   padding-top: 8px;
   border-top: 1px dashed var(--border);
+}
+
+/* ---------- v1.12: ảnh trong ghi chú — kích thước, căn lề, kéo đổi cỡ ---------- */
+.note-rich img[width] {
+  max-height: none;
+  height: auto;
+}
+.panel-notes .note-rich img[width] {
+  max-height: none;
+}
+.note-rich img[data-align] {
+  display: block;
+  margin-top: 6px;
+  margin-bottom: 6px;
+}
+.note-rich img[data-align='left'] {
+  margin-left: 0;
+  margin-right: auto;
+}
+.note-rich img[data-align='center'] {
+  margin-left: auto;
+  margin-right: auto;
+}
+.note-rich img[data-align='right'] {
+  margin-left: auto;
+  margin-right: 0;
+}
+.note-editor img {
+  cursor: pointer;
+}
+.img-sel {
+  position: absolute;
+  pointer-events: none;
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+  border-radius: 8px;
+  z-index: 3;
+}
+.img-sel-badge {
+  position: absolute;
+  left: 4px;
+  top: 4px;
+  padding: 1px 6px;
+  border-radius: 6px;
+  font-size: 11px;
+  background: color-mix(in srgb, var(--surface) 88%, transparent);
+  color: var(--text);
+  border: 1px solid var(--border);
+}
+.img-handle {
+  position: absolute;
+  right: -7px;
+  bottom: -7px;
+  width: 14px;
+  height: 14px;
+  border-radius: 4px;
+  background: var(--accent);
+  border: 2px solid var(--surface);
+  cursor: nwse-resize;
+  pointer-events: auto;
+}
+.img-menu {
+  z-index: 1000;
+  width: 250px;
+  padding: 10px;
 }

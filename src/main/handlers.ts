@@ -77,7 +77,7 @@ export function createHandlers(ctx: Ctx, desktop: Desktop): Handlers {
   const DANGEROUS = new Set(['exe', 'bat', 'cmd', 'com', 'msi', 'ps1', 'vbs', 'vbe', 'js', 'jse', 'wsf', 'scr', 'lnk', 'reg', 'hta', 'cpl', 'pif']);
 
   const assertLinkedFile = (p: string) => {
-    const linked = ctx.db.scalar<number>('SELECT COUNT(*) FROM projects WHERE file_path = ?', [p]);
+    const linked = ctx.db.scalar<number>('SELECT COUNT(*) FROM project_files WHERE file_path = ?', [p]);
     if (!linked) throw new AppError('File này không được liên kết với dự án nào.');
   };
 
@@ -206,6 +206,17 @@ export function createHandlers(ctx: Ctx, desktop: Desktop): Handlers {
     updateOnlineTool: (id, input) => passwords.updateOnlineTool(ctx, id, input),
     deleteOnlineTool: (id) => passwords.deleteOnlineTool(ctx, id),
 
+    pickLinkFiles: async () => {
+      const files = await desktop.pickFiles({
+        title: 'Chọn file đính kèm (chọn được nhiều file)',
+        filters: [{ name: 'Bản vẽ AutoCAD / Văn bản / Word / PDF / Excel (*.dwg, *.txt, *.docx, *.pdf, *.xlsx)', extensions: LINK_FILE_EXTENSIONS }],
+        multi: true,
+      });
+      const bad = files.filter((f) => !LINK_FILE_EXTENSIONS.includes(fileExtension(f)));
+      if (bad.length) throw new AppError(`Chỉ hỗ trợ file ${LINK_FILE_LABEL} — "${path.basename(bad[0])}" không được nhận.`);
+      return files.map((f) => ({ path: f, name: path.basename(f), extension: fileExtension(f) }));
+    },
+    setProjectFiles: (id, files) => projects.setProjectFiles(ctx, String(id), files),
     pickLinkFile: async () => {
       const [file] = await desktop.pickFiles({
         title: 'Chọn file đính kèm',
