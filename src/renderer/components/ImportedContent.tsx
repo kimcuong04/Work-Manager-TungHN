@@ -1,7 +1,9 @@
 import type { ImportedItem } from '../../shared/types';
+import { useTableResize } from '../lib/tableResize';
 
 /** Dữ liệu import từ Excel: chỉ hiển thị bảng thông tin các thiết bị; `bare` = bỏ tiêu đề (đã có ở cây import). */
 export function ImportedContent({ items, compact, bare }: { items: ImportedItem[]; compact?: boolean; bare?: boolean }) {
+  const tableRef = useTableResize('imported-items');
   return (
     <section>
       {!bare && (
@@ -13,7 +15,7 @@ export function ImportedContent({ items, compact, bare }: { items: ImportedItem[
         <div className="faint small">Không có dòng thiết bị.</div>
       ) : (
         <div className="table-wrap" style={{ maxHeight: compact ? 420 : 560 }}>
-          <table className="tbl">
+          <table className="tbl" ref={tableRef}>
             <thead>
               <tr>
                 <th style={{ width: 48 }}>#</th>

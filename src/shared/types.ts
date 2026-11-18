@@ -407,6 +407,10 @@ export interface ImportPayload {
 export interface ProjectImport {
   id: string;
   projectId: string;
+  /** Tên tab (mặc định là tên file bỏ đuôi), đổi được; không trùng trong cùng dự án. */
+  name: string;
+  /** Thứ tự tab từ trái sang phải. */
+  sortOrder: number;
   sourceFileName: string;
   sourcePath: string | null;
   sheetNames: string[];

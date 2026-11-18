@@ -154,8 +154,11 @@ Backup/Restore trong **Settings › Dữ liệu & Backup** xuất một file `.z
   danh sách/bảng, dán ảnh Ctrl+V; ảnh lớn tự thu vừa khung; **bấm ảnh rồi kéo góc** để phóng to / thu nhỏ, **chuột phải vào
   ảnh** để nhập tỉ lệ (1 = cỡ gốc, tối đa 2 chữ số thập phân) và căn trái / giữa / phải; sửa được ghi chú ngày cũ), **Import .xlsx** chỉ lấy bảng **Thông tin các thiết bị**
   (tự nhận diện + mapping cột, preview, lưu mapping tái sử dụng, không ghi đè âm thầm). **Import thêm xlsx** để có nhiều
-  bảng thiết bị trong một dự án; mỗi bảng ghi ngày giờ import và hiện dạng cây **Ngày › từng bảng** (bấm mũi tên để ẩn /
-  hiện, mặc định chỉ mở bảng mới nhất); mỗi bảng có **Import lại** (chỉ thay bảng đó) và nút gỡ riêng.
+  bảng thiết bị trong một dự án, xem như **workbook Excel**: mỗi bảng là một **tab sheet** ở thanh dưới cùng (tên mặc định
+  là tên file, trùng thì thêm (2)…; nút + để import thêm). **Bấm đúp / F2 / chuột phải › Đổi tên** để đổi tên tab; **kéo tab**,
+  chuột phải › Di chuyển hoặc **Alt + ←/→** để đổi thứ tự. Mỗi bảng ghi ngày giờ import (dòng thông tin trên bảng); có
+  **Import lại** (thay đúng bảng đó, giữ vị trí tab) và nút gỡ riêng. Tab đang mở được nhớ theo dự án; mở kết quả tìm Model
+  thì tự mở đúng tab có Model đó.
 - **Warranty**: bảng riêng theo Job/Năm, có **STT** (tự +1 trong năm, sửa được) và Case no (nhập tự do), bấm một dòng mở panel chi tiết bên cạnh (vẫn cuộn/chọn dòng khác được), nút
   **View info** xem đầy đủ trên màn hình lớn (có Edit, chuyển bản trước/sau), form đầy đủ trường, Pass che mặc định + mã hóa (Windows DPAPI),
   lọc khoảng ngày / theo tháng / quick filter, chọn Ngày nhận hoặc Ngày test, lọc Hãng, search, sort, ẩn/hiện cột, ảnh.

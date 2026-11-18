@@ -14,7 +14,7 @@ import {
   type ProjectInput,
   type WarrantyInput,
 } from './types';
-import { cleanName } from './text';
+import { cleanName, nameKey } from './text';
 import { isWebLink } from './webLink';
 
 export type FieldErrors = Partial<Record<string, string>>;
@@ -99,6 +99,34 @@ export function validateMasterName(name: string): string | null {
   const n = cleanName(name);
   if (!n) return 'Tên không được để trống.';
   if (n.length > LIMITS.masterName) return `Tối đa ${LIMITS.masterName} ký tự.`;
+  return null;
+}
+
+export const IMPORT_TAB_NAME_MAX = 60;
+
+/** Tên tab mặc định của một bảng import: tên file .xlsx bỏ đuôi. */
+export function defaultImportTabName(fileName: string): string {
+  const base = cleanName(String(fileName ?? '').replace(/\.[^.\\/]*$/, ''));
+  return (base || 'Bảng').slice(0, IMPORT_TAB_NAME_MAX).trim();
+}
+
+/** Như Excel: tên đã có (không phân biệt hoa/thường) thì thêm " (2)", " (3)"… */
+export function uniqueImportTabName(base: string, taken: string[]): string {
+  const keys = new Set(taken.map(nameKey));
+  if (!keys.has(nameKey(base))) return base;
+  for (let n = 2; ; n++) {
+    const suffix = ` (${n})`;
+    const name = base.slice(0, IMPORT_TAB_NAME_MAX - suffix.length).trimEnd() + suffix;
+    if (!keys.has(nameKey(name))) return name;
+  }
+}
+
+/** Tên tab bảng import: bắt buộc, tối đa 60 ký tự, không trùng tên tab khác của cùng dự án. */
+export function validateImportTabName(name: string, others: string[]): string | null {
+  const n = cleanName(String(name ?? ''));
+  if (!n) return 'Tên bảng không được để trống.';
+  if (n.length > IMPORT_TAB_NAME_MAX) return `Tên bảng tối đa ${IMPORT_TAB_NAME_MAX} ký tự.`;
+  if (others.some((o) => nameKey(o) === nameKey(n))) return `Đã có bảng tên "${n}" trong dự án này.`;
   return null;
 }
 

@@ -404,45 +404,148 @@ try {
   check('Import XLSX thành công (3 thiết bị)', (await win.getByText('COLDSTORE 2U').isVisible()) && (await win.locator('.req-round').count()) === 0);
   await shot(win, '07-project-detail-imported');
 
-  // --- v1.10: Import thêm nhiều bảng xlsx, mỗi bảng ghi ngày import, hiển thị dạng cây thu gọn ---
+  // --- v1.10 + v1.13: Import thêm nhiều bảng xlsx — mỗi bảng là một tab sheet kiểu Excel ở dưới bảng ---
   {
     const pid = created[2].id;
+    const tabNames = async () => (await win.locator('.xl-tabs [role="tab"]').allInnerTexts()).map((t) => t.trim());
+    const activeTab = async () => (await win.locator('.xl-tab[aria-selected="true"]').innerText()).trim();
+    const apiNames = async () => (await call(win, 'listProjectImports', pid)).map((i) => i.name).join('|');
     await stubOpen(app, [xlsxFile]);
     await win.getByRole('button', { name: 'Import thêm xlsx' }).click();
     await win.waitForSelector('.wizard', { timeout: 10000 });
     const addTitle = await win.locator('.modal-head, .modal h2').first().innerText().catch(() => '');
     await win.getByRole('button', { name: 'Xác nhận Import' }).click();
-    await win.waitForTimeout(600);
+    await win.waitForTimeout(700);
     let imps = await call(win, 'listProjectImports', pid);
-    const dayTxt = await win.locator('.import-day > .tree-toggle').first().innerText();
-    const openTables = await win.locator('.import-entry-body').count();
-    await shot(win, '54-project-imports-tree');
+    const names1 = await tabNames();
+    const active1 = await activeTab();
+    await win.locator('.xl-book').scrollIntoViewIfNeeded();
+    const sheetBox = await win.locator('.xl-sheet').boundingBox();
+    const barBox = await win.locator('.xl-tabbar').boundingBox();
+    await shot(win, '54-project-imports-tabs');
     check(
-      'Import thêm xlsx: thêm bảng thứ hai, bảng cũ giữ nguyên, nhóm theo ngày import (cây có mũi tên)',
-      imps.length === 2 && /Import thêm/.test(addTitle) && /2 bảng/.test(dayTxt) && openTables === 2 && (await win.locator('.import-entry').count()) === 2,
-      `${imps.length} bảng · "${dayTxt.replace(/\s+/g, ' ')}" · đang mở ${openTables}`,
+      'Import thêm xlsx: mỗi bảng là một tab sheet ở dưới cùng (kiểu Excel), tên theo file, trùng thì thêm (2); bảng mới tự mở',
+      imps.length === 2 && /Import thêm/.test(addTitle) && names1.join('|') === 'Bao gia XYZ|Bao gia XYZ (2)' && active1 === 'Bao gia XYZ (2)' && barBox.y >= sheetBox.y + sheetBox.height - 2,
+      `${names1.join(' | ')} · đang mở: ${active1}`,
     );
-    await win.locator('.import-entry .tree-toggle').nth(1).click();
-    const afterOne = await win.locator('.import-entry-body').count();
-    await win.locator('.import-day > .tree-toggle').first().click();
-    const afterDay = await win.locator('.import-entry').count();
-    await win.locator('.import-day > .tree-toggle').first().click();
-    check('Bấm mũi tên để ẩn / hiện từng bảng và cả ngày', afterOne === 1 && afterDay === 0 && (await win.locator('.import-entry').count()) === 2, `${afterOne} / ${afterDay}`);
 
-    const older = imps[1];
+    await win.locator('.xl-tab').nth(0).click();
+    const infoName = (await win.locator('.xl-info .ellipsis').first().innerText()).trim();
+    await win.locator('.xl-tab').nth(0).dblclick();
+    await win.locator('.xl-tab-edit').fill('Camera tầng 1');
+    await win.locator('.xl-tab-edit').press('Enter');
+    await win.waitForTimeout(500);
+    await win.locator('.xl-tab').nth(1).press('F2');
+    await win.locator('.xl-tab-edit').fill('CAMERA TẦNG 1');
+    await win.locator('.xl-tab-edit').press('Enter');
+    await win.waitForTimeout(200);
+    const dupToast = await win.locator('.toast.error').last().innerText().catch(() => '');
+    const stillEditing = await win.locator('.xl-tab-edit').count();
+    await win.locator('.xl-tab-edit').press('Escape');
+    await win.locator('.xl-tab').nth(1).click({ button: 'right' });
+    await win.waitForSelector('.xl-menu');
+    await shot(win, '61-import-tab-menu');
+    await win.locator('.xl-menu').getByRole('menuitem', { name: /Đổi tên/ }).click();
+    await win.locator('.xl-tab-edit').fill('Máy chủ VMS');
+    await win.locator('.xl-tab-edit').press('Enter');
+    await win.waitForTimeout(500);
+    const renamed = await apiNames();
+    check(
+      'Đổi tên tab: bấm đúp / F2 / chuột phải › Đổi tên; tên trùng (không phân biệt hoa thường) bị chặn',
+      infoName === 'Bao gia XYZ' && /Đã có bảng tên/.test(dupToast) && stillEditing === 1 && renamed === 'Camera tầng 1|Máy chủ VMS' && (await tabNames()).join('|') === renamed,
+      `${renamed} · "${dupToast}"`,
+    );
+
+    const rackFile = path.join(fixtures, 'Tu rack.xlsx');
+    {
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([['Model', 'Brand', 'Description'], ['RACK-42U', 'APC', 'Tủ rack 42U phòng server']]), 'Equipment');
+      fs.writeFileSync(rackFile, XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' }));
+    }
+    await stubOpen(app, [rackFile]);
+    await win.getByRole('button', { name: 'Thêm bảng mới (import xlsx)' }).click();
+    await win.waitForSelector('.wizard', { timeout: 10000 });
+    await win.getByRole('button', { name: 'Xác nhận Import' }).click();
+    await win.waitForTimeout(700);
+    const added = `${(await tabNames()).join('|')} › ${await activeTab()}`;
+    await win.locator('.xl-tab').nth(2).dragTo(win.locator('.xl-tab').nth(0), { targetPosition: { x: 4, y: 10 } });
+    await win.waitForTimeout(600);
+    const afterDrag = await apiNames();
+    await win.locator('.xl-tab').nth(0).click({ button: 'right' });
+    await win.locator('.xl-menu').getByRole('menuitem', { name: 'Di chuyển sang phải' }).click();
+    await win.waitForTimeout(500);
+    const afterMenu = await apiNames();
+    await win.locator('.xl-tab', { hasText: 'Tu rack' }).press('Alt+ArrowRight');
+    await win.waitForTimeout(500);
+    const afterKey = await apiNames();
+    check(
+      'Đổi thứ tự tab: kéo thả tab, chuột phải › Di chuyển sang phải, Alt + →; nút + thêm bảng mới ở cuối',
+      added === 'Camera tầng 1|Máy chủ VMS|Tu rack › Tu rack' &&
+        afterDrag === 'Tu rack|Camera tầng 1|Máy chủ VMS' &&
+        afterMenu === 'Camera tầng 1|Tu rack|Máy chủ VMS' &&
+        afterKey === 'Camera tầng 1|Máy chủ VMS|Tu rack' &&
+        (await tabNames()).join('|') === afterKey,
+      `${added} · kéo: ${afterDrag} · menu: ${afterMenu} · Alt+→: ${afterKey}`,
+    );
+
+    await win.locator('.xl-tab', { hasText: 'Máy chủ VMS' }).click();
+    await win.reload();
+    await win.waitForSelector('.sidebar');
+    await win.waitForSelector('.xl-tab[aria-selected="true"]');
+    const remembered = await activeTab();
+    const searchModel = async (text) => {
+      await win.locator('select[aria-label="Kiểu tìm kiếm"]').selectOption('model');
+      await win.locator('.gsearch-input').fill(text);
+      await win.waitForSelector('.gsearch-results .opt');
+      await win.locator('.gsearch-results .opt', { hasText: created[2].projectName }).first().click();
+      await win.waitForFunction(() => (CSS.highlights?.get('ppm-search')?.size ?? 0) > 0, null, { timeout: 5000 }).catch(() => undefined);
+      await win.waitForTimeout(200);
+      const hit = await win.evaluate(() => [...(CSS.highlights?.get('ppm-search') ?? [])].map((r) => r.toString()));
+      return { tab: await activeTab(), hit, hash: await win.evaluate(() => location.hash) };
+    };
+    await go(win, '#/');
+    await win.waitForTimeout(300);
+    const fromHome = await searchModel('rack-42u');
+    await win.locator('.page-head h1').click();
+    await win.locator('.xl-tab', { hasText: 'Camera tầng 1' }).click();
+    const samePage = await searchModel('rack-42u');
+    await win.locator('.xl-book').scrollIntoViewIfNeeded();
+    await shot(win, '62-import-tab-search');
+    await win.locator('.page-head h1').click();
+    await win.locator('.gsearch-input').fill('');
+    await win.locator('select[aria-label="Kiểu tìm kiếm"]').selectOption('name');
+    check(
+      'Tab đang mở được nhớ; mở kết quả tìm Model → tự mở đúng tab có Model đó và tô sáng (cả khi đang ở sẵn trang dự án)',
+      remembered === 'Máy chủ VMS' &&
+        fromHome.hash === `#/project/${pid}` &&
+        fromHome.tab === 'Tu rack' &&
+        fromHome.hit.some((t) => t.toLowerCase() === 'rack-42u') &&
+        samePage.tab === 'Tu rack' &&
+        samePage.hit.length > 0,
+      `nhớ: ${remembered} · từ Dashboard: ${fromHome.tab} (${fromHome.hit.join(', ')}) · tại trang: ${samePage.tab}`,
+    );
+
+    const vms = (await call(win, 'listProjectImports', pid)).find((i) => i.name === 'Máy chủ VMS');
+    await win.locator('.xl-tab', { hasText: 'Máy chủ VMS' }).click();
     await stubOpen(app, [xlsxFile]);
-    await win.getByRole('button', { name: new RegExp(`^Import lại bảng .*`) }).nth(1).click();
+    await win.getByRole('button', { name: 'Import lại bảng Máy chủ VMS' }).click();
     await win.waitForSelector('.wizard', { timeout: 10000 });
     await win.getByRole('button', { name: 'Xác nhận Import' }).click();
     await win.locator('.modal').getByRole('button', { name: 'Thay thế' }).click();
-    await win.waitForTimeout(600);
+    await win.waitForTimeout(700);
     imps = await call(win, 'listProjectImports', pid);
-    const replacedOk = imps.length === 2 && !imps.some((i) => i.id === older.id);
-    await win.getByRole('button', { name: /^Gỡ bảng / }).first().click();
+    const replacedOk = imps.length === 3 && !imps.some((i) => i.id === vms.id) && imps[1].name === 'Máy chủ VMS' && (await activeTab()) === 'Máy chủ VMS';
+    await win.locator('.xl-tab', { hasText: 'Camera tầng 1' }).click();
+    await win.getByRole('button', { name: 'Gỡ bảng Camera tầng 1' }).click();
     await win.locator('.modal').getByRole('button', { name: 'Gỡ bảng' }).click();
     await win.waitForTimeout(500);
     imps = await call(win, 'listProjectImports', pid);
-    check('Import lại chỉ thay đúng bảng đó; Gỡ một bảng giữ các bảng còn lại', replacedOk && imps.length === 1 && (await win.getByText('COLDSTORE 2U').first().isVisible()), `còn ${imps.length} bảng`);
+    const left = await activeTab();
+    check(
+      'Import lại giữ vị trí và tên tab đã đổi; Gỡ một bảng giữ các bảng còn lại, mở bảng bên cạnh',
+      replacedOk && imps.map((i) => i.name).join('|') === 'Máy chủ VMS|Tu rack' && left === 'Máy chủ VMS' && (await win.getByText('COLDSTORE 2U').first().isVisible()),
+      `còn ${imps.map((i) => i.name).join(' | ')} · đang mở: ${left}`,
+    );
   }
 
   // --- Mở file DWG: không có ứng dụng .dwg thì báo lỗi có hướng xử lý (AC-010) ---

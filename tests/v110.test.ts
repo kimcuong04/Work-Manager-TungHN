@@ -62,7 +62,7 @@ describe('Nâng cấp v1.9 → v1.10', () => {
     const c2 = { ...ctx, db };
     expect(projects.listProjectImports(c2, p.id).map((i) => [i.sourceFileName, i.items.length])).toEqual([['BOQ-v1.xlsx', 2]]);
     projects.commitImport(c2, p.id, payload('BOQ-v2.xlsx', ['Q6135']));
-    expect(projects.listProjectImports(c2, p.id).map((i) => i.sourceFileName)).toEqual(['BOQ-v2.xlsx', 'BOQ-v1.xlsx']);
+    expect(projects.listProjectImports(c2, p.id).map((i) => i.sourceFileName)).toEqual(['BOQ-v1.xlsx', 'BOQ-v2.xlsx']);
     expect(db.all('PRAGMA foreign_key_check')).toEqual([]);
   });
 });
@@ -73,8 +73,8 @@ describe('Nhiều bảng import thiết bị trong một dự án', () => {
     const a = projects.commitImport(ctx, p.id, payload('BOQ-01.xlsx', ['P1375']));
     const b = projects.commitImport(ctx, p.id, payload('BOQ-02.xlsx', ['M3086', 'Q6135']));
     expect(projects.listProjectImports(ctx, p.id).map((i) => [i.id, i.items.length])).toEqual([
-      [b.id, 2],
       [a.id, 1],
+      [b.id, 2],
     ]);
     expect(projects.getProject(ctx, p.id).hasImport).toBe(true);
 

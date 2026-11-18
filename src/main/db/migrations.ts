@@ -659,6 +659,33 @@ INSERT INTO project_files (id, project_id, file_path, file_name, file_extension,
   FROM projects WHERE file_path IS NOT NULL AND file_path <> '';
 `;
 
+/** v1.13: bảng import hiển thị dạng tab sheet kiểu Excel — mỗi bảng có tên tab và thứ tự (đổi tên / kéo đổi chỗ được). */
+const V13 = `
+ALTER TABLE project_imports ADD COLUMN tab_name TEXT NOT NULL DEFAULT '';
+ALTER TABLE project_imports ADD COLUMN sort_order INTEGER NOT NULL DEFAULT 0;
+CREATE INDEX idx_project_imports_order ON project_imports(project_id, sort_order);
+`;
+
+/** Tab của bảng cũ: tên file bỏ đuôi (trùng thì thêm " (2)"…), xếp theo ngày import, bảng cũ nhất bên trái. */
+function backfillImportTabsV13(db: Db) {
+  const rows = db.all<{ id: string; project_id: string; source_file_name: string | null }>(
+    'SELECT id, project_id, source_file_name FROM project_imports ORDER BY project_id, imported_at, rowid',
+  );
+  const taken = new Map<string, Set<string>>();
+  const count = new Map<string, number>();
+  for (const r of rows) {
+    const keys = taken.get(r.project_id) ?? new Set<string>();
+    taken.set(r.project_id, keys);
+    const base = (cleanName(String(r.source_file_name ?? '').replace(/\.[^.\\/]*$/, '')) || 'Bảng').slice(0, 60).trim();
+    let name = base;
+    for (let n = 2; keys.has(nameKey(name)); n++) name = base.slice(0, 60 - ` (${n})`.length).trimEnd() + ` (${n})`;
+    keys.add(nameKey(name));
+    const order = count.get(r.project_id) ?? 0;
+    count.set(r.project_id, order + 1);
+    db.run('UPDATE project_imports SET tab_name = ?, sort_order = ? WHERE id = ?', [name, order, r.id]);
+  }
+}
+
 const DEFAULT_STATUS_COLORS: Record<string, string> = {
   'mới nhận': '#3b82f6',
   'đang làm': '#f59e0b',
@@ -797,6 +824,13 @@ export const MIGRATIONS: Migration[] = [
   {
     version: 12,
     up: (db) => db.exec(V12),
+  },
+  {
+    version: 13,
+    up: (db) => {
+      db.exec(V13);
+      backfillImportTabsV13(db);
+    },
   },
 ];
 

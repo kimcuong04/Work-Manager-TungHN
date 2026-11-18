@@ -260,6 +260,8 @@ export function createHandlers(ctx: Ctx, desktop: Desktop): Handlers {
     listProjectImports: (id) => projects.listProjectImports(ctx, String(id)),
     commitImport: (id, payload, replaceImportId) => projects.commitImport(ctx, String(id), payload, replaceImportId ? String(replaceImportId) : null),
     removeImport: (id, importId) => projects.removeImport(ctx, String(id), String(importId)),
+    renameImport: (id, importId, name) => projects.renameImport(ctx, String(id), String(importId), String(name ?? '')),
+    reorderImports: (id, ids) => projects.reorderImports(ctx, String(id), Array.isArray(ids) ? ids.map(String) : []),
 
     listWarranty: (yearId) => records.listWarranty(ctx, yearId),
     createWarranty: (input) => records.createWarranty(ctx, input),

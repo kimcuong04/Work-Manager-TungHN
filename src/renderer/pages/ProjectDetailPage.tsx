@@ -46,7 +46,7 @@ export function ProjectDetailPage() {
         toastError(e);
       });
   }, [id, toastError]);
-  const imp = imports?.[0] ?? null;
+  const imp = imports?.length ? imports.reduce((a, b) => (b.importedAt > a.importedAt ? b : a)) : null;
 
   useEffect(() => {
     if (p) loadImport();
@@ -257,6 +257,7 @@ export function ProjectDetailPage() {
       <ProjectCalendarCard projectId={p.id} dueDate={p.dueDate} version={p.updatedAt} />
 
       <ProjectImports
+        key={p.id}
         projectId={p.id}
         imports={imports}
         onChanged={() => {

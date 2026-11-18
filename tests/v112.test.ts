@@ -50,8 +50,8 @@ describe('Nâng cấp v1.11 → v1.12', () => {
     const a = { id: 'p-file' };
     old.close();
     const db = await Db.open(f);
-    expect(SCHEMA_VERSION).toBe(12);
-    expect(db.scalar<number>('PRAGMA user_version')).toBe(12);
+    expect(SCHEMA_VERSION).toBeGreaterThanOrEqual(12);
+    expect(db.scalar<number>('PRAGMA user_version')).toBe(SCHEMA_VERSION);
     const c2 = { ...ctx, db };
     const got = projects.getProject(c2, a.id);
     expect(got.files).toEqual([{ path: 'C:\\BV\\mat-bang.dwg', name: 'mat-bang.dwg', extension: 'dwg' }]);

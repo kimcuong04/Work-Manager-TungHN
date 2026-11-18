@@ -7,6 +7,14 @@ const MAX_WAIT_MS = 4000;
 
 let pending: string | null = null;
 
+/** Phát ra mỗi lần mở một kết quả tìm kiếm (kèm từ khóa ở `pendingHighlight()`). */
+export const HIGHLIGHT_EVENT = EVENT;
+
+/** Từ khóa đang chờ tô sáng (vừa mở từ kết quả tìm kiếm, trang đích chưa hiện), hoặc null. */
+export function pendingHighlight(): string | null {
+  return pending;
+}
+
 /** Gọi ngay trước khi mở một kết quả tìm kiếm: trang đích sẽ tô sáng `text` (không phân biệt dấu, hoa thường). */
 export function requestHighlight(text: string): void {
   pending = text.trim() || null;

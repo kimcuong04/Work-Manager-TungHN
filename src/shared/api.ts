@@ -145,11 +145,15 @@ export interface Api {
 
   pickWorkbook(): Promise<string | null>;
   readWorkbook(path: string): Promise<WorkbookData>;
-  /** Các bảng thiết bị import của dự án, mới nhất trước. */
+  /** Các bảng thiết bị import của dự án theo thứ tự tab (trái → phải). */
   listProjectImports(projectId: string): Promise<ProjectImport[]>;
   /** Thêm bảng import mới; có `replaceImportId` thì thay đúng bảng đó. */
   commitImport(projectId: string, payload: ImportPayload, replaceImportId?: string | null): Promise<ProjectImport>;
   removeImport(projectId: string, importId: string): Promise<void>;
+  /** Đổi tên tab của bảng import. */
+  renameImport(projectId: string, importId: string, name: string): Promise<ProjectImport>;
+  /** Xếp lại thứ tự tab; `ids` gồm đủ các bảng import của dự án. */
+  reorderImports(projectId: string, ids: string[]): Promise<ProjectImport[]>;
 
   listWarranty(jobYearId: string): Promise<WarrantyRecord[]>;
   createWarranty(input: WarrantyInput): Promise<WarrantyRecord>;

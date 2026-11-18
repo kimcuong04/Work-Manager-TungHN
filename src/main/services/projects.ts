@@ -15,7 +15,7 @@ import type {
 } from '../../shared/types';
 import { textToNoteHtml } from '../../shared/noteHtml';
 import { LINK_FILE_EXTENSIONS, LINK_FILE_LABEL } from '../../shared/types';
-import { LIMITS, fileExtension, hasErrors, validateProjectInput } from '../../shared/validation';
+import { IMPORT_TAB_NAME_MAX, LIMITS, defaultImportTabName, fileExtension, hasErrors, uniqueImportTabName, validateImportTabName, validateProjectInput } from '../../shared/validation';
 import { AppError, now, str, strOrNull, todayOf, type Ctx } from '../context';
 import { assertDirectory, ensureProjectFolder, moveProjectFolder, removeIfEmpty, undoFolderMove } from '../integration/folders';
 import { addProjectStartEvent, addProjectUpdateEvent, describeProjectChanges, hasProjectStartEvent, removeProjectEvents, syncProjectStartEvent } from './calendar';
@@ -479,6 +479,8 @@ function mapImport(ctx: Ctx, imp: Record<string, any>): ProjectImport {
   return {
     id: imp.id,
     projectId: imp.project_id,
+    name: imp.tab_name || defaultImportTabName(imp.source_file_name),
+    sortOrder: Number(imp.sort_order) || 0,
     sourceFileName: imp.source_file_name,
     sourcePath: strOrNull(imp.source_path),
     sheetNames: JSON.parse(imp.sheet_names || '[]'),
@@ -496,11 +498,25 @@ function mapImport(ctx: Ctx, imp: Record<string, any>): ProjectImport {
   };
 }
 
-/** Các bảng thiết bị đã import của dự án, mới nhất trước (mỗi lần import / import thêm là một bảng, có ngày import). */
+/** Các bảng thiết bị đã import của dự án theo thứ tự tab (trái → phải); mỗi lần import / import thêm là một bảng. */
 export function listProjectImports(ctx: Ctx, projectId: string): ProjectImport[] {
   return ctx.db
-    .all<Record<string, any>>('SELECT * FROM project_imports WHERE project_id = ? ORDER BY imported_at DESC, rowid DESC', [projectId])
+    .all<Record<string, any>>('SELECT * FROM project_imports WHERE project_id = ? ORDER BY sort_order, imported_at, rowid', [projectId])
     .map((r) => mapImport(ctx, r));
+}
+
+function tabNames(ctx: Ctx, projectId: string, exceptId: string | null): string[] {
+  return ctx.db
+    .all<{ tab_name: string }>('SELECT tab_name FROM project_imports WHERE project_id = ? AND id <> ?', [projectId, exceptId ?? ''])
+    .map((r) => r.tab_name);
+}
+
+/** Tên tab vẫn là tên tự đặt theo file cũ (chưa đổi tay) thì Import lại sẽ đặt theo file mới. */
+function isAutoTabName(name: string, fileName: string): boolean {
+  const base = defaultImportTabName(fileName);
+  if (name === base) return true;
+  const m = / \((\d+)\)$/.exec(name);
+  return !!m && name === base.slice(0, IMPORT_TAB_NAME_MAX - m[0].length).trimEnd() + m[0];
 }
 
 function getImport(ctx: Ctx, projectId: string, importId: string): ProjectImport {
@@ -525,14 +541,19 @@ function validatePayload(p: ImportPayload) {
 export function commitImport(ctx: Ctx, projectId: string, payload: ImportPayload, replaceImportId: string | null = null): ProjectImport {
   getProject(ctx, projectId);
   validatePayload(payload);
-  if (replaceImportId) getImport(ctx, projectId, replaceImportId);
+  const old = replaceImportId ? getImport(ctx, projectId, replaceImportId) : null;
+  const others = tabNames(ctx, projectId, old?.id ?? null);
+  const name =
+    old && !isAutoTabName(old.name, old.sourceFileName) ? old.name : uniqueImportTabName(defaultImportTabName(payload.sourceFileName), others);
+  const order = old ? old.sortOrder : (ctx.db.scalar<number>('SELECT MAX(sort_order) FROM project_imports WHERE project_id = ?', [projectId]) ?? -1) + 1;
   const importId = randomUUID();
   const stamp = now();
   ctx.db.tx(() => {
-    if (replaceImportId) ctx.db.run('DELETE FROM project_imports WHERE id = ? AND project_id = ?', [replaceImportId, projectId]);
-    ctx.db.run('INSERT INTO project_imports VALUES (?,?,?,?,?,?,?)', [
-      importId, projectId, payload.sourceFileName, payload.sourcePath, JSON.stringify(payload.sheetNames ?? []), stamp, 'IMPORTED',
-    ]);
+    if (old) ctx.db.run('DELETE FROM project_imports WHERE id = ? AND project_id = ?', [old.id, projectId]);
+    ctx.db.run(
+      'INSERT INTO project_imports (id, project_id, source_file_name, source_path, sheet_names, imported_at, status, tab_name, sort_order) VALUES (?,?,?,?,?,?,?,?,?)',
+      [importId, projectId, payload.sourceFileName, payload.sourcePath, JSON.stringify(payload.sheetNames ?? []), stamp, 'IMPORTED', name, order],
+    );
     payload.info.forEach((r, i) =>
       ctx.db.run('INSERT INTO imported_project_info VALUES (?,?,?,?,?,?)', [
         randomUUID(), importId, str(r.fieldKey), str(r.fieldLabel), str(r.fieldValue), i,
@@ -566,6 +587,26 @@ export function removeImport(ctx: Ctx, projectId: string, importId: string): voi
     ctx.db.run('DELETE FROM project_imports WHERE id = ? AND project_id = ?', [importId, projectId]);
     ctx.db.run('UPDATE projects SET updated_at = ? WHERE id = ?', [now(), projectId]);
   });
+}
+
+/** Đổi tên tab của một bảng import (không trùng tên tab khác trong dự án, không phân biệt hoa/thường). */
+export function renameImport(ctx: Ctx, projectId: string, importId: string, name: string): ProjectImport {
+  getImport(ctx, projectId, importId);
+  const err = validateImportTabName(name, tabNames(ctx, projectId, importId));
+  if (err) throw new AppError(err);
+  ctx.db.tx(() => ctx.db.run('UPDATE project_imports SET tab_name = ? WHERE id = ? AND project_id = ?', [cleanName(name), importId, projectId]));
+  return getImport(ctx, projectId, importId);
+}
+
+/** Xếp lại thứ tự tab: `ids` phải là đủ các bảng import hiện có của dự án, mỗi bảng một lần. */
+export function reorderImports(ctx: Ctx, projectId: string, ids: string[]): ProjectImport[] {
+  getProject(ctx, projectId);
+  const current = ctx.db.all<{ id: string }>('SELECT id FROM project_imports WHERE project_id = ?', [projectId]).map((r) => r.id);
+  const list = Array.isArray(ids) ? ids.map(String) : [];
+  if (list.length !== current.length || new Set(list).size !== list.length || !list.every((id) => current.includes(id)))
+    throw new AppError('Danh sách bảng import đã thay đổi — hãy tải lại trang rồi thử lại.');
+  ctx.db.tx(() => list.forEach((id, i) => ctx.db.run('UPDATE project_imports SET sort_order = ? WHERE id = ? AND project_id = ?', [i, id, projectId])));
+  return listProjectImports(ctx, projectId);
 }
 
 export function savedMappings(ctx: Ctx, signature: string) {

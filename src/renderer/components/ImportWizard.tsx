@@ -177,7 +177,7 @@ export function ImportWizard({
       replaceImport &&
       !(await confirm({
         title: 'Import lại bảng này?',
-        message: `Bảng "${replaceImport.sourceFileName}" (import ${formatDateTime(replaceImport.importedAt)}) sẽ được thay hoàn toàn bằng dữ liệu mới. Các bảng import khác giữ nguyên. Tiếp tục?`,
+        message: `Bảng "${replaceImport.name}" (file ${replaceImport.sourceFileName}, import ${formatDateTime(replaceImport.importedAt)}) sẽ được thay hoàn toàn bằng dữ liệu mới, giữ nguyên vị trí tab. Các bảng import khác giữ nguyên. Tiếp tục?`,
         confirmText: 'Thay thế',
         danger: true,
       }))
