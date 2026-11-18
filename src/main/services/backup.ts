@@ -52,7 +52,9 @@ function counts(ctx: Ctx): Record<string, number> {
     freelance: c('SELECT COUNT(*) FROM freelance_jobs'),
     passwords: c('SELECT COUNT(*) FROM password_entries'),
     onlineTools: c('SELECT COUNT(*) FROM online_tools'),
-    images: c('SELECT (SELECT COUNT(*) FROM warranty_images) + (SELECT COUNT(*) FROM experience_images) + (SELECT COUNT(*) FROM knowledge_images) + (SELECT COUNT(*) FROM project_note_images) + (SELECT COUNT(*) FROM freelance_note_images)'),
+    equipment: c('SELECT COUNT(*) FROM equipment_items'),
+    equipmentLoans: c('SELECT COUNT(*) FROM equipment_loans'),
+    images: c('SELECT (SELECT COUNT(*) FROM warranty_images) + (SELECT COUNT(*) FROM experience_images) + (SELECT COUNT(*) FROM knowledge_images) + (SELECT COUNT(*) FROM project_note_images) + (SELECT COUNT(*) FROM freelance_note_images) + (SELECT COUNT(*) FROM equipment_images)'),
   };
 }
 

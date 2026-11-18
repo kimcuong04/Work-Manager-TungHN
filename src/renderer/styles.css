@@ -604,6 +604,11 @@ a.btn {
   color: var(--attention);
   border-color: transparent;
 }
+.badge.danger {
+  background: color-mix(in srgb, var(--urgent) 13%, transparent);
+  color: var(--urgent);
+  border-color: transparent;
+}
 
 .empty {
   text-align: center;
@@ -2816,6 +2821,15 @@ table.tbl {
   overflow: hidden;
   color: var(--text-muted);
 }
+.panel-notes .note-entry {
+  padding: 10px 0;
+}
+.panel-notes .note-rich {
+  font-size: 13px;
+}
+.panel-notes .note-rich img {
+  max-height: 260px;
+}
 .toolbar.view-bar {
   margin-top: -6px;
 }
@@ -3144,4 +3158,32 @@ input.select-box {
 }
 .select-banner {
   margin-bottom: 10px;
+}
+
+/* ---------- Kho thiết bị: lịch sử mượn / trả ---------- */
+.equipment-table td.eq-name {
+  min-width: 190px;
+}
+.loan-entry {
+  padding: 10px 12px;
+  margin-top: 8px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+}
+.loan-entry.open {
+  border-color: color-mix(in srgb, var(--attention) 45%, var(--border));
+}
+.loan-grid {
+  grid-template-columns: 120px minmax(0, 1fr);
+  row-gap: 4px;
+  font-size: 13px;
+}
+.loan-current {
+  padding: 10px 12px;
+  border: 1px dashed var(--border-strong);
+  border-radius: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
 }

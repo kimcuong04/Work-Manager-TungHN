@@ -49,6 +49,42 @@ export function NoteContent({ html }: { html: string }) {
   );
 }
 
+/** Panel xem nhanh: toàn bộ ghi chú theo ngày của dự án (chỉ đọc, mới nhất trước), kèm ảnh — bấm ảnh để phóng to. */
+export function ProjectNotesReadonly({ projectId, version, onCount }: { projectId: string; version: string; onCount?: (n: number) => void }) {
+  const { today } = useAppData();
+  const { toastError } = useUi();
+  const [notes, setNotes] = useState<DayNote[] | null>(null);
+  useEffect(() => {
+    let alive = true;
+    api
+      .listProjectNotes(projectId)
+      .then((n) => {
+        if (!alive) return;
+        setNotes(n);
+        onCount?.(n.length);
+      })
+      .catch((e) => alive && toastError(e));
+    return () => {
+      alive = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [projectId, version, toastError]);
+  if (notes === null) return <div className="faint small">Đang tải…</div>;
+  if (!notes.length) return <span className="faint small">Chưa có ghi chú.</span>;
+  return (
+    <div className="note-list panel-notes">
+      {notes.map((n) => (
+        <article key={n.id} className="note-entry">
+          <header className="note-entry-head">
+            <span className={`note-date ${n.noteDate === today ? 'today' : ''}`}>{noteDayLabel(n.noteDate, today)}</span>
+          </header>
+          <NoteContent html={n.html} />
+        </article>
+      ))}
+    </div>
+  );
+}
+
 /** Nơi đọc/ghi ghi chú theo ngày của một đối tượng (dự án Job Chính, job Freelance). */
 export interface NoteSource {
   list(): Promise<DayNote[]>;

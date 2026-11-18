@@ -126,9 +126,13 @@ describe('Project (FR-PROJ, FR-NAV-007, FR-XLSX-006/007/009)', () => {
     expect(back.isCompleted).toBe(false);
     expect(back.completedAt).toBeNull();
   });
-  it('từ chối ngày tới hạn < ngày tiếp nhận và file không phải dwg/txt', () => {
+  it('từ chối ngày tới hạn < ngày tiếp nhận và file không phải dwg/txt/docx/pdf', () => {
     expect(() => projects.createProject(ctx, input({ dueDate: '2026-11-01' }))).toThrow();
-    expect(() => projects.createProject(ctx, input({ filePath: 'C:\\x\\a.pdf', fileName: 'a.pdf', fileExtension: 'pdf' }))).toThrow(/dwg/);
+    expect(() => projects.createProject(ctx, input({ filePath: 'C:\\x\\a.xlsx', fileName: 'a.xlsx', fileExtension: 'xlsx' }))).toThrow(/dwg/);
+    const pdf = projects.createProject(ctx, input({ projectName: 'Có PDF', filePath: 'C:\\x\\Báo giá.pdf', fileName: 'Báo giá.pdf', fileExtension: 'pdf' }));
+    expect(pdf.fileExtension).toBe('pdf');
+    const docx = projects.createProject(ctx, input({ projectName: 'Có DOCX', filePath: 'C:\\x\\Thuyết minh.DOCX', fileName: 'Thuyết minh.DOCX', fileExtension: 'docx' }));
+    expect(docx.fileExtension).toBe('docx');
   });
   const payload = (name: string) => ({
     sourceFileName: name,

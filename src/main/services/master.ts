@@ -17,10 +17,17 @@ const SPECS: Record<MasterKind, MasterSpec> = {
     usage: [
       { table: 'projects', column: 'si_id', nullable: true },
       { table: 'warranty_records', column: 'si_id', nullable: true },
+      { table: 'equipment_loans', column: 'si_id', nullable: true },
     ],
   },
   departments: { table: 'departments', usage: [{ table: 'salespersons', column: 'department_id', nullable: true }] },
-  salespersons: { table: 'salespersons', usage: [{ table: 'projects', column: 'salesperson_id', nullable: true }] },
+  salespersons: {
+    table: 'salespersons',
+    usage: [
+      { table: 'projects', column: 'salesperson_id', nullable: true },
+      { table: 'equipment_loans', column: 'salesperson_id', nullable: true },
+    ],
+  },
   freelanceStatuses: { table: 'freelance_statuses', usage: [{ table: 'freelance_jobs', column: 'status_id', nullable: true }] },
   freelanceHirers: { table: 'freelance_hirers', usage: [{ table: 'freelance_jobs', column: 'hirer_id', nullable: true }] },
   brands: {
@@ -30,6 +37,7 @@ const SPECS: Record<MasterKind, MasterSpec> = {
       { table: 'experience_records', column: 'brand_id', nullable: false },
       { table: 'knowledge_records', column: 'brand_id', nullable: true },
       { table: 'project_brands', column: 'brand_id', nullable: false },
+      { table: 'equipment_items', column: 'brand_id', nullable: true },
     ],
   },
 };

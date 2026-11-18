@@ -9,6 +9,10 @@ import type {
   CalendarQuery,
   BulkImportResult,
   BulkImportSpec,
+  EquipmentInput,
+  EquipmentItem,
+  EquipmentLoanInput,
+  EquipmentLoanOptions,
   ExperienceInput,
   FreelanceInput,
   FreelanceJob,
@@ -144,6 +148,17 @@ export interface Api {
   deleteWarranties(ids: string[]): Promise<number>;
   nextWarrantyStt(jobYearId: string): Promise<number>;
   revealWarrantyPassword(id: string): Promise<string>;
+
+  /** Kho thiết bị: bảng riêng (không thuộc Job Chính), kèm lịch sử mượn/trả của từng thiết bị. */
+  listEquipment(): Promise<EquipmentItem[]>;
+  nextEquipmentStt(): Promise<number>;
+  createEquipment(input: EquipmentInput): Promise<EquipmentItem>;
+  updateEquipment(id: string, input: EquipmentInput): Promise<EquipmentItem>;
+  deleteEquipment(id: string): Promise<void>;
+  deleteEquipments(ids: string[]): Promise<number>;
+  /** Thêm (loanId = null) hoặc sửa một lần mượn/trả; trả về thiết bị sau khi cập nhật. */
+  saveEquipmentLoan(equipmentId: string, loanId: string | null, input: EquipmentLoanInput, opts?: EquipmentLoanOptions): Promise<EquipmentItem>;
+  deleteEquipmentLoan(loanId: string): Promise<EquipmentItem>;
 
   pickImages(): Promise<ImageRef[]>;
   /** Lấy ảnh đang có trong clipboard hệ điều hành (ảnh chụp màn hình, ảnh copy, hoặc file ảnh copy từ Explorer). */

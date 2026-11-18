@@ -9,6 +9,7 @@ import { AllProjectsPage } from './pages/AllProjectsPage';
 import { CalendarPage } from './pages/CalendarPage';
 import { CategoryPage } from './pages/CategoryPage';
 import { DashboardPage } from './pages/DashboardPage';
+import { EquipmentPage } from './pages/EquipmentPage';
 import { ExperienceBrandPage, ExperienceHomePage } from './pages/ExperiencePages';
 import { FreelanceDetailPage, FreelanceListPage } from './pages/FreelancePages';
 import { KnowledgeBrandPage, KnowledgeHomePage } from './pages/KnowledgePages';
@@ -40,7 +41,7 @@ function Shell() {
     );
   if (!ready) return <div className="empty">Đang tải dữ liệu…</div>;
 
-  const fillPage = /^\/(all|job\/|calendar)/.test(location.pathname) || /\/(experience|knowledge)\/.+/.test(location.pathname);
+  const fillPage = /^\/(all|job\/|calendar|equipment)/.test(location.pathname) || /\/(experience|knowledge)\/.+/.test(location.pathname);
 
   return (
     <div className="app">
@@ -74,6 +75,7 @@ function Shell() {
             <Route path="/project/:id" element={<ProjectDetailPage />} />
             <Route path="/freelance" element={<FreelanceListPage />} />
             <Route path="/freelance/:id" element={<FreelanceDetailPage />} />
+            <Route path="/equipment" element={<EquipmentPage />} />
             <Route path="/passwords" element={<PasswordPage />} />
             <Route path="/tools/app" element={<ToolAppPage />} />
             <Route path="/tools/app/:toolId" element={<ToolAppRunPage />} />

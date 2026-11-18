@@ -91,13 +91,20 @@ Backup/Restore trong **Settings › Dữ liệu & Backup** xuất một file `.z
   nghiệm) và **Loại** (Bắt đầu / Cập nhật / Sự kiện khác / Hạn chót). Xóa dự án thì các mục Bắt đầu/Cập nhật của nó
   biến mất khỏi Calendar (sự kiện tự tạo có liên kết dự án chỉ bị gỡ liên kết).
 - **Sidebar**: My Workspace › Dashboard, Tất cả mục, Calendar, Job Chính › Năm › Pre-sales / Post-sales / Warranty,
-  **Job Freelance** (một bảng), Experience / Kiến thức › Hãng, **Tiện ích › Password, Tools (Tool app / Tool online)**,
+  **Job Freelance** (một bảng), **Kho thiết bị**, Experience / Kiến thức › Hãng, **Tiện ích › Password, Tools (Tool app / Tool online)**,
   AI Assistant (Coming Soon), Settings. Thêm/đổi tên/xóa năm, “+” thêm Project theo ngữ cảnh.
 - **Job Freelance**: một bảng chung cho mọi năm, quản lý riêng với Job Chính — STT (tự +1, không trùng), **Tên dự án**
   (bắt buộc), **Bên thuê** (danh mục riêng), Ngày bắt đầu, **Tình trạng** (danh mục riêng, đổi ngay trên bảng; sửa/sắp xếp ở Settings ›
   Master Data › Job Freelance) và **ghi chú theo ngày** như Job Chính (sửa được ngày cũ, dán ảnh). Lọc theo Tình trạng /
   năm, tìm không dấu. Dữ liệu Freelance cũ (Pre/Post-sales) được chuyển sang bảng này khi cập nhật lên v1.5; Warranty
   Freelance cũ chuyển sang Warranty Job Chính cùng năm.
+- **Kho thiết bị**: bảng riêng (không thuộc Job Chính) cho thiết bị cho mượn — STT (tự +1, không trùng), **Tên sp**
+  (bắt buộc), Hãng (danh mục dùng chung với Job Chính), Serial number, **Tình trạng**, Ngày mượn hiện tại, Ngày hẹn trả
+  hiện tại, ảnh. Mỗi thiết bị có **lịch sử mượn / trả**: Tên SI, Sale (danh mục dùng chung), Ngày mượn, Ngày trả, Lý do
+  mượn, Tình trạng khi trả. Thêm lần mượn có thể đặt luôn Ngày mượn / hẹn trả hiện tại; *Ghi nhận trả* đưa thiết bị về
+  kho; **Tình trạng tự lấy theo “Tình trạng khi trả” của lần trả mới nhất** (vẫn sửa tay được). Trạng thái Đang cho mượn /
+  Quá hạn trả / Trong kho; lọc theo trạng thái, Hãng, Tên SI đã mượn, Ngày mượn / hẹn trả hiện tại; tìm không dấu;
+  panel phải, View info, Duplicate (thiết bị cùng loại), Chọn nhiều để xóa; Tìm kiếm trên topbar ra cả thiết bị.
 - **Import .xlsx hàng loạt** cho Pre-sales / Post-sales / Warranty (theo năm) và Job Freelance: tự nhận diện dòng header
   và cột theo tên tiêu đề, chỉnh mapping từng cột, xem trước (dòng lỗi được đánh dấu và bỏ qua), Tên SI / Hãng / Sale /
   EU / Tình trạng khớp theo tên, chưa có thì thêm vào danh mục; Pre/Post-sales tạo luôn thư mục dự án nếu chọn. File không có
@@ -110,11 +117,12 @@ Backup/Restore trong **Settings › Dữ liệu & Backup** xuất một file `.z
 - **Tools**: *Tool app* — các tool nhỏ chạy trong app (đăng ký trong `src/renderer/tools/registry.ts`); *Tool online* —
   danh sách STT / Tên tool / Mục đích / Link (bắt buộc là link), thêm, sửa, xóa, tìm theo tên, bấm để mở trình duyệt.
 - **Pre-sales / Post-sales** mặc định xem dạng **Danh sách** (bảng sắp xếp theo cột, ẩn/hiện cột; bấm một dòng mở panel
-  xem nhanh bên phải với View info / Edit); chuyển sang **Tiến độ** để xem board.
+  xem nhanh bên phải với View info / Edit — panel hiện **toàn bộ ghi chú theo ngày kèm ảnh** (bấm ảnh để phóng to),
+  cuộn được); chuyển sang **Tiến độ** để xem board.
 - **Thông tin dự án**: **STT** (tự +1 và không trùng **trong từng danh sách** năm × Pre-sales/Post-sales — Pre-sales và
   Post-sales có dãy số riêng) và **Tên dự án** là bắt buộc; Tên SI, Hãng (chọn nhiều), Sale
-  (kèm Phòng ban), EU, Ngày bắt đầu, Ngày tới hạn, Priority không bắt buộc. File DWG/TXT nằm trong mục thu gọn
-  "File liên kết".
+  (kèm Phòng ban), EU, Ngày bắt đầu, Ngày tới hạn, Priority không bắt buộc. File liên kết (**.dwg, .txt, .docx, .pdf**)
+  nằm trong mục thu gọn "File liên kết".
 - **Thư mục dự án trên máy** (không bắt buộc): khi tạo dự án, tick **Tạo thư mục mới** thì chọn nơi lưu (lần sau mặc định
   nơi đã chọn) và app tự tạo thư mục `STT.Tên dự án_Tên SI_Hãng`, đổi tên theo khi sửa các trường đó; bỏ tick thì có thể
   **liên kết thư mục có sẵn** (app không tự đổi tên thư mục đó) hoặc để trống rồi đặt sau ở trang chi tiết (Tạo thư mục… /
@@ -126,7 +134,7 @@ Backup/Restore trong **Settings › Dữ liệu & Backup** xuất một file `.z
 - **Board 4 cột** Khẩn cấp / Cần chú ý / Mới tiếp nhận / Đã hoàn thành — trạng thái luôn tính tự động từ ngày tới hạn
   và ngưỡng. Kéo thả chỉ bật khi bấm *Chỉnh sửa Board* và chỉ dùng để hoàn thành / bỏ hoàn thành (có xác nhận).
 - **Tìm kiếm không dấu** (`thiet ke` ↔ `Thiết kế`), lọc nhiều EU/Tên SI/Hãng/Sale, sắp xếp; bộ lọc giữ trong phiên.
-- **Project Detail**: thông tin, thời hạn & ưu tiên, file DWG/TXT liên kết (mở bằng ứng dụng mặc định của Windows,
+- **Project Detail**: thông tin, thời hạn & ưu tiên, file liên kết .dwg/.txt/.docx/.pdf (mở bằng ứng dụng mặc định của Windows,
   cảnh báo khi mất liên kết, chọn lại/gỡ), **Ghi chú theo ngày** (mỗi ngày một mục, định dạng tự do: đậm/nghiêng/màu/
   danh sách/bảng, dán ảnh Ctrl+V; sửa được ghi chú ngày cũ), **Import .xlsx** chỉ lấy bảng **Thông tin các thiết bị**
   (tự nhận diện + mapping cột, preview, lưu mapping tái sử dụng, không ghi đè âm thầm).
@@ -193,4 +201,5 @@ Diễn giải thêm:
 - Warranty Record cần ít nhất *Model* hoặc *Case no*; Experience bắt buộc *Date* và *Event*.
 - Mật khẩu Warranty mã hóa bằng tài khoản Windows (DPAPI): restore backup sang **máy/tài khoản khác** sẽ không xem lại
   được mật khẩu cũ (các dữ liệu khác vẫn đầy đủ).
-- Mở `.dwg` phụ thuộc AutoCAD (hoặc ứng dụng tương thích) được đặt làm ứng dụng mặc định cho đuôi `.dwg`.
+- Mở `.dwg` phụ thuộc AutoCAD (hoặc ứng dụng tương thích) được đặt làm ứng dụng mặc định cho đuôi `.dwg`; `.docx` / `.pdf`
+  mở bằng Word / trình đọc PDF mặc định của Windows.

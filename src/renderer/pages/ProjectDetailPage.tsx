@@ -261,7 +261,7 @@ export function ProjectDetailPage() {
             ) : (
               <div className="row">
                 <FileText size={16} className="faint" />
-                <span className="muted small grow">Chưa liên kết file DWG/TXT.</span>
+                <span className="muted small grow">Chưa liên kết file (DWG, TXT, DOCX, PDF).</span>
                 <button className="btn sm" onClick={replaceFile}>
                   <Upload size={14} /> Chọn file
                 </button>

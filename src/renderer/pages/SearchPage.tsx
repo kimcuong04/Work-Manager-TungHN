@@ -94,7 +94,7 @@ export function SearchPage() {
                 <tr key={`${h.kind}:${h.id}`} className="clickable" onClick={() => openHit(h)}>
                   <td className="nowrap">
                     <span className="row" style={{ gap: 6 }}>
-                      <HitIcon kind={h.kind} /> {h.kind === 'freelance' ? 'Job Freelance' : h.workCategory ? CATEGORY_LABEL[h.workCategory] : 'Warranty'}
+                      <HitIcon kind={h.kind} /> {h.kind === 'freelance' ? 'Job Freelance' : h.kind === 'equipment' ? 'Kho thiết bị' : h.workCategory ? CATEGORY_LABEL[h.workCategory] : 'Warranty'}
                     </span>
                   </td>
                   <td style={{ fontWeight: 600, minWidth: 220 }}>{h.title}</td>

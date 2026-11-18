@@ -10,6 +10,7 @@ import { useProjectActions } from '../state/projectActions';
 import { useUi } from '../state/ui';
 import { MenuButton, PriorityBadge, SortHeader, StatusBadge, shortenPath, type MenuItem } from './common';
 import { useOpenFile } from './FileLink';
+import { ProjectNotesReadonly } from './ProjectNotes';
 import { SelectAllHeader, SelectCell, type Selection } from './Selection';
 import { SidePanel } from './Modal';
 
@@ -188,7 +189,7 @@ export function ProjectPreviewPanel({ p, onClose }: { p: ProjectView; onClose: (
       <span>{v || dash}</span>
     </>
   );
-  const note = latestNote(p);
+  const [noteCount, setNoteCount] = useState(0);
   return (
     <SidePanel
       title={p.label}
@@ -257,10 +258,15 @@ export function ProjectPreviewPanel({ p, onClose }: { p: ProjectView; onClose: (
             </button>,
           )}
       </div>
-      <h3 className="card-title" style={{ marginTop: 18, fontSize: 14 }}>
-        Ghi chú gần nhất
-      </h3>
-      {note ? <div className="pre small note-snippet">{note}</div> : <span className="faint small">Chưa có ghi chú.</span>}
+      <div className="row" style={{ marginTop: 18, marginBottom: 8 }}>
+        <h3 className="card-title grow" style={{ margin: 0, fontSize: 14 }}>
+          Ghi chú theo ngày {noteCount ? <span className="badge">{noteCount}</span> : null}
+        </h3>
+        <button className="btn sm ghost" onClick={() => navigate(`/project/${p.id}`)} title="Mở trang chi tiết để viết / sửa ghi chú">
+          <Pencil size={13} /> Sửa ghi chú
+        </button>
+      </div>
+      <ProjectNotesReadonly projectId={p.id} version={p.updatedAt} onCount={setNoteCount} />
     </SidePanel>
   );
 }

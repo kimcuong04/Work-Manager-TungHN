@@ -14,6 +14,7 @@ import {
   KeyRound,
   LayoutDashboard,
   LayoutGrid,
+  Package,
   Laptop,
   Lightbulb,
   Pencil,
@@ -375,6 +376,9 @@ export function Sidebar({ collapsed, onExpand }: { collapsed: boolean; onExpand:
           <NavLink to="/freelance" className={({ isActive }) => `nav-row ${isActive ? 'active' : ''}`} title="Job Freelance">
             <Laptop size={18} />
           </NavLink>
+          <NavLink to="/equipment" className={({ isActive }) => `nav-row ${isActive ? 'active' : ''}`} title="Kho thiết bị">
+            <Package size={18} />
+          </NavLink>
           <NavLink to="/experience" className={({ isActive }) => `nav-row ${isActive ? 'active' : ''}`} title="Experience">
             <Lightbulb size={18} />
           </NavLink>
@@ -424,6 +428,10 @@ export function Sidebar({ collapsed, onExpand }: { collapsed: boolean; onExpand:
           <JobNode key={j} jobType={j} openMap={openMap} toggle={toggle} />
         ))}
         <FreelanceNode />
+        <NavLink to="/equipment" className={({ isActive }) => `nav-row lvl-strong ${isActive ? 'active' : ''}`}>
+          <Package size={16} />
+          <span className="nav-label">Kho thiết bị</span>
+        </NavLink>
 
         <div className="sidebar-section">KINH NGHIỆM &amp; KIẾN THỨC</div>
         <ExperienceNode openMap={openMap} toggle={toggle} />

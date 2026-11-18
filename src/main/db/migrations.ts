@@ -524,6 +524,38 @@ function backfillHirersV6(db: Db) {
   }
 }
 
+/** v1.7: Kho thiết bị (thiết bị cho mượn) — bảng riêng, không thuộc Job Chính; log từng lần mượn/trả. */
+const V7 = `
+CREATE TABLE equipment_items (
+  id TEXT PRIMARY KEY,
+  stt INTEGER NOT NULL,
+  product_name TEXT NOT NULL,
+  brand_id TEXT REFERENCES brands(id),
+  serial_number TEXT NOT NULL DEFAULT '',
+  condition TEXT NOT NULL DEFAULT '',
+  current_borrow_date TEXT,
+  current_due_date TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+CREATE UNIQUE INDEX ux_equipment_stt ON equipment_items(stt);
+${IMAGE_TABLE('equipment_images', 'equipment_id', 'equipment_items')}
+
+CREATE TABLE equipment_loans (
+  id TEXT PRIMARY KEY,
+  equipment_id TEXT NOT NULL REFERENCES equipment_items(id) ON DELETE CASCADE,
+  si_id TEXT REFERENCES si_partners(id),
+  salesperson_id TEXT REFERENCES salespersons(id),
+  borrow_date TEXT NOT NULL,
+  return_date TEXT,
+  reason TEXT NOT NULL DEFAULT '',
+  return_condition TEXT NOT NULL DEFAULT '',
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+CREATE INDEX idx_equipment_loans_item ON equipment_loans(equipment_id);
+`;
+
 export interface Migration {
   version: number;
   up: (db: Db) => void;
@@ -575,6 +607,10 @@ export const MIGRATIONS: Migration[] = [
       db.exec(V6);
       backfillHirersV6(db);
     },
+  },
+  {
+    version: 7,
+    up: (db) => db.exec(V7),
   },
 ];
 

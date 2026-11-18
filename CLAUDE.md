@@ -37,6 +37,10 @@ App tự cập nhật trên máy user, nên mọi thay đổi phải giữ đư�
 10. **Thư mục dự án trên máy**: `projects.folder_auto = 0` là thư mục có sẵn do người dùng liên kết — không bao giờ
    tự đổi tên/chuyển. Ngoài ra: chỉ tạo/đổi tên/chuyển trong nơi người dùng đã chọn qua hộp thoại; xóa thì chuyển vào
    Thùng rác (`shell.trashItem`), không xóa vĩnh viễn. E2E không được ghi vào clipboard thật của Windows.
+11. **Kho thiết bị** (schema 7): `equipment_items` (+ `equipment_images`) và `equipment_loans` (log mượn/trả, xóa dây
+   chuyền theo thiết bị) — không thuộc `job_years`. Hãng / Tên SI / Sale dùng chung danh mục Job Chính, nên mọi cột
+   tham chiếu danh mục phải khai báo trong `SPECS` của `src/main/services/master.ts`. Tình trạng thiết bị chỉ tự đổi trong
+   `saveEquipmentLoan` (lần trả mới nhất có ghi Tình trạng khi trả); ngày mượn/hẹn trả hiện tại chỉ đổi khi người dùng tick.
 
 ## Phát hành bản cập nhật
 

@@ -733,7 +733,9 @@ function DataManagement() {
               <br />
               Gồm: {b.counts.projects ?? 0} Project · {b.counts.warranty ?? 0} Warranty · {b.counts.experience ?? 0} Experience
               {b.counts.knowledge !== undefined && ` · ${b.counts.knowledge} Kiến thức`}
-              {b.counts.calendar !== undefined && ` · ${b.counts.calendar} sự kiện Calendar`} · {b.counts.images ?? 0} ảnh
+              {b.counts.calendar !== undefined && ` · ${b.counts.calendar} sự kiện Calendar`}
+              {b.counts.freelance !== undefined && ` · ${b.counts.freelance} Job Freelance`}
+              {b.counts.equipment !== undefined && ` · ${b.counts.equipment} thiết bị trong Kho`} · {b.counts.images ?? 0} ảnh
             </div>
             <div className="alert warn">
               <AlertTriangle size={16} />

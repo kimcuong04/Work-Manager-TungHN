@@ -43,7 +43,9 @@ export const MASTER_LABEL: Record<MasterKind, string> = {
   freelanceHirers: 'Bên thuê',
 };
 
-export const LINK_FILE_EXTENSIONS = ['dwg', 'txt'];
+/** File liên kết của dự án: bản vẽ AutoCAD, văn bản, Word, PDF (chỉ lưu đường dẫn, mở bằng ứng dụng mặc định). */
+export const LINK_FILE_EXTENSIONS = ['dwg', 'txt', 'docx', 'pdf'];
+export const LINK_FILE_LABEL = '.dwg, .txt, .docx, .pdf';
 export const IMAGE_EXTENSIONS = ['jpg', 'jpeg', 'png', 'webp'];
 
 export interface AppSettings {
@@ -437,6 +439,72 @@ export interface WarrantyInput {
   images: ImageRef[];
 }
 
+/** Một lần cho mượn / trả thiết bị trong Kho thiết bị (log theo ngày). */
+export interface EquipmentLoan {
+  id: string;
+  equipmentId: string;
+  siId: string | null;
+  siName: string | null;
+  salespersonId: string | null;
+  salespersonName: string | null;
+  salespersonDepartment: string | null;
+  borrowDate: string;
+  /** null = chưa trả (đang mượn). */
+  returnDate: string | null;
+  reason: string;
+  returnCondition: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** Thiết bị trong Kho thiết bị — quản lý riêng, không thuộc Job Chính. STT duy nhất trong cả kho. */
+export interface EquipmentItem {
+  id: string;
+  stt: number;
+  productName: string;
+  brandId: string | null;
+  brandName: string | null;
+  serialNumber: string;
+  /** Nhập tay; tự lấy theo "Tình trạng khi trả" khi ghi lần trả mới nhất. */
+  condition: string;
+  currentBorrowDate: string | null;
+  currentDueDate: string | null;
+  images: ImageRef[];
+  /** Lịch sử mượn/trả, mới nhất trước (theo Ngày mượn). */
+  loans: EquipmentLoan[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface EquipmentInput {
+  /** undefined = tự lấy STT lớn nhất + 1; null = người dùng bỏ trống (báo lỗi). */
+  stt?: number | null;
+  productName: string;
+  brandId: string | null;
+  serialNumber: string;
+  condition: string;
+  currentBorrowDate: string | null;
+  currentDueDate: string | null;
+  images: ImageRef[];
+}
+
+export interface EquipmentLoanInput {
+  siId: string | null;
+  salespersonId: string | null;
+  borrowDate: string;
+  returnDate: string | null;
+  reason: string;
+  returnCondition: string;
+}
+
+/** Cập nhật thông tin "hiện tại" của thiết bị khi lưu một lần mượn/trả. */
+export interface EquipmentLoanOptions {
+  /** Lần mượn chưa trả: đặt Ngày mượn hiện tại = Ngày mượn của lần này và Ngày hẹn trả hiện tại = giá trị này. */
+  setCurrent?: { dueDate: string | null };
+  /** Lần mượn đã trả: xóa Ngày mượn / Ngày hẹn trả hiện tại (thiết bị đã về kho). */
+  clearCurrent?: boolean;
+}
+
 export interface ExperienceRecord {
   id: string;
   brandId: string;
@@ -575,7 +643,7 @@ export interface SearchQuery {
 }
 
 export interface SearchHit {
-  kind: 'project' | 'warranty' | 'freelance';
+  kind: 'project' | 'warranty' | 'freelance' | 'equipment';
   id: string;
   title: string;
   subtitle: string;

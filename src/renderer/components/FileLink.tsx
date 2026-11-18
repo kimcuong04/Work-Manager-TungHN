@@ -115,7 +115,7 @@ export function FileLinkField({ value, onChange }: { value: LinkedFile | null; o
     return (
       <div className="row">
         <button type="button" className="btn" onClick={pick}>
-          <Upload size={15} /> Chọn file .dwg / .txt
+          <Upload size={15} /> Chọn file .dwg / .txt / .docx / .pdf
         </button>
         <span className="field-hint">Chỉ lưu đường dẫn, không copy hay upload file.</span>
       </div>

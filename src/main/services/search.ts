@@ -116,8 +116,36 @@ export function globalSearch(ctx: Ctx, q: SearchQuery): SearchHit[] {
     }
   }
 
+  if (q.mode === 'si' || q.mode === 'serial' || q.mode === 'brand' || q.mode === 'model') {
+    const items = ctx.db.all<{ id: string; stt: number; product_name: string; serial_number: string; current_borrow_date: string | null; brand_name: string | null }>(
+      'SELECT e.id, e.stt, e.product_name, e.serial_number, e.current_borrow_date, b.name AS brand_name FROM equipment_items e LEFT JOIN brands b ON b.id = e.brand_id',
+    );
+    const sis = new Map<string, string[]>();
+    if (q.mode === 'si')
+      for (const r of ctx.db.all<{ equipment_id: string; name: string }>('SELECT DISTINCT l.equipment_id, si.name FROM equipment_loans l JOIN si_partners si ON si.id = l.si_id'))
+        sis.set(r.equipment_id, [...(sis.get(r.equipment_id) ?? []), r.name]);
+    for (const r of items) {
+      if (!inDate(r.current_borrow_date)) continue;
+      const values = q.mode === 'si' ? sis.get(r.id) ?? [] : [q.mode === 'serial' ? r.serial_number : q.mode === 'brand' ? r.brand_name : r.product_name];
+      const m = values.filter((v): v is string => !!v && hit([v]));
+      if (!m.length) continue;
+      out.push({
+        kind: 'equipment',
+        id: r.id,
+        title: `${r.stt}. ${r.product_name}`,
+        subtitle: `Kho thiết bị${r.brand_name ? ` · ${r.brand_name}` : ''}${r.serial_number ? ` · SN ${r.serial_number}` : ''}`,
+        matched: m.join(', '),
+        date: r.current_borrow_date,
+        jobType: 'MAIN',
+        jobYearId: '',
+        yearLabel: '',
+        workCategory: null,
+      });
+    }
+  }
+
   if (q.mode === 'name') {
-    const jobs = ctx.db.all<{ id: string; stt: number; project_name: string; hirer: string | null; start_date: string | null; status_name: string | null }>(
+    const jobs =ctx.db.all<{ id: string; stt: number; project_name: string; hirer: string | null; start_date: string | null; status_name: string | null }>(
       'SELECT f.id, f.stt, f.project_name, h.name AS hirer, f.start_date, s.name AS status_name FROM freelance_jobs f LEFT JOIN freelance_statuses s ON s.id = f.status_id LEFT JOIN freelance_hirers h ON h.id = f.hirer_id',
     );
     for (const r of jobs) {

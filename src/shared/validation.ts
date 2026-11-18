@@ -1,7 +1,11 @@
 import { isValidISODate } from './dates';
 import {
   CALENDAR_COLORS,
+  LINK_FILE_EXTENSIONS,
+  LINK_FILE_LABEL,
   type CalendarEventInput,
+  type EquipmentInput,
+  type EquipmentLoanInput,
   type ExperienceInput,
   type FreelanceInput,
   type KnowledgeInput,
@@ -45,8 +49,8 @@ export function validateProjectInput(input: ProjectInput): FieldErrors {
   else if (name.length > LIMITS.projectName) e.projectName = `Tối đa ${LIMITS.projectName} ký tự.`;
   if (!Number.isInteger(input.priorityPoint) || input.priorityPoint < 1 || input.priorityPoint > 5)
     e.priorityPoint = 'Priority Point phải từ 1 đến 5.';
-  if (input.fileExtension && !['dwg', 'txt'].includes(input.fileExtension.toLowerCase()))
-    e.file = 'Chỉ hỗ trợ file .dwg hoặc .txt.';
+  if (input.fileExtension && !LINK_FILE_EXTENSIONS.includes(input.fileExtension.toLowerCase()))
+    e.file = `Chỉ hỗ trợ file ${LINK_FILE_LABEL}.`;
   return e;
 }
 
@@ -133,6 +137,34 @@ export function validateWarrantyInput(input: WarrantyInput): FieldErrors {
   if (input.password !== undefined) checkLen(e, 'password', input.password, LIMITS.shortText);
   for (const k of ['customerReport', 'inspection', 'result', 'resolution'] as const)
     checkLen(e, k, input[k], LIMITS.longText);
+  return e;
+}
+
+/** Kho thiết bị: STT và Tên sp là bắt buộc; các ngày nếu có thì phải hợp lệ. */
+export function validateEquipmentInput(input: EquipmentInput): FieldErrors {
+  const e: FieldErrors = {};
+  if (input.stt === null) e.stt = 'Bắt buộc nhập STT.';
+  else if (input.stt !== undefined && !(Number.isInteger(input.stt) && input.stt >= 1 && input.stt <= 999999)) e.stt = 'STT phải là số nguyên dương.';
+  if (!cleanName(input.productName ?? '')) e.productName = 'Bắt buộc nhập Tên sp.';
+  checkLen(e, 'productName', input.productName ?? '', LIMITS.projectName);
+  checkLen(e, 'serialNumber', input.serialNumber ?? '', LIMITS.shortText);
+  checkLen(e, 'condition', input.condition ?? '', LIMITS.longText);
+  if (input.currentBorrowDate && !isValidISODate(input.currentBorrowDate)) e.currentBorrowDate = 'Ngày không hợp lệ (dd/mm/yyyy).';
+  if (input.currentDueDate && !isValidISODate(input.currentDueDate)) e.currentDueDate = 'Ngày không hợp lệ (dd/mm/yyyy).';
+  else if (input.currentDueDate && input.currentBorrowDate && isValidISODate(input.currentBorrowDate) && input.currentDueDate < input.currentBorrowDate)
+    e.currentDueDate = 'Ngày hẹn trả phải lớn hơn hoặc bằng Ngày mượn.';
+  return e;
+}
+
+/** Một lần mượn/trả: bắt buộc Ngày mượn; Ngày trả (nếu có) không trước Ngày mượn. */
+export function validateEquipmentLoanInput(input: EquipmentLoanInput): FieldErrors {
+  const e: FieldErrors = {};
+  if (!input.borrowDate) e.borrowDate = 'Bắt buộc nhập Ngày mượn.';
+  else if (!isValidISODate(input.borrowDate)) e.borrowDate = 'Ngày không hợp lệ (dd/mm/yyyy).';
+  if (input.returnDate && !isValidISODate(input.returnDate)) e.returnDate = 'Ngày không hợp lệ (dd/mm/yyyy).';
+  else if (input.returnDate && input.borrowDate && input.returnDate < input.borrowDate) e.returnDate = 'Ngày trả phải lớn hơn hoặc bằng Ngày mượn.';
+  checkLen(e, 'reason', input.reason ?? '', LIMITS.longText);
+  checkLen(e, 'returnCondition', input.returnCondition ?? '', LIMITS.longText);
   return e;
 }
 

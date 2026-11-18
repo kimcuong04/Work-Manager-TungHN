@@ -13,6 +13,7 @@ import type {
   ProjectSaveOptions,
 } from '../../shared/types';
 import { textToNoteHtml } from '../../shared/noteHtml';
+import { LINK_FILE_EXTENSIONS, LINK_FILE_LABEL } from '../../shared/types';
 import { LIMITS, fileExtension, hasErrors, validateProjectInput } from '../../shared/validation';
 import { AppError, now, str, strOrNull, todayOf, type Ctx } from '../context';
 import { assertDirectory, ensureProjectFolder, moveProjectFolder, removeIfEmpty, undoFolderMove } from '../integration/folders';
@@ -157,7 +158,7 @@ function normalizeInput(ctx: Ctx, input: ProjectInput, currentId?: string): Norm
   let ext = strOrNull(input.fileExtension);
   if (filePath) {
     ext = fileExtension(filePath);
-    if (ext !== 'dwg' && ext !== 'txt') throw new AppError('Chỉ hỗ trợ file .dwg hoặc .txt.');
+    if (!LINK_FILE_EXTENSIONS.includes(ext)) throw new AppError(`Chỉ hỗ trợ file ${LINK_FILE_LABEL}.`);
     fileName = fileName || filePath.split(/[\\/]/).pop() || filePath;
   } else {
     fileName = null;

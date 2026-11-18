@@ -13,15 +13,16 @@ import { AppError, now, str, strOrNull, type Ctx } from '../context';
 import { assertStorageKey, deleteImageFiles, imageExists } from '../integration/images';
 import { getYear } from './master';
 
-type ImageTable =
+export type ImageTable =
   | { table: 'warranty_images'; owner: 'warranty_record_id' }
+  | { table: 'equipment_images'; owner: 'equipment_id' }
   | { table: 'experience_images'; owner: 'experience_id' }
   | { table: 'knowledge_images'; owner: 'knowledge_id' };
 const WARRANTY_IMG: ImageTable = { table: 'warranty_images', owner: 'warranty_record_id' };
 const EXPERIENCE_IMG: ImageTable = { table: 'experience_images', owner: 'experience_id' };
 const KNOWLEDGE_IMG: ImageTable = { table: 'knowledge_images', owner: 'knowledge_id' };
 
-function loadImages(ctx: Ctx, t: ImageTable, ownerIds: string[]): Map<string, ImageRef[]> {
+export function loadImages(ctx: Ctx, t: ImageTable, ownerIds: string[]): Map<string, ImageRef[]> {
   const map = new Map<string, ImageRef[]>();
   if (!ownerIds.length) return map;
   const rows = ctx.db.all<Record<string, any>>(`SELECT * FROM ${t.table} ORDER BY sort_order, created_at`);
@@ -37,7 +38,7 @@ function loadImages(ctx: Ctx, t: ImageTable, ownerIds: string[]): Map<string, Im
 }
 
 /** Đồng bộ danh sách ảnh; trả về các storage key bị bỏ để xóa file sau khi commit. */
-function syncImages(ctx: Ctx, t: ImageTable, ownerId: string, images: ImageRef[]): string[] {
+export function syncImages(ctx: Ctx, t: ImageTable, ownerId: string, images: ImageRef[]): string[] {
   if (!Array.isArray(images)) throw new AppError('Danh sách ảnh không hợp lệ.');
   const existing = ctx.db.all<{ storage_key: string }>(`SELECT storage_key FROM ${t.table} WHERE ${t.owner} = ?`, [ownerId]);
   const keep = new Set(images.map((i) => i.storageKey));

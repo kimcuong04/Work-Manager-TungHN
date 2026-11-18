@@ -563,7 +563,7 @@ export function ProjectForm({
 
         <section className="form-section">
           <button type="button" className="section-toggle" onClick={() => setMoreOpen((o) => !o)} aria-expanded={moreOpen}>
-            <ChevronDown size={15} className={moreOpen ? '' : 'rot-90'} /> File liên kết (DWG/TXT)
+            <ChevronDown size={15} className={moreOpen ? '' : 'rot-90'} /> File liên kết (DWG/TXT/DOCX/PDF)
           </button>
           {moreOpen && (
             <div className="stack" style={{ marginTop: 12 }}>

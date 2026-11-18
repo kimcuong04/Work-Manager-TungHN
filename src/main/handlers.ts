@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import type { Api } from '../shared/api';
-import { IMAGE_EXTENSIONS, LINK_FILE_EXTENSIONS } from '../shared/types';
+import { IMAGE_EXTENSIONS, LINK_FILE_EXTENSIONS, LINK_FILE_LABEL } from '../shared/types';
 import { fileExtension } from '../shared/validation';
 import { formatDateTime } from '../shared/dates';
 import { resolveWebLink } from '../shared/webLink';
@@ -12,6 +12,7 @@ import { imagePath, importImageBuffer, importImages, storageUsage } from './inte
 import { inspectBackup, restoreBackup, writeBackup } from './services/backup';
 import { bulkImport } from './services/bulkImport';
 import * as calendar from './services/calendar';
+import * as equipment from './services/equipment';
 import * as freelance from './services/freelance';
 import * as master from './services/master';
 import * as notes from './services/notes';
@@ -204,12 +205,12 @@ export function createHandlers(ctx: Ctx, desktop: Desktop): Handlers {
 
     pickLinkFile: async () => {
       const [file] = await desktop.pickFiles({
-        title: 'Chọn file DWG/TXT',
-        filters: [{ name: 'Bản vẽ AutoCAD / Văn bản (*.dwg, *.txt)', extensions: LINK_FILE_EXTENSIONS }],
+        title: 'Chọn file đính kèm',
+        filters: [{ name: 'Bản vẽ AutoCAD / Văn bản / Word / PDF (*.dwg, *.txt, *.docx, *.pdf)', extensions: LINK_FILE_EXTENSIONS }],
       });
       if (!file) return null;
       const ext = fileExtension(file);
-      if (!LINK_FILE_EXTENSIONS.includes(ext)) throw new AppError('Chỉ hỗ trợ file .dwg hoặc .txt.');
+      if (!LINK_FILE_EXTENSIONS.includes(ext)) throw new AppError(`Chỉ hỗ trợ file ${LINK_FILE_LABEL}.`);
       return { path: file, name: path.basename(file), extension: ext };
     },
     checkFile: (p) => checkFile(p),
@@ -220,7 +221,7 @@ export function createHandlers(ctx: Ctx, desktop: Desktop): Handlers {
       const err = await desktop.openPath(p);
       if (err)
         throw new AppError(
-          `Không mở được file: ${err}. Kiểm tra đã cài và đặt ứng dụng mặc định cho đuôi .${fileExtension(p)} (ví dụ AutoCAD cho .dwg).`,
+          `Không mở được file: ${err}. Kiểm tra đã cài và đặt ứng dụng mặc định cho đuôi .${fileExtension(p)} (ví dụ AutoCAD cho .dwg, Word cho .docx).`,
         );
     },
     showFileInFolder: (p) => {
@@ -256,6 +257,18 @@ export function createHandlers(ctx: Ctx, desktop: Desktop): Handlers {
       return records.deleteWarranties(ctx, ids.map(String));
     },
     revealWarrantyPassword: (id) => records.revealWarrantyPassword(ctx, id),
+
+    listEquipment: () => equipment.listEquipment(ctx),
+    nextEquipmentStt: () => equipment.nextEquipmentStt(ctx),
+    createEquipment: (input) => equipment.createEquipment(ctx, input),
+    updateEquipment: (id, input) => equipment.updateEquipment(ctx, id, input),
+    deleteEquipment: (id) => equipment.deleteEquipment(ctx, id),
+    deleteEquipments: (ids) => {
+      if (!Array.isArray(ids)) throw new AppError('Danh sách cần xóa không hợp lệ.');
+      return equipment.deleteEquipments(ctx, ids.map(String));
+    },
+    saveEquipmentLoan: (equipmentId, loanId, input, opts) => equipment.saveEquipmentLoan(ctx, String(equipmentId), loanId ? String(loanId) : null, input, opts ?? {}),
+    deleteEquipmentLoan: (loanId) => equipment.deleteEquipmentLoan(ctx, String(loanId)),
 
     pickImages: async () => {
       const files = await desktop.pickFiles({

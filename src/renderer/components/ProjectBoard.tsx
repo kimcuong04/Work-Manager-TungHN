@@ -276,7 +276,7 @@ function DeleteProjectsDialog({ list, onClose, onDone }: { list: ProjectView[]; 
           ))}
           {list.length > 12 && <li className="faint">… và {list.length - 12} dự án khác</li>}
         </ul>
-        <div className="muted small">Ghi chú, dữ liệu Excel đã import và lịch của các dự án này cũng bị xóa. File DWG/TXT liên kết không bị ảnh hưởng.</div>
+        <div className="muted small">Ghi chú, dữ liệu Excel đã import và lịch của các dự án này cũng bị xóa. File liên kết (DWG/TXT/DOCX/PDF) không bị ảnh hưởng.</div>
         {withFolder > 0 && (
           <div className="alert info small">
             <div>

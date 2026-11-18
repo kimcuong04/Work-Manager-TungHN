@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { useLocation, useNavigate } from 'react-router';
-import { FolderKanban, Laptop, Funnel, Search, ShieldCheck, X } from 'lucide-react';
+import { FolderKanban, Laptop, Funnel, Package, Search, ShieldCheck, X } from 'lucide-react';
 import { formatDate } from '../../shared/dates';
 import { SEARCH_MODE_LABEL, type SearchHit, type SearchMode } from '../../shared/types';
 import { api } from '../api';
@@ -49,9 +49,9 @@ export function useSearchState(): [GlobalSearchState, (p: Partial<GlobalSearchSt
 export const SEARCH_PLACEHOLDER: Record<SearchMode, string> = {
   name: 'Tìm theo STT / tên dự án (gõ không dấu cũng được)…',
   si: 'Tìm theo tên SI…',
-  serial: 'Tìm Serial number trong Warranty…',
+  serial: 'Tìm Serial number trong Warranty và Kho thiết bị…',
   brand: 'Tìm theo Hãng…',
-  model: 'Tìm Model / mã thiết bị trong bảng thiết bị…',
+  model: 'Tìm Model / mã thiết bị trong bảng thiết bị và Tên sp trong Kho thiết bị…',
 };
 
 /** Mở đúng nơi chứa kết quả: dự án / job Freelance → trang chi tiết; Warranty → bảng Warranty của năm đó với bản ghi được chọn. */
@@ -62,11 +62,13 @@ export function useOpenHit() {
       ? navigate(`/project/${h.id}`)
       : h.kind === 'freelance'
         ? navigate(`/freelance/${h.id}`)
-        : navigate(nodePath(h.jobType, h.jobYearId, 'WARRANTY'), { state: { select: h.id } });
+        : h.kind === 'equipment'
+          ? navigate('/equipment', { state: { select: h.id } })
+          : navigate(nodePath(h.jobType, h.jobYearId, 'WARRANTY'), { state: { select: h.id } });
 }
 
 export function HitIcon({ kind }: { kind: SearchHit['kind'] }) {
-  return kind === 'project' ? <FolderKanban size={15} /> : kind === 'freelance' ? <Laptop size={15} /> : <ShieldCheck size={15} />;
+  return kind === 'project' ? <FolderKanban size={15} /> : kind === 'freelance' ? <Laptop size={15} /> : kind === 'equipment' ? <Package size={15} /> : <ShieldCheck size={15} />;
 }
 
 export function SearchDateFilter({ st, onChange }: { st: GlobalSearchState; onChange: (p: Partial<GlobalSearchState>) => void }) {
