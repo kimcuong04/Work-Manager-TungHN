@@ -175,6 +175,7 @@ export interface ChangedProject {
   dueDate: string | null;
   priorityPoint: number;
   files: { name: string }[];
+  erpLink?: string;
 }
 
 /** Tóm tắt những gì đổi giữa bản cũ và bản mới của dự án, mỗi dòng một trường. */
@@ -193,6 +194,7 @@ export function describeProjectChanges(before: Project, after: ChangedProject, l
   cmp('Ngày tới hạn', formatDate(before.dueDate), formatDate(after.dueDate));
   if (before.priorityPoint !== after.priorityPoint) lines.push(`Priority: ${before.priorityPoint} → ${after.priorityPoint}`);
   cmp('File liên kết', before.files.map((f) => f.name).join(', '), after.files.map((f) => f.name).join(', '));
+  if (after.erpLink !== undefined) cmp('Link ERP', before.erpLink ?? '', after.erpLink);
   return lines;
 }
 

@@ -686,6 +686,115 @@ function backfillImportTabsV13(db: Db) {
   }
 }
 
+/**
+ * v1.14: Password có Ghi chú (chèn được link); dự án Pre/Post-sales có Link ERP; Warranty có Dự án (dự án Pre/Post-sales
+ * hoặc danh mục "Dự án (Warranty)"); Job Freelance có Người đồng hành + các lần thanh toán; mục Sự kiện tạm thời; Kiến thức có bảng cố định "Website - App - Địa điểm" và cho ẩn Hãng khỏi
+ * Kiến thức (Hãng còn dùng ở nơi khác thì chỉ ẩn, không xóa khỏi danh mục). To-do "Vô thời hạn" dùng todo_date = ''.
+ */
+const V14 = `
+ALTER TABLE password_entries ADD COLUMN note TEXT NOT NULL DEFAULT '';
+ALTER TABLE projects ADD COLUMN erp_link TEXT NOT NULL DEFAULT '';
+ALTER TABLE brands ADD COLUMN knowledge_hidden INTEGER NOT NULL DEFAULT 0;
+CREATE TABLE knowledge_places (
+  id TEXT PRIMARY KEY,
+  category TEXT CHECK (category IN ('WEBSITE','APP','PLACE')),
+  name TEXT NOT NULL,
+  note TEXT NOT NULL DEFAULT '',
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+CREATE INDEX idx_knowledge_places_created ON knowledge_places(created_at);
+
+${MASTER_TABLE('warranty_projects')}
+ALTER TABLE warranty_records ADD COLUMN project_id TEXT REFERENCES projects(id) ON DELETE SET NULL;
+ALTER TABLE warranty_records ADD COLUMN project_entry_id TEXT REFERENCES warranty_projects(id) ON DELETE SET NULL;
+
+${MASTER_TABLE('freelance_companions')}
+CREATE TABLE freelance_job_companions (
+  job_id TEXT NOT NULL REFERENCES freelance_jobs(id) ON DELETE CASCADE,
+  companion_id TEXT NOT NULL REFERENCES freelance_companions(id) ON DELETE CASCADE,
+  sort_order INTEGER NOT NULL DEFAULT 0,
+  PRIMARY KEY (job_id, companion_id)
+);
+CREATE INDEX idx_fl_job_companions_companion ON freelance_job_companions(companion_id);
+CREATE TABLE freelance_companion_payments (
+  id TEXT PRIMARY KEY,
+  job_id TEXT NOT NULL REFERENCES freelance_jobs(id) ON DELETE CASCADE,
+  companion_id TEXT NOT NULL REFERENCES freelance_companions(id) ON DELETE CASCADE,
+  paid_date TEXT NOT NULL,
+  amount INTEGER NOT NULL,
+  note TEXT NOT NULL DEFAULT '',
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+CREATE INDEX idx_fl_payments_job ON freelance_companion_payments(job_id, companion_id, paid_date);
+CREATE INDEX idx_fl_payments_companion ON freelance_companion_payments(companion_id);
+${IMAGE_TABLE('freelance_payment_images', 'payment_id', 'freelance_companion_payments')}
+
+CREATE TABLE temp_events (
+  id TEXT PRIMARY KEY,
+  stt INTEGER NOT NULL,
+  name TEXT NOT NULL,
+  event_date TEXT,
+  brand_id TEXT REFERENCES brands(id) ON DELETE SET NULL,
+  note TEXT NOT NULL DEFAULT '',
+  folder_path TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+CREATE UNIQUE INDEX ux_temp_events_stt ON temp_events(stt);
+CREATE TABLE temp_event_files (
+  id TEXT PRIMARY KEY,
+  event_id TEXT NOT NULL REFERENCES temp_events(id) ON DELETE CASCADE,
+  file_path TEXT NOT NULL,
+  file_name TEXT NOT NULL,
+  file_extension TEXT NOT NULL,
+  sort_order INTEGER NOT NULL DEFAULT 0,
+  created_at TEXT NOT NULL
+);
+CREATE INDEX idx_temp_event_files_event ON temp_event_files(event_id, sort_order);
+CREATE TABLE temp_event_notes (
+  id TEXT PRIMARY KEY,
+  event_id TEXT NOT NULL REFERENCES temp_events(id) ON DELETE CASCADE,
+  note_date TEXT NOT NULL,
+  content_html TEXT NOT NULL,
+  content_text TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+CREATE UNIQUE INDEX ux_temp_event_notes_day ON temp_event_notes(event_id, note_date);
+${IMAGE_TABLE('temp_event_note_images', 'note_id', 'temp_event_notes')}
+CREATE TABLE temp_event_imports (
+  id TEXT PRIMARY KEY,
+  event_id TEXT NOT NULL REFERENCES temp_events(id) ON DELETE CASCADE,
+  source_file_name TEXT NOT NULL,
+  source_path TEXT,
+  sheet_names TEXT NOT NULL,
+  imported_at TEXT NOT NULL,
+  status TEXT NOT NULL,
+  tab_name TEXT NOT NULL DEFAULT '',
+  sort_order INTEGER NOT NULL DEFAULT 0
+);
+CREATE INDEX idx_temp_event_imports_event ON temp_event_imports(event_id, sort_order);
+CREATE TABLE temp_event_imported_items (
+  id TEXT PRIMARY KEY,
+  import_id TEXT NOT NULL REFERENCES temp_event_imports(id) ON DELETE CASCADE,
+  model TEXT,
+  brand TEXT,
+  description TEXT,
+  sort_order INTEGER NOT NULL DEFAULT 0
+);
+CREATE INDEX idx_temp_event_items_import ON temp_event_imported_items(import_id, sort_order);
+`;
+
+/**
+ * v1.14: đảo thang Priority Point — trước đây 1 là cao nhất, nay 5 là cao nhất. Đổi giá trị cũ (p → 6 − p) để dự án
+ * giữ đúng mức ưu tiên người dùng đã chọn.
+ */
+const V15 = `
+UPDATE projects SET priority_point = 6 - priority_point WHERE priority_point BETWEEN 1 AND 5;
+`;
+
 const DEFAULT_STATUS_COLORS: Record<string, string> = {
   'mới nhận': '#3b82f6',
   'đang làm': '#f59e0b',
@@ -831,6 +940,14 @@ export const MIGRATIONS: Migration[] = [
       db.exec(V13);
       backfillImportTabsV13(db);
     },
+  },
+  {
+    version: 14,
+    up: (db) => db.exec(V14),
+  },
+  {
+    version: 15,
+    up: (db) => db.exec(V15),
   },
 ];
 

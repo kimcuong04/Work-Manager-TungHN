@@ -8,7 +8,8 @@ import type { FreelanceInput, FreelanceJob, MasterKind } from '../../shared/type
 import { hasErrors, validateFreelanceInput } from '../../shared/validation';
 import { api } from '../api';
 import { BulkImportWizard } from '../components/BulkImportWizard';
-import { Breadcrumbs, DateInput, EmptyState, Field, MultiSelect, SearchInput, SearchableSelect, SortHeader } from '../components/common';
+import { Breadcrumbs, DateInput, EmptyState, Field, MultiSearchSelect, MultiSelect, SearchInput, SearchableSelect, SortHeader } from '../components/common';
+import { CompanionSection } from '../components/CompanionPayments';
 import { Modal } from '../components/Modal';
 import { SelectAllHeader, SelectCell, SelectToggleButton, SelectionBar, useSelection } from '../components/Selection';
 import { DayNotes, type NoteSource } from '../components/ProjectNotes';
@@ -78,7 +79,15 @@ export function FreelanceForm({ job, onClose, onSaved }: { job?: FreelanceJob; o
   const isEdit = !!job;
   const [initial] = useState<FreelanceInput>(() =>
     job
-      ? { stt: job.stt, projectName: job.projectName, hirerId: job.hirerId, startDate: job.startDate, statusId: job.statusId, paymentStatusId: job.paymentStatusId }
+      ? {
+          stt: job.stt,
+          projectName: job.projectName,
+          hirerId: job.hirerId,
+          startDate: job.startDate,
+          statusId: job.statusId,
+          paymentStatusId: job.paymentStatusId,
+          companionIds: job.companions.map((c) => c.id),
+        }
       : {
           stt: Math.max(0, ...freelance.map((j) => j.stt)) + 1,
           projectName: '',
@@ -86,6 +95,7 @@ export function FreelanceForm({ job, onClose, onSaved }: { job?: FreelanceJob; o
           startDate: today,
           statusId: masters.freelanceStatuses.find((s) => s.isActive)?.id ?? null,
           paymentStatusId: masters.freelancePaymentStatuses.find((s) => s.isActive)?.id ?? null,
+          companionIds: [],
         },
   );
   const [form, setForm] = useState<FreelanceInput>(initial);
@@ -253,6 +263,28 @@ export function FreelanceForm({ job, onClose, onSaved }: { job?: FreelanceJob; o
               />
             </Field>
           </div>
+          <div style={{ marginTop: 14 }}>
+            <Field label="Người đồng hành" hint="Không bắt buộc, chọn được nhiều người. Các lần thanh toán cho từng người ghi ở trang chi tiết job.">
+              <MultiSearchSelect
+                options={masters.freelanceCompanions.map((m) => ({ id: m.id, name: m.name, inactive: !m.isActive }))}
+                value={form.companionIds ?? []}
+                onChange={(ids) => set('companionIds', ids)}
+                onCreate={async (name) => {
+                  try {
+                    const item = await api.createMaster('freelanceCompanions', name);
+                    await refresh('masters');
+                    toast('success', `Đã thêm Người đồng hành "${item.name}".`);
+                    return item.id;
+                  } catch (e) {
+                    toastError(e);
+                    return null;
+                  }
+                }}
+                createLabel="Thêm người đồng hành"
+                placeholder="Chọn hoặc thêm người đồng hành"
+              />
+            </Field>
+          </div>
         </section>
 
         <section className="form-section">
@@ -313,7 +345,7 @@ export function FreelanceListPage() {
   const tableRef = useTableResize('freelance');
 
   const indexed = useMemo(
-    () => freelance.map((j) => ({ j, hay: buildHaystack([String(j.stt), j.projectName, j.hirer, j.statusName, j.paymentStatusName, j.note]) })),
+    () => freelance.map((j) => ({ j, hay: buildHaystack([String(j.stt), j.projectName, j.hirer, j.statusName, j.paymentStatusName, j.note, ...j.companions.map((c) => c.name)]) })),
     [freelance],
   );
   const yearOpts = useMemo(
@@ -459,6 +491,8 @@ export function FreelanceListPage() {
                     onClick={() => setSort({ key: c.key, dir: sort.key === c.key && sort.dir === 'asc' ? 'desc' : 'asc' })}
                   />
                 ))}
+                <th>Người đồng hành</th>
+                <th title="Số lần đã thanh toán cho người đồng hành (theo số lần đã ghi)">TT đồng hành</th>
                 <th>Ghi chú gần nhất</th>
                 <th style={{ width: 1 }} data-col="__actions" />
               </tr>
@@ -466,7 +500,7 @@ export function FreelanceListPage() {
             <tbody>
               {shown.length === 0 && (
                 <tr>
-                  <td colSpan={9} className="faint" style={{ textAlign: 'center' }}>
+                  <td colSpan={11} className="faint" style={{ textAlign: 'center' }}>
                     Không có job khớp bộ lọc.
                   </td>
                 </tr>
@@ -490,6 +524,8 @@ export function FreelanceListPage() {
                   <td>
                     <StatusSelect job={j} compact kind="freelancePaymentStatuses" />
                   </td>
+                  <td className="small">{j.companions.length ? j.companions.map((c) => c.name).join(', ') : dash}</td>
+                  <td className="nowrap num">{j.companions.length || j.companionPaymentCount ? `${j.companionPaymentCount} lần` : dash}</td>
                   <td className="clamp small muted">
                     <div>{latestNote(j) || dash}</div>
                   </td>
@@ -632,11 +668,14 @@ export function FreelanceDetailPage() {
           <span>
             <StatusSelect job={job} kind="freelancePaymentStatuses" />
           </span>
+          <span className="k">Người đồng hành</span>
+          <span>{job.companions.length ? job.companions.map((c) => c.name).join(', ') : dash}</span>
         </div>
         <div className="small faint" style={{ marginTop: 14 }}>
           Tạo lúc {formatDateTime(job.createdAt)} · Cập nhật lúc {formatDateTime(job.updatedAt)}
         </div>
       </section>
+      <CompanionSection job={job} onChanged={() => void refresh('freelance')} />
       <div style={{ marginTop: 16 }}>
         <DayNotes source={source} version={job.updatedAt} />
       </div>

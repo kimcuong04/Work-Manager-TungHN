@@ -23,15 +23,16 @@ export function StatusBadge({ status }: { status: DeadlineStatus }) {
   return <span className={`badge status st-${status}`}>{STATUS_LABEL[status]}</span>;
 }
 
+/** Mức ưu tiên: 1 thấp nhất … 5 cao nhất (từ v1.14; dữ liệu cũ đã được đảo khi nâng cấp). */
+export const PRIO_HINT = ['', 'Thấp nhất', 'Thấp', 'Trung bình', 'Cao', 'Cao nhất'];
+
 export function PriorityBadge({ value }: { value: number }) {
   return (
-    <span className={`badge prio p${value}`} title={`Priority Point ${value} (1 là cao nhất)`}>
+    <span className={`badge prio p${value}`} title={`Priority Point ${value}: ${PRIO_HINT[value] ?? ''} (5 là cao nhất, 1 thấp nhất)`}>
       P{value}
     </span>
   );
 }
-
-const PRIO_HINT = ['', 'Cao nhất', 'Cao', 'Trung bình', 'Thấp', 'Thấp nhất'];
 
 export function PriorityPicker({ value, onChange }: { value: number; onChange: (v: number) => void }) {
   return (
@@ -43,7 +44,7 @@ export function PriorityPicker({ value, onChange }: { value: number; onChange: (
             key={n}
             role="radio"
             aria-checked={value === n}
-            className={value === n ? 'on' : ''}
+            className={`p${n} ${value === n ? 'on' : ''}`}
             title={PRIO_HINT[n]}
             onClick={() => onChange(n)}
           >
@@ -52,7 +53,7 @@ export function PriorityPicker({ value, onChange }: { value: number; onChange: (
         ))}
       </div>
       <div className="field-hint" style={{ marginTop: 4 }}>
-        {value}: {PRIO_HINT[value]} — 1 là ưu tiên cao nhất, 5 thấp nhất
+        {value}: {PRIO_HINT[value]} — 5 là ưu tiên cao nhất, 1 thấp nhất
       </div>
     </div>
   );

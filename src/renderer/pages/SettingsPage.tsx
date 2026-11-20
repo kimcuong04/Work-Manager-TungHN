@@ -504,11 +504,13 @@ const MASTER_TABS: Record<MasterGroup, { kind: MasterKind; label: string }[]> = 
     { kind: 'siPartners', label: 'Tên SI' },
     { kind: 'brands', label: 'Hãng' },
     { kind: 'salespersons', label: 'Sale & Phòng ban' },
+    { kind: 'warrantyProjects', label: 'Dự án (Warranty)' },
   ],
   FREELANCE: [
     { kind: 'freelanceStatuses', label: 'Tình trạng' },
     { kind: 'freelancePaymentStatuses', label: 'Trạng thái thanh toán' },
     { kind: 'freelanceHirers', label: 'Bên thuê' },
+    { kind: 'freelanceCompanions', label: 'Người đồng hành' },
   ],
   EQUIPMENT: [{ kind: 'equipmentCategories', label: 'Phân loại' }],
 };
@@ -516,9 +518,9 @@ const MASTER_TABS: Record<MasterGroup, { kind: MasterKind; label: string }[]> = 
 const GROUP_LABEL: Record<MasterGroup, string> = { MAIN: JOB_LABEL.MAIN, FREELANCE: JOB_LABEL.FREELANCE, EQUIPMENT: 'Kho thiết bị' };
 
 const MASTER_GROUP_NOTE: Record<MasterGroup, string> = {
-  MAIN: 'Danh mục của Job Chính: dự án Pre-sales / Post-sales (EU, Tên SI, Hãng, Sale), Warranty, Experience và Kiến thức. Đổi tên tự cập nhật mọi nơi (liên kết theo ID). Hãng đang được dùng chỉ có thể Deactivate.',
+  MAIN: 'Danh mục của Job Chính: dự án Pre-sales / Post-sales (EU, Tên SI, Hãng, Sale), Warranty, Experience, Kiến thức và Sự kiện tạm thời. "Dự án (Warranty)" là các dự án nhập mới ở ô Dự án của Warranty (ngoài các dự án Pre/Post-sales). Đổi tên tự cập nhật mọi nơi (liên kết theo ID). Hãng đang được dùng chỉ có thể Deactivate.',
   FREELANCE:
-    'Danh mục riêng của Job Freelance (Tình trạng, Trạng thái thanh toán, Bên thuê), không dùng chung với Job Chính dù trùng tên. Tình trạng và Trạng thái thanh toán hiển thị theo thứ tự ở đây (nút lên/xuống) và theo màu bạn chọn.',
+    'Danh mục riêng của Job Freelance (Tình trạng, Trạng thái thanh toán, Bên thuê, Người đồng hành), không dùng chung với Job Chính dù trùng tên. Tình trạng và Trạng thái thanh toán hiển thị theo thứ tự ở đây (nút lên/xuống) và theo màu bạn chọn. Người đồng hành đã có trong job chỉ có thể Deactivate.',
   EQUIPMENT: 'Danh mục riêng của Kho thiết bị (Phân loại). Hãng, Tên SI, Sale của Kho thiết bị dùng chung với Job Chính — quản lý ở phân loại Job Chính.',
 };
 

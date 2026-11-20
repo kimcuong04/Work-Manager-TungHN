@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import { ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, FilePlus2, FileSpreadsheet, Pencil, Plus, RefreshCw, Trash2, Upload } from 'lucide-react';
 import { formatDateTime } from '../../shared/dates';
 import { cleanName, normalizeText } from '../../shared/text';
-import type { ProjectImport } from '../../shared/types';
+import type { ImportPayload, ProjectImport } from '../../shared/types';
 import { IMPORT_TAB_NAME_MAX, validateImportTabName } from '../../shared/validation';
 import { api } from '../api';
 import { HIGHLIGHT_EVENT, pendingHighlight } from '../lib/highlight';
@@ -35,13 +35,42 @@ const hasText = (imp: ProjectImport | undefined, query: string | null) => {
 
 type Menu = { id: string; x: number; y: number; up: boolean };
 
+/** Thao tác trên các bảng import của một chủ sở hữu (dự án Pre/Post-sales hoặc Sự kiện tạm thời). */
+export interface ImportOps {
+  commit(payload: ImportPayload, replaceImportId: string | null): Promise<ProjectImport>;
+  remove(importId: string): Promise<void>;
+  rename(importId: string, name: string): Promise<ProjectImport>;
+  reorder(ids: string[]): Promise<ProjectImport[]>;
+}
+
+const projectOps = (projectId: string): ImportOps => ({
+  commit: (payload, replaceImportId) => api.commitImport(projectId, payload, replaceImportId),
+  remove: (importId) => api.removeImport(projectId, importId),
+  rename: (importId, name) => api.renameImport(projectId, importId, name),
+  reorder: (ids) => api.reorderImports(projectId, ids),
+});
+
 /**
- * Các bảng thiết bị import của một dự án, xem như workbook Excel: mỗi bảng là một tab sheet ở thanh dưới cùng.
+ * Các bảng thiết bị import của một dự án, xem như workbook Excel: mỗi bảng là một tab sheet ở thanh tab phía trên bảng.
  * Bấm tab để xem; bấm đúp / F2 để đổi tên; kéo tab (hoặc Alt + ←/→, menu chuột phải) để đổi thứ tự.
  * Tab đang mở được nhớ theo dự án; bảng vừa import / import lại tự mở; mở từ kết quả tìm Model thì mở bảng có Model đó.
  */
-export function ProjectImports({ projectId, imports, onChanged }: { projectId: string; imports: ProjectImport[] | undefined; onChanged: () => void }) {
+export function ProjectImports({
+  projectId,
+  imports,
+  onChanged,
+  ops: opsProp,
+  ownerLabel = 'Project',
+}: {
+  /** Id của chủ sở hữu (dự án hoặc sự kiện). */
+  projectId: string;
+  imports: ProjectImport[] | undefined;
+  onChanged: () => void;
+  ops?: ImportOps;
+  ownerLabel?: string;
+}) {
   const { confirm, toast, toastError } = useUi();
+  const ops = useMemo(() => opsProp ?? projectOps(projectId), [opsProp, projectId]);
   // Trang chi tiết vẫn giữ danh sách của dự án trước cho tới khi tải xong dự án mới.
   const own = imports && imports.length > 0 && imports[0].projectId !== projectId ? undefined : imports;
 
@@ -156,8 +185,8 @@ export function ProjectImports({ projectId, imports, onChanged }: { projectId: s
   const reorder = (ids: string[]) => {
     if (ids.join() === sheets.map((s) => s.id).join()) return;
     setOrder(ids);
-    api
-      .reorderImports(projectId, ids)
+    ops
+      .reorder(ids)
       .then(() => onChanged())
       .catch((e: unknown) => {
         setOrder(null);
@@ -219,7 +248,7 @@ export function ProjectImports({ projectId, imports, onChanged }: { projectId: s
     setRenamed((r) => ({ ...r, [e.id]: name }));
     if (!fromBlur) focusTab(e.id);
     try {
-      await api.renameImport(projectId, e.id, name);
+      await ops.rename(e.id, name);
       toast('success', `Đã đổi tên bảng thành "${name}".`);
       onChanged();
     } catch (x) {
@@ -238,9 +267,9 @@ export function ProjectImports({ projectId, imports, onChanged }: { projectId: s
       title: 'Gỡ bảng import',
       message: (
         <>
-          Gỡ bảng <b>{imp.name}</b> (file {imp.sourceFileName}, import {formatDateTime(imp.importedAt)}, {imp.items.length} thiết bị) khỏi Project?
+          Gỡ bảng <b>{imp.name}</b> (file {imp.sourceFileName}, import {formatDateTime(imp.importedAt)}, {imp.items.length} thiết bị) khỏi {ownerLabel}?
           <br />
-          <span className="muted small">Các bảng khác, Project và file XLSX gốc trên máy không bị ảnh hưởng.</span>
+          <span className="muted small">Các bảng khác, {ownerLabel} và file XLSX gốc trên máy không bị ảnh hưởng.</span>
         </>
       ),
       confirmText: 'Gỡ bảng',
@@ -248,7 +277,7 @@ export function ProjectImports({ projectId, imports, onChanged }: { projectId: s
     });
     if (!ok) return;
     try {
-      await api.removeImport(projectId, imp.id);
+      await ops.remove(imp.id);
       toast('success', `Đã gỡ bảng ${imp.name}.`);
       onChanged();
     } catch (e) {
@@ -302,7 +331,7 @@ export function ProjectImports({ projectId, imports, onChanged }: { projectId: s
         <EmptyState
           icon={<FileSpreadsheet size={36} />}
           title="Chưa có dữ liệu Excel"
-          text="Import workbook .xlsx để lấy bảng thông tin các thiết bị (Model / Hãng / Mô tả). Mỗi lần Import thêm là một bảng mới, hiện như một tab sheet ở dưới cùng — đổi tên và kéo đổi thứ tự được."
+          text="Import workbook .xlsx để lấy bảng thông tin các thiết bị (Model / Hãng / Mô tả). Mỗi lần Import thêm là một bảng mới, hiện như một tab sheet trên thanh tab phía trên bảng — đổi tên và kéo đổi thứ tự được."
           action={
             <button className="btn primary" onClick={() => setWizard({})}>
               <Upload size={15} /> Import .xlsx
@@ -311,30 +340,6 @@ export function ProjectImports({ projectId, imports, onChanged }: { projectId: s
         />
       ) : (
         <div className="xl-book">
-          <div className="xl-info">
-            <FileSpreadsheet size={16} className="faint" style={{ flexShrink: 0 }} />
-            <div className="grow" style={{ minWidth: 0 }}>
-              <div className="ellipsis" style={{ fontWeight: 600 }}>
-                {active.name}
-              </div>
-              <div className="small muted ellipsis" title={active.sourcePath ?? active.sourceFileName}>
-                Import lúc {formatDateTime(active.importedAt)} · {active.sourcePath ? shortenPath(active.sourcePath, 80) : active.sourceFileName} · Sheet gốc:{' '}
-                {active.sheetNames.join(', ') || '—'} · {active.items.length} thiết bị
-              </div>
-            </div>
-            <button className="btn sm" onClick={() => startRename(active.id)} aria-label={`Đổi tên bảng ${active.name}`} title="Đổi tên bảng (F2)">
-              <Pencil size={13} /> Đổi tên
-            </button>
-            <button className="btn sm" onClick={() => setWizard({ replace: active })} aria-label={`Import lại bảng ${active.name}`}>
-              <RefreshCw size={13} /> Import lại
-            </button>
-            <button className="btn sm icon ghost" style={{ color: 'var(--danger)' }} onClick={() => void remove(active)} aria-label={`Gỡ bảng ${active.name}`} title="Gỡ bảng này">
-              <Trash2 size={14} />
-            </button>
-          </div>
-          <div className="xl-sheet" role="tabpanel" id="xl-sheet-panel" aria-labelledby={`xl-tab-${active.id}`}>
-            <ImportedContent key={active.id} items={active.items} bare />
-          </div>
           <div className="xl-tabbar">
             <button type="button" className="xl-nav" aria-label="Bảng trước" title="Bảng trước" disabled={activeIndex <= 0} onClick={() => select(sheets[activeIndex - 1].id)}>
               <ChevronLeft size={16} />
@@ -417,6 +422,30 @@ export function ProjectImports({ projectId, imports, onChanged }: { projectId: s
             </button>
             <span className="xl-hint small faint">Bấm đúp tab để đổi tên · kéo tab để đổi thứ tự</span>
           </div>
+          <div className="xl-info">
+            <FileSpreadsheet size={16} className="faint" style={{ flexShrink: 0 }} />
+            <div className="grow" style={{ minWidth: 0 }}>
+              <div className="ellipsis" style={{ fontWeight: 600 }}>
+                {active.name}
+              </div>
+              <div className="small muted ellipsis" title={active.sourcePath ?? active.sourceFileName}>
+                Import lúc {formatDateTime(active.importedAt)} · {active.sourcePath ? shortenPath(active.sourcePath, 80) : active.sourceFileName} · Sheet gốc:{' '}
+                {active.sheetNames.join(', ') || '—'} · {active.items.length} thiết bị
+              </div>
+            </div>
+            <button className="btn sm" onClick={() => startRename(active.id)} aria-label={`Đổi tên bảng ${active.name}`} title="Đổi tên bảng (F2)">
+              <Pencil size={13} /> Đổi tên
+            </button>
+            <button className="btn sm" onClick={() => setWizard({ replace: active })} aria-label={`Import lại bảng ${active.name}`}>
+              <RefreshCw size={13} /> Import lại
+            </button>
+            <button className="btn sm icon ghost" style={{ color: 'var(--danger)' }} onClick={() => void remove(active)} aria-label={`Gỡ bảng ${active.name}`} title="Gỡ bảng này">
+              <Trash2 size={14} />
+            </button>
+          </div>
+          <div className="xl-sheet" role="tabpanel" id="xl-sheet-panel" aria-labelledby={`xl-tab-${active.id}`}>
+            <ImportedContent key={active.id} items={active.items} bare />
+          </div>
         </div>
       )}
       {menu &&
@@ -470,6 +499,8 @@ export function ProjectImports({ projectId, imports, onChanged }: { projectId: s
           projectId={projectId}
           hasExisting={sheets.length > 0}
           replaceImport={wizard.replace ?? null}
+          existing={own ?? []}
+          commitTo={opsProp ? (payload, replaceImportId) => ops.commit(payload, replaceImportId) : undefined}
           onClose={() => setWizard(null)}
           onDone={(saved) => {
             focusNext.current = saved.id;

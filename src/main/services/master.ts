@@ -40,6 +40,15 @@ const SPECS: Record<MasterKind, MasterSpec> = {
       { table: 'knowledge_records', column: 'brand_id', nullable: true },
       { table: 'project_brands', column: 'brand_id', nullable: false },
       { table: 'equipment_items', column: 'brand_id', nullable: true },
+      { table: 'temp_events', column: 'brand_id', nullable: true },
+    ],
+  },
+  warrantyProjects: { table: 'warranty_projects', usage: [{ table: 'warranty_records', column: 'project_entry_id', nullable: true }] },
+  freelanceCompanions: {
+    table: 'freelance_companions',
+    usage: [
+      { table: 'freelance_job_companions', column: 'companion_id', nullable: false },
+      { table: 'freelance_companion_payments', column: 'companion_id', nullable: false },
     ],
   },
 };
@@ -65,7 +74,7 @@ export function listMaster(ctx: Ctx, kind: MasterKind): MasterItem[] {
   const dept = kind === 'salespersons';
   return ctx.db
     .all<Record<string, any>>(
-      `SELECT m.*, ${usageSql} AS usage_count${dept ? ', d.name AS department_name' : ''} FROM ${s.table} m
+      `SELECT m.*, ${usageSql} AS usage_count${dept ? ', d.name AS department_name' : ''}${kind === 'brands' ? ', (SELECT COUNT(*) FROM knowledge_records k WHERE k.brand_id = m.id) AS knowledge_count' : ''} FROM ${s.table} m
        ${dept ? 'LEFT JOIN departments d ON d.id = m.department_id' : ''} ORDER BY ${ORDERED_MASTER_KINDS.includes(kind) ? 'm.sort_order, m.name' : 'm.name COLLATE NOCASE'}`,
     )
     .map((r) => ({
@@ -76,9 +85,17 @@ export function listMaster(ctx: Ctx, kind: MasterKind): MasterItem[] {
       usageCount: r.usage_count,
       ...(dept ? { departmentId: r.department_id ?? null, departmentName: r.department_name ?? null } : {}),
       ...(COLORED_MASTER_KINDS.includes(kind) ? { color: r.color ?? null } : {}),
+      ...(kind === 'brands' ? { knowledgeHidden: !!r.knowledge_hidden, knowledgeCount: Number(r.knowledge_count) || 0 } : {}),
       createdAt: r.created_at,
       updatedAt: r.updated_at,
     }));
+}
+
+/** Số chỗ đang dùng Hãng ngoài mục Kiến thức (Dự án, Warranty, Experience, Kho thiết bị). */
+export function brandUsageOutsideKnowledge(ctx: Ctx, id: string): number {
+  return spec('brands')
+    .usage.filter((u) => u.table !== 'knowledge_records')
+    .reduce((sum, u) => sum + ctx.db.scalar<number>(`SELECT COUNT(*) FROM ${u.table} WHERE ${u.column} = ?`, [id]), 0);
 }
 
 function getMaster(ctx: Ctx, kind: MasterKind, id: string): MasterItem {
@@ -158,8 +175,8 @@ export function deleteMaster(ctx: Ctx, kind: MasterKind, id: string, strategy: M
   const s = spec(kind);
   const used = usageCount(ctx, kind, id);
   if (used > 0) {
-    if (kind === 'brands')
-      throw new AppError(`Hãng "${item.name}" đang được ${used} bản ghi sử dụng. Hãy Deactivate thay vì xóa.`);
+    if (kind === 'brands' || kind === 'freelanceCompanions')
+      throw new AppError(`${MASTER_LABEL[kind]} "${item.name}" đang được ${used} bản ghi sử dụng. Hãy Deactivate thay vì xóa.`);
     if (!strategy)
       throw new AppError(`${MASTER_LABEL[kind]} "${item.name}" đang được ${used} mục sử dụng. Chọn mục thay thế hoặc gỡ liên kết trước khi xóa.`);
     if ('replaceWithId' in strategy) {

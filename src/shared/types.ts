@@ -13,7 +13,9 @@ export type MasterKind =
   | 'freelanceStatuses'
   | 'freelanceHirers'
   | 'freelancePaymentStatuses'
-  | 'equipmentCategories';
+  | 'equipmentCategories'
+  | 'warrantyProjects'
+  | 'freelanceCompanions';
 export const MASTER_KINDS: MasterKind[] = [
   'clients',
   'siPartners',
@@ -24,6 +26,8 @@ export const MASTER_KINDS: MasterKind[] = [
   'freelanceHirers',
   'freelancePaymentStatuses',
   'equipmentCategories',
+  'warrantyProjects',
+  'freelanceCompanions',
 ];
 /** Danh mục theo phân loại trong Settings › Master Data: Job Freelance quản lý riêng, không dùng chung với Job Chính. */
 export type MasterGroup = 'MAIN' | 'FREELANCE' | 'EQUIPMENT';
@@ -37,6 +41,8 @@ export const MASTER_GROUP: Record<MasterKind, MasterGroup> = {
   freelanceHirers: 'FREELANCE',
   freelancePaymentStatuses: 'FREELANCE',
   equipmentCategories: 'EQUIPMENT',
+  warrantyProjects: 'MAIN',
+  freelanceCompanions: 'FREELANCE',
 };
 /** Danh mục sắp xếp theo thứ tự người dùng chọn (lên/xuống) thay vì theo tên. */
 export const ORDERED_MASTER_KINDS: MasterKind[] = ['freelanceStatuses', 'freelancePaymentStatuses'];
@@ -66,6 +72,8 @@ export const MASTER_LABEL: Record<MasterKind, string> = {
   freelanceHirers: 'Bên thuê',
   freelancePaymentStatuses: 'Trạng thái thanh toán',
   equipmentCategories: 'Phân loại',
+  warrantyProjects: 'Dự án (Warranty)',
+  freelanceCompanions: 'Người đồng hành',
 };
 
 /** File liên kết của dự án: bản vẽ AutoCAD, văn bản, Word, PDF, Excel (chỉ lưu đường dẫn, mở bằng ứng dụng mặc định). */
@@ -116,6 +124,10 @@ export interface MasterItem {
   departmentName?: string | null;
   /** Chỉ có ở danh mục có màu: mã màu #rrggbb, null = không màu. */
   color?: string | null;
+  /** Chỉ có ở Hãng: đã bị xóa khỏi mục Kiến thức (Hãng còn dùng ở nơi khác nên chỉ ẩn). */
+  knowledgeHidden?: boolean;
+  /** Chỉ có ở Hãng: số bài Kiến thức của Hãng. */
+  knowledgeCount?: number;
   createdAt: string;
   updatedAt: string;
 }
@@ -164,6 +176,8 @@ export interface Project {
   salespersonId: string | null;
   salespersonName: string | null;
   note: string;
+  /** Link ERP của dự án (không bắt buộc), '' = chưa có. */
+  erpLink: string;
   /** Các file liên kết (theo thứ tự); filePath / fileName / fileExtension là file đầu tiên (null nếu không có). */
   files: LinkedFile[];
   filePath: string | null;
@@ -196,6 +210,8 @@ export interface ProjectInput {
   note: string;
   /** Danh sách file liên kết (thay toàn bộ). Bỏ trống thì dùng filePath (một file) như client cũ. */
   files?: LinkedFile[];
+  /** Link ERP; undefined (client cũ) = giữ nguyên khi sửa. */
+  erpLink?: string;
   filePath?: string | null;
   fileName?: string | null;
   fileExtension?: string | null;
@@ -246,6 +262,10 @@ export interface FreelanceJob {
   paymentStatusName: string | null;
   statusColor: string | null;
   paymentStatusColor: string | null;
+  /** Người đồng hành của job (danh mục riêng của Job Freelance), theo thứ tự chọn. */
+  companions: { id: string; name: string }[];
+  /** Tổng số lần đã thanh toán cho người đồng hành (mọi người). */
+  companionPaymentCount: number;
   /** Bản chữ thuần của mọi ngày ghi chú (mới nhất trước). */
   note: string;
   createdAt: string;
@@ -261,6 +281,54 @@ export interface FreelanceInput {
   statusId: string | null;
   /** Danh mục Trạng thái thanh toán của Job Freelance; bỏ trống = chưa có. */
   paymentStatusId?: string | null;
+  /** Người đồng hành (thay toàn bộ); undefined (client cũ) = giữ nguyên. */
+  companionIds?: string[];
+}
+
+/** Một lần thanh toán cho người đồng hành của một job Freelance (ngày tự ghi khi nhập). */
+export interface CompanionPayment {
+  id: string;
+  jobId: string;
+  companionId: string;
+  paidDate: string;
+  /** Số tiền (VNĐ, số nguyên). */
+  amount: number;
+  note: string;
+  images: ImageRef[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CompanionPaymentInput {
+  amount: number;
+  note: string;
+  images: ImageRef[];
+}
+
+/** Mục Sự kiện tạm thời (dưới Kho thiết bị). */
+export interface TempEvent {
+  id: string;
+  stt: number;
+  name: string;
+  eventDate: string | null;
+  brandId: string | null;
+  brandName: string | null;
+  /** Bản chữ thuần của mọi ngày ghi chú (mới nhất trước). */
+  note: string;
+  /** Thư mục trên máy liên kết với sự kiện (không bắt buộc). */
+  folderPath: string | null;
+  files: LinkedFile[];
+  importCount: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface TempEventInput {
+  /** undefined = tự lấy STT lớn nhất + 1; null = người dùng bỏ trống (báo lỗi). */
+  stt?: number | null;
+  name: string;
+  eventDate: string | null;
+  brandId: string | null;
 }
 
 export interface FreelanceSaveOptions {
@@ -274,6 +342,8 @@ export interface PasswordEntry {
   siteName: string;
   username: string;
   url: string;
+  /** Ghi chú tự do, chèn được link `[Tên](link)` hoặc dán link thẳng. Không mã hóa. */
+  note: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -284,6 +354,7 @@ export interface PasswordInput {
   /** Bắt buộc khi tạo; khi sửa undefined = giữ nguyên. */
   password?: string;
   url: string;
+  note?: string;
 }
 
 export interface OnlineTool {
@@ -402,6 +473,8 @@ export interface ImportPayload {
   requirements: ImportedRequirement[];
   items: ImportedItem[];
   mappings: ColumnMappingRecord[];
+  /** Tên tab đề xuất (vd "Tên file - Tên sheet" khi workbook có nhiều sheet); bỏ trống = tên file bỏ đuôi. */
+  tabName?: string;
 }
 
 export interface ProjectImport {
@@ -452,6 +525,12 @@ export interface WarrantyRecord {
   result: string;
   resolution: string;
   caseNumber: string;
+  /** Dự án Pre-sales / Post-sales liên quan (một trong hai: projectId hoặc projectEntryId). */
+  projectId: string | null;
+  /** Dự án nhập mới ở Warranty, lưu trong danh mục "Dự án (Warranty)". */
+  projectEntryId: string | null;
+  /** Tên dự án để hiển thị ("STT. Tên" với dự án Pre/Post-sales). */
+  projectName: string | null;
   images: ImageRef[];
   createdAt: string;
   updatedAt: string;
@@ -479,6 +558,9 @@ export interface WarrantyInput {
   result: string;
   resolution: string;
   caseNumber: string;
+  /** undefined (client cũ) = giữ nguyên dự án. Chỉ được chọn một trong hai. */
+  projectId?: string | null;
+  projectEntryId?: string | null;
   images: ImageRef[];
 }
 
@@ -604,6 +686,28 @@ export interface KnowledgeInput {
   webUrl: string;
   localPath?: string;
   images: ImageRef[];
+}
+
+export type PlaceCategory = 'WEBSITE' | 'APP' | 'PLACE';
+export const PLACE_CATEGORIES: PlaceCategory[] = ['WEBSITE', 'APP', 'PLACE'];
+export const PLACE_CATEGORY_LABEL: Record<PlaceCategory, string> = { WEBSITE: 'Website', APP: 'App', PLACE: 'Địa điểm' };
+
+/** Một dòng trong bảng Kiến thức › Website - App - Địa điểm. */
+export interface KnowledgePlace {
+  id: string;
+  /** null = chưa phân loại. */
+  category: PlaceCategory | null;
+  name: string;
+  /** Ghi chú tự do, chèn được link. */
+  note: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface KnowledgePlaceInput {
+  category: PlaceCategory | null;
+  name: string;
+  note: string;
 }
 
 export type CalendarEventKind = 'PROJECT_START' | 'PROJECT_UPDATE' | 'CUSTOM';
@@ -752,9 +856,14 @@ export interface AppInfo {
 /** MAIN = dự án Pre/Post-sales, FREELANCE = job Freelance, TASK = việc tự nhập (chỉ có tên). */
 export type TodoKind = 'MAIN' | 'FREELANCE' | 'TASK';
 
+/** `todoDate` của mục "Vô thời hạn" (việc không gắn ngày, luôn hiện cạnh các ngày). */
+export const TODO_NO_DATE = '';
+export const TODO_NO_DATE_LABEL = 'Vô thời hạn';
+
 /** Một việc trong To-do list của một ngày: một dự án Job Chính (Pre-sales / Post-sales), một job Freelance hoặc việc tự nhập. */
 export interface TodoItem {
   id: string;
+  /** Ngày yyyy-mm-dd, hoặc `TODO_NO_DATE` ('') với việc Vô thời hạn. */
   todoDate: string;
   kind: TodoKind;
   /** Id dự án (MAIN) hoặc job Freelance (FREELANCE); null với việc tự nhập. */

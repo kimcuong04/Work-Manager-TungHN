@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { ArrowDown, ArrowUp, ChevronLeft, ChevronRight, Copy, Eye, EyeOff, FileSpreadsheet, Image as ImageIcon, KeyRound, Maximize2, Pencil, Plus, ShieldCheck, Trash2, X } from 'lucide-react';
 import { QUICK_RANGE_LABEL, formatDate, formatDateTime, inRange, monthRange, quickRange, todayISO, type QuickRangeKey } from '../../shared/dates';
 import { buildHaystack, compareVi, matchesQuery, normalizeText } from '../../shared/text';
-import type { ImageRef, JobYear, WarrantyInput, WarrantyRecord } from '../../shared/types';
+import { CATEGORY_LABEL, type ImageRef, type JobYear, type WarrantyInput, type WarrantyRecord } from '../../shared/types';
 import { hasErrors, validateWarrantyInput } from '../../shared/validation';
 import { api } from '../api';
 import { Breadcrumbs, ColumnToggle, DateInput, EmptyState, Field, MultiSelect, SearchInput, SearchableSelect, type Crumb } from '../components/common';
@@ -47,6 +47,7 @@ const COLUMNS: Column[] = [
   { key: 'model', label: 'Model', sort: 'model', render: (r) => r.model, cls: 'nowrap' },
   { key: 'brand', label: 'Hãng', sort: 'brand', render: (r) => r.brandName ?? <span className="faint">—</span>, cls: 'nowrap' },
   { key: 'si', label: 'Tên SI', render: (r) => r.siName ?? <span className="faint">—</span>, cls: 'nowrap' },
+  { key: 'project', label: 'Dự án', render: (r) => r.projectName ?? <span className="faint">—</span>, cls: 'nowrap' },
   { key: 'ip', label: 'IP', render: (r) => r.ipAddress, cls: 'nowrap' },
   { key: 'user', label: 'User', render: (r) => r.username, cls: 'nowrap' },
   { key: 'pass', label: 'Pass', render: (r) => (r.hasPassword ? <span className="faint">••••••</span> : ''), cls: 'nowrap' },
@@ -160,6 +161,8 @@ function emptyInput(yearId: string): WarrantyInput {
     result: '',
     resolution: '',
     caseNumber: '',
+    projectId: null,
+    projectEntryId: null,
     images: [],
   };
 }
@@ -183,6 +186,8 @@ function toInput(r: WarrantyRecord): WarrantyInput {
     result: r.result,
     resolution: r.resolution,
     caseNumber: r.caseNumber,
+    projectId: r.projectId,
+    projectEntryId: r.projectEntryId,
     images: r.images,
   };
 }
@@ -206,6 +211,36 @@ export function useBrandOptions() {
 }
 
 /** Duplicate: chép mọi thông tin của bản gốc (trừ ảnh), STT lấy số tiếp theo, mật khẩu dùng lại của bản gốc nếu có. */
+/**
+ * Ô Dự án của Warranty: các dự án Pre-sales / Post-sales (id dạng "p:…") và danh mục "Dự án (Warranty)" ("m:…").
+ * Gõ tên chưa có thì lưu vào danh mục đó (Settings › Master Data › Job Chính › Dự án (Warranty)).
+ */
+function useWarrantyProjectOptions() {
+  const { projects, masters, yearById, refresh } = useAppData();
+  const { toast, toastError } = useUi();
+  const options = useMemo(
+    () => [
+      ...projects
+        .filter((p) => p.workCategory === 'PRE_SALES' || p.workCategory === 'POST_SALES')
+        .map((p) => ({ id: `p:${p.id}`, name: `${p.stt}. ${p.projectName}`, hint: `${CATEGORY_LABEL[p.workCategory]} ${yearById.get(p.jobYearId)?.yearLabel ?? ''}`.trim() })),
+      ...masters.warrantyProjects.map((m) => ({ id: `m:${m.id}`, name: m.name, inactive: !m.isActive, hint: 'Dự án (Warranty)' })),
+    ],
+    [projects, masters.warrantyProjects, yearById],
+  );
+  const create = async (name: string) => {
+    try {
+      const m = await api.createMaster('warrantyProjects', name);
+      await refresh('masters');
+      toast('success', `Đã thêm dự án "${m.name}" vào danh mục Dự án (Warranty).`);
+      return `m:${m.id}`;
+    } catch (e) {
+      toastError(e);
+      return null;
+    }
+  };
+  return { options, create };
+}
+
 function duplicateInput(r: WarrantyRecord): WarrantyInput {
   return { ...toInput(r), stt: undefined, images: [], password: undefined, copyPasswordFrom: r.hasPassword ? r.id : undefined };
 }
@@ -227,6 +262,7 @@ function WarrantyForm({
   const brands = useBrandOptions();
   const { masters, refresh } = useAppData();
   const siOptions = masters.siPartners.map((m) => ({ id: m.id, name: m.name, inactive: !m.isActive }));
+  const projectOptions = useWarrantyProjectOptions();
   const createSi = async (name: string) => {
     try {
       const si = await api.createMaster('siPartners', name);
@@ -343,8 +379,20 @@ function WarrantyForm({
             <Field label="Tên SI">
               <SearchableSelect options={siOptions} value={form.siId ?? null} onChange={(v) => set('siId', v)} onCreate={createSi} createLabel="Thêm SI" placeholder="Không bắt buộc" />
             </Field>
-            {text('serialNumber', 'Serial number')}
+            <Field label="Dự án" error={err('project')} hint="Dự án Pre-sales / Post-sales, hoặc gõ tên mới để lưu vào danh mục Dự án (Warranty).">
+              <SearchableSelect
+                options={projectOptions.options}
+                value={form.projectId ? `p:${form.projectId}` : form.projectEntryId ? `m:${form.projectEntryId}` : null}
+                onChange={(v) =>
+                  setForm((f) => ({ ...f, projectId: v?.startsWith('p:') ? v.slice(2) : null, projectEntryId: v?.startsWith('m:') ? v.slice(2) : null }))
+                }
+                onCreate={projectOptions.create}
+                createLabel="Thêm dự án mới"
+                placeholder="Không bắt buộc"
+              />
+            </Field>
             {text('macAddress', 'MAC', 'AA:BB:CC:DD:EE:FF')}
+            {text('serialNumber', 'Serial number')}
           </div>
         </section>
         <section className="form-section">
@@ -529,8 +577,9 @@ function WarrantyDetail({
           ['Model', r.model],
           ['Hãng', r.brandName],
           ['Tên SI', r.siName],
-          ['Serial number', r.serialNumber],
+          ['Dự án', r.projectName],
           ['MAC', r.macAddress],
+          ['Serial number', r.serialNumber],
           ['IP', r.ipAddress],
           ['User', r.username],
           ['Pass', null],
@@ -608,7 +657,7 @@ function WarrantyInfoModal({
       <div className="view-info">
         <section className="card card-pad">
           <h3 className="card-title">Thiết bị</h3>
-          <InfoRows r={r} rows={[['Model', r.model], ['Hãng', r.brandName], ['Tên SI', r.siName], ['Serial number', r.serialNumber], ['MAC', r.macAddress]]} />
+          <InfoRows r={r} rows={[['Model', r.model], ['Hãng', r.brandName], ['Tên SI', r.siName], ['Dự án', r.projectName], ['MAC', r.macAddress], ['Serial number', r.serialNumber]]} />
         </section>
         <section className="card card-pad">
           <h3 className="card-title">Truy cập thiết bị</h3>
@@ -689,7 +738,7 @@ export function WarrantyPage({ year, crumbs }: { year: JobYear; crumbs: Crumb[] 
     () =>
       (records ?? []).map((r) => ({
         r,
-        hay: buildHaystack([r.model, r.brandName, r.siName, r.ipAddress, r.macAddress, r.serialNumber, r.caseNumber, r.customerReport, r.inspection, r.result, r.resolution]),
+        hay: buildHaystack([r.model, r.brandName, r.siName, r.projectName, r.ipAddress, r.macAddress, r.serialNumber, r.caseNumber, r.customerReport, r.inspection, r.result, r.resolution]),
       })),
     [records],
   );

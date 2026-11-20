@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router';
-import { BookMarked, FolderOpen, Globe, GraduationCap, Image as ImageIcon, Maximize2, Pencil, Plus, Tag, Trash2, X } from 'lucide-react';
+import { BookMarked, FolderOpen, Globe, GraduationCap, Image as ImageIcon, LayoutList, Maximize2, Pencil, Plus, Tag, Trash2, X } from 'lucide-react';
 import { formatDate, formatDateTime, inRange, todayISO } from '../../shared/dates';
 import { buildHaystack, compareVi, matchesQuery, normalizeText } from '../../shared/text';
-import type { KnowledgeInput, KnowledgeRecord } from '../../shared/types';
+import type { KnowledgeInput, KnowledgeRecord, MasterItem } from '../../shared/types';
 import { hasErrors, validateKnowledgeInput, validateMasterName } from '../../shared/validation';
 import { api } from '../api';
 import { Breadcrumbs, DateInput, EmptyState, Field, SearchInput, SearchableSelect } from '../components/common';
@@ -16,6 +16,7 @@ import { usePageTitle, useUi } from '../state/ui';
 import { useOpenLocal, useOpenUrl } from './ExperiencePages';
 import { DateFilterControls, resolveDateRange, useBrandOptions } from './WarrantyPage';
 import { useTableResize } from '../lib/tableResize';
+import { PLACES, PLACES_TITLE } from './KnowledgePlacesPage';
 
 /** Mục không gắn Hãng nằm ở "Kiến thức chung" (đường dẫn /knowledge/general). */
 export const GENERAL = 'general';
@@ -191,7 +192,7 @@ function KnowledgeDetail({ r, onClose, onEdit, onView, onDelete }: { r: Knowledg
   );
 }
 
-function KnowledgeInfoModal({ r, onClose, onEdit }: { r: KnowledgeRecord; onClose: () => void; onEdit: () => void }) {
+function KnowledgeInfoModal({ r, onClose, onEdit, onDelete }: { r: KnowledgeRecord; onClose: () => void; onEdit: () => void; onDelete: () => void }) {
   return (
     <Modal
       size="xl"
@@ -204,6 +205,9 @@ function KnowledgeInfoModal({ r, onClose, onEdit }: { r: KnowledgeRecord; onClos
       bodyStyle={{ background: 'var(--surface-2)' }}
       footer={(close) => (
         <>
+          <button className="btn danger left" onClick={onDelete}>
+            <Trash2 size={15} /> Xóa
+          </button>
           <button className="btn" onClick={close}>
             Đóng
           </button>
@@ -236,6 +240,76 @@ function KnowledgeInfoModal({ r, onClose, onEdit }: { r: KnowledgeRecord; onClos
 
 const hay = (r: KnowledgeRecord) => buildHaystack([r.title, r.deviceModel, r.content, r.brandName]);
 
+/**
+ * Xóa Hãng khỏi Kiến thức: chọn chuyển các bài sang Kiến thức chung (mặc định) hoặc xóa luôn. Hãng còn dùng ở Dự án /
+ * Warranty / Experience / Kho thiết bị thì chỉ ẩn khỏi Kiến thức; không dùng ở đâu thì xóa hẳn khỏi danh mục Hãng.
+ */
+function RemoveBrandDialog({ brand, onClose, onDone }: { brand: MasterItem; onClose: () => void; onDone: () => void }) {
+  const { refresh } = useAppData();
+  const { toast, toastError } = useUi();
+  const [mode, setMode] = useState<'move' | 'delete'>('move');
+  const [busy, setBusy] = useState(false);
+  const count = brand.knowledgeCount ?? 0;
+  const other = Math.max(0, brand.usageCount - count);
+  const run = async () => {
+    setBusy(true);
+    try {
+      const r = await api.removeKnowledgeBrand(brand.id, mode === 'delete');
+      const parts = [
+        r.deletedBrand ? `Đã xóa Hãng "${brand.name}"` : `Đã ẩn Hãng "${brand.name}" khỏi Kiến thức`,
+        r.moved ? `${r.moved} bài chuyển sang Kiến thức chung` : '',
+        r.deleted ? `đã xóa ${r.deleted} bài` : '',
+      ].filter(Boolean);
+      toast('success', `${parts.join(', ')}.`);
+      await refresh('masters');
+      onDone();
+      onClose();
+    } catch (e) {
+      toastError(e);
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <Modal
+      size="sm"
+      title={`Xóa Hãng "${brand.name}" khỏi Kiến thức`}
+      onClose={onClose}
+      footer={() => (
+        <>
+          <button className="btn" onClick={onClose}>
+            Hủy
+          </button>
+          <button className="btn danger" disabled={busy} onClick={() => void run()}>
+            <Trash2 size={15} /> Xóa Hãng
+          </button>
+        </>
+      )}
+    >
+      <div className="stack">
+        {count > 0 ? (
+          <fieldset className="radio-list" aria-label="Các bài kiến thức của Hãng">
+            <legend className="small muted">Hãng có {count} bài kiến thức:</legend>
+            <label>
+              <input type="radio" name="kb-mode" checked={mode === 'move'} onChange={() => setMode('move')} /> Chuyển {count} bài sang <b>Kiến thức chung</b> (giữ nguyên nội dung)
+            </label>
+            <label>
+              <input type="radio" name="kb-mode" checked={mode === 'delete'} onChange={() => setMode('delete')} /> Xóa luôn {count} bài (kèm ảnh, không hoàn tác được)
+            </label>
+          </fieldset>
+        ) : (
+          <div>Hãng này chưa có bài kiến thức nào.</div>
+        )}
+        <div className="small muted">
+          {other > 0
+            ? `Hãng còn được dùng ở ${other} chỗ khác (Dự án, Warranty, Experience, Kho thiết bị) nên chỉ ẩn khỏi Kiến thức — danh mục Hãng giữ nguyên. Thêm lại bằng "Thêm Hãng" hoặc khi viết bài cho Hãng này.`
+            : 'Hãng chưa được dùng ở đâu khác nên sẽ bị xóa hẳn khỏi danh mục Hãng (Settings › Master Data).'}
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
 export function KnowledgeHomePage() {
   const tableRef = useTableResize('knowledge-all');
   usePageTitle('Kiến thức');
@@ -245,9 +319,15 @@ export function KnowledgeHomePage() {
   const [all, setAll] = useState<KnowledgeRecord[] | null>(null);
   const [q, setQ] = useSessionState('knowledge-home-q', '');
   const [form, setForm] = useState(false);
+  const [removing, setRemoving] = useState<MasterItem | null>(null);
+  const [placeCount, setPlaceCount] = useState<number | null>(null);
 
   const load = useCallback(() => {
     api.listKnowledge({}).then(setAll).catch(toastError);
+    api
+      .listPlaces()
+      .then((l) => setPlaceCount(l.length))
+      .catch(toastError);
   }, [toastError]);
   useEffect(load, [load, masters.brands]);
 
@@ -265,7 +345,7 @@ export function KnowledgeHomePage() {
 
   const nq = normalizeText(q);
   const brands = masters.brands
-    .filter((b) => b.isActive || (stats.get(b.id)?.count ?? 0) > 0)
+    .filter((b) => (b.isActive && !b.knowledgeHidden) || (stats.get(b.id)?.count ?? 0) > 0)
     .filter((b) => !nq || normalizeText(b.name).includes(nq))
     .sort((a, b) => compareVi(a.name, b.name));
   const matches = useMemo(() => (nq ? (all ?? []).filter((r) => matchesQuery(nq, hay(r))).slice(0, 50) : []), [all, nq]);
@@ -274,7 +354,7 @@ export function KnowledgeHomePage() {
     const name = await prompt({ title: 'Thêm Hãng', label: 'Tên Hãng', confirmText: 'Thêm', validate: validateMasterName });
     if (name === null) return;
     try {
-      const b = await api.createMaster('brands', name);
+      const b = await api.addKnowledgeBrand(name);
       await refresh('masters');
       toast('success', `Đã thêm Hãng "${b.name}".`);
     } catch (e) {
@@ -282,17 +362,33 @@ export function KnowledgeHomePage() {
     }
   };
 
-  const card = (key: string, name: React.ReactNode, inactive = false) => {
+  const card = (key: string, name: string, brand?: MasterItem) => {
     const s = stats.get(key);
+    const icon =
+      key === GENERAL ? (
+        <BookMarked size={16} style={{ color: 'var(--accent)' }} />
+      ) : key === PLACES ? (
+        <LayoutList size={16} style={{ color: 'var(--accent)' }} />
+      ) : (
+        <Tag size={16} style={{ color: 'var(--accent)' }} />
+      );
+    const sub = key === PLACES ? (placeCount === null ? '…' : placeCount ? `${placeCount} mục` : 'Chưa có mục nào') : s ? `${s.count} mục · gần nhất ${formatDate(s.last)}` : 'Chưa có kiến thức';
     return (
-      <button key={key} className="card brand-card" onClick={() => navigate(`/knowledge/${key}`)}>
-        <span className="bname">
-          {key === GENERAL ? <BookMarked size={16} style={{ color: 'var(--accent)' }} /> : <Tag size={16} style={{ color: 'var(--accent)' }} />}
-          {name}
-          {inactive && <span className="badge">Ngừng dùng</span>}
-        </span>
-        <span className="muted small">{s ? `${s.count} mục · gần nhất ${formatDate(s.last)}` : 'Chưa có kiến thức'}</span>
-      </button>
+      <div key={key} className="brand-card-wrap">
+        <button className={`card brand-card ${key === PLACES ? 'fixed' : ''}`} onClick={() => navigate(`/knowledge/${key}`)}>
+          <span className="bname">
+            {icon}
+            {name}
+            {brand && !brand.isActive && <span className="badge">Ngừng dùng</span>}
+          </span>
+          <span className="muted small">{sub}</span>
+        </button>
+        {brand && (
+          <button className="btn sm icon ghost brand-card-del" aria-label={`Xóa Hãng ${name} khỏi Kiến thức`} title="Xóa Hãng khỏi Kiến thức" onClick={() => setRemoving(brand)}>
+            <Trash2 size={14} />
+          </button>
+        )}
+      </div>
     );
   };
 
@@ -317,7 +413,8 @@ export function KnowledgeHomePage() {
       </div>
       <div className="brand-grid">
         {(!nq || normalizeText('Kiến thức chung').includes(nq)) && card(GENERAL, 'Kiến thức chung')}
-        {brands.map((b) => card(b.id, b.name, !b.isActive))}
+        {(!nq || normalizeText(PLACES_TITLE).includes(nq)) && card(PLACES, PLACES_TITLE)}
+        {brands.map((b) => card(b.id, b.name, b))}
       </div>
       {nq && (
         <section className="card card-pad" style={{ marginTop: 18 }}>
@@ -352,6 +449,7 @@ export function KnowledgeHomePage() {
           )}
         </section>
       )}
+      {removing && <RemoveBrandDialog brand={removing} onClose={() => setRemoving(null)} onDone={load} />}
       {form && (
         <KnowledgeForm
           defaultBrandId={null}
@@ -405,6 +503,7 @@ function KnowledgeBrandView({ scope }: { scope: string }) {
   const [form, setForm] = useState<{ record?: KnowledgeRecord } | null>(null);
   const [detailId, setDetailId] = useState<string | null>((location.state as { select?: string } | null)?.select ?? null);
   const [viewId, setViewId] = useState<string | null>(null);
+  const [removingBrand, setRemovingBrand] = useState(false);
   const openUrl = useOpenUrl();
   const openLocal = useOpenLocal();
 
@@ -465,6 +564,11 @@ function KnowledgeBrandView({ scope }: { scope: string }) {
           </h1>
         </div>
         <div className="actions">
+          {brand && (
+            <button className="btn" onClick={() => setRemovingBrand(true)} title="Xóa Hãng khỏi Kiến thức">
+              <Trash2 size={15} /> Xóa Hãng
+            </button>
+          )}
           <button className="btn primary" onClick={() => setForm({})}>
             <Plus size={16} /> Thêm Kiến thức
           </button>
@@ -514,12 +618,13 @@ function KnowledgeBrandView({ scope }: { scope: string }) {
                   <th>Mode Device</th>
                   <th style={{ width: '45%' }}>Nội dung</th>
                   <th>Link / Ảnh</th>
+                  <th style={{ width: 1 }} data-col="__actions" />
                 </tr>
               </thead>
               <tbody>
                 {shown.length === 0 && (
                   <tr>
-                    <td colSpan={5} className="faint" style={{ textAlign: 'center', padding: 24 }}>
+                    <td colSpan={6} className="faint" style={{ textAlign: 'center', padding: 24 }}>
                       Không có mục phù hợp bộ lọc.
                     </td>
                   </tr>
@@ -560,6 +665,11 @@ function KnowledgeBrandView({ scope }: { scope: string }) {
                         )}
                       </div>
                     </td>
+                    <td onClick={(e) => e.stopPropagation()} onDoubleClick={(e) => e.stopPropagation()}>
+                      <button className="btn sm icon ghost" style={{ color: 'var(--danger)' }} aria-label={`Xóa ${r.title}`} title="Xóa bài kiến thức" onClick={() => void remove(r)}>
+                        <Trash2 size={14} />
+                      </button>
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -577,7 +687,8 @@ function KnowledgeBrandView({ scope }: { scope: string }) {
           )}
         </div>
       )}
-      {viewing && <KnowledgeInfoModal key={viewing.id} r={viewing} onClose={() => setViewId(null)} onEdit={() => setForm({ record: viewing })} />}
+      {viewing && <KnowledgeInfoModal key={viewing.id} r={viewing} onClose={() => setViewId(null)} onEdit={() => setForm({ record: viewing })} onDelete={() => void remove(viewing)} />}
+      {removingBrand && brand && <RemoveBrandDialog brand={brand} onClose={() => setRemovingBrand(false)} onDone={() => navigate('/knowledge')} />}
       {form && <KnowledgeForm defaultBrandId={isGeneral ? null : scope} record={form.record} onClose={() => setForm(null)} onSaved={afterSave} />}
     </>
   );

@@ -7,6 +7,7 @@ import { hasErrors, validateOnlineToolInput, validatePasswordInput } from '../..
 import { api } from '../api';
 import { Breadcrumbs, EmptyState, Field, SearchInput } from '../components/common';
 import { WebLinkButton } from '../components/LinkFields';
+import { LinkedText, LinkNoteField } from '../components/LinkNote';
 import { Modal } from '../components/Modal';
 import { useSessionState } from '../lib/persist';
 import { usePageTitle, useUi } from '../state/ui';
@@ -28,7 +29,7 @@ function useNumbered<T extends { id: string }>(items: T[] | null, q: string, nam
 function PasswordForm({ entry, onClose, onSaved }: { entry?: PasswordEntry; onClose: () => void; onSaved: () => void }) {
   const { toast, toastError } = useUi();
   const isEdit = !!entry;
-  const [form, setForm] = useState<PasswordInput>({ siteName: entry?.siteName ?? '', username: entry?.username ?? '', password: isEdit ? undefined : '', url: entry?.url ?? '' });
+  const [form, setForm] = useState<PasswordInput>({ siteName: entry?.siteName ?? '', username: entry?.username ?? '', password: isEdit ? undefined : '', url: entry?.url ?? '', note: entry?.note ?? '' });
   const [showPwd, setShowPwd] = useState(false);
   const [submitted, setSubmitted] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -55,7 +56,7 @@ function PasswordForm({ entry, onClose, onSaved }: { entry?: PasswordEntry; onCl
 
   return (
     <Modal
-      size="sm"
+      size="md"
       title={isEdit ? 'Sửa mục Password' : 'Thêm mục Password'}
       onClose={onClose}
       footer={() => (
@@ -111,6 +112,9 @@ function PasswordForm({ entry, onClose, onSaved }: { entry?: PasswordEntry; onCl
         </Field>
         <Field label="Link website" error={err('url')} hint="Không bắt buộc. Vd: mail.google.com" htmlFor="pw-url">
           <input id="pw-url" className="input" value={form.url} onChange={(e) => set('url', e.target.value)} />
+        </Field>
+        <Field label="Ghi chú" error={err('note')} hint="Không bắt buộc, chèn được link. Ghi chú không được mã hóa — đừng ghi mật khẩu ở đây." htmlFor="pw-note">
+          <LinkNoteField id="pw-note" value={form.note ?? ''} onChange={(v) => set('note', v)} rows={3} placeholder="Vd: đăng nhập bằng SSO công ty, hướng dẫn ở [Wiki nội bộ](https://wiki.example.com)" />
         </Field>
       </form>
     </Modal>
@@ -224,13 +228,14 @@ export function PasswordPage() {
                 <th>Username</th>
                 <th>Password</th>
                 <th>Link website</th>
+                <th>Ghi chú</th>
                 <th style={{ width: 1 }} data-col="__actions" />
               </tr>
             </thead>
             <tbody>
               {shown.length === 0 && (
                 <tr>
-                  <td colSpan={6} className="faint" style={{ textAlign: 'center' }}>
+                  <td colSpan={7} className="faint" style={{ textAlign: 'center' }}>
                     Không có mục khớp “{q}”.
                   </td>
                 </tr>
@@ -256,6 +261,9 @@ export function PasswordPage() {
                     <SecretCell entry={p} />
                   </td>
                   <td style={{ maxWidth: 260 }}>{p.url ? <WebLinkButton text={p.url} /> : dash}</td>
+                  <td className="note-cell">
+                    <LinkedText text={p.note} />
+                  </td>
                   <td>
                     <div className="row nowrap" style={{ gap: 2 }}>
                       <button className="btn sm icon ghost" aria-label={`Sửa ${p.siteName}`} title="Sửa" onClick={() => setForm({ entry: p })}>

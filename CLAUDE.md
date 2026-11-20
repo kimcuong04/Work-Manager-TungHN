@@ -54,9 +54,26 @@ App tự cập nhật trên máy user, nên mọi thay đổi phải giữ đư�
    Từ schema 13 mỗi bảng là một tab sheet: `tab_name` (không trùng trong dự án, không phân biệt hoa/thường — kiểm tra bằng
    `validateImportTabName`) và `sort_order` (trái → phải); import thêm nối vào cuối, Import lại giữ vị trí (tên tự đặt
    theo file thì đổi theo file mới, tên đã đổi tay thì giữ). Đổi tên / thứ tự qua `renameImport` / `reorderImports`.
+   Logic dùng chung ở `src/main/services/imports.ts` (`ImportStore`: `PROJECT_IMPORTS`, `EVENT_IMPORTS`); giao diện
+   `ProjectImports` nhận `ops` để dùng cho chủ sở hữu khác dự án.
 15. **File liên kết** (schema 12): danh sách ở `project_files`; cột `projects.file_*` chỉ là bản sao file đầu tiên (giữ cho
    dữ liệu cũ) — luôn ghi qua `writeFiles`. `openFile` chỉ mở đường dẫn có trong `project_files`. Ảnh trong ghi chú chỉ
    được giữ `width` / `data-scale` / `data-align` (lọc trong `noteHtml.ts`); chỉnh ảnh ở `NoteImageTools.tsx`.
+16. **Schema 14–15**:
+   - **Priority Point** (schema 15): **5 là cao nhất, 1 thấp nhất** — migration đã đảo dữ liệu cũ (p → 6 − p). Sắp xếp theo
+     Priority "tăng dần" nghĩa là ưu tiên cao trước (`sortProjects` so `b.priorityPoint - a.priorityPoint`).
+   - To-do **Vô thời hạn** là `todo_items.todo_date = ''` (`TODO_NO_DATE`), không phải NULL — để chỉ mục duy nhất
+     (ngày, dự án / job) vẫn chặn trùng. `listTodosRange` không trả về mục này; kéo sang ngày khác qua `moveTodo`.
+   - Ghi chú có link (`src/shared/linkNote.ts`): chữ thường, `[Tên](link)` hoặc link dán thẳng; chỉ mở được link
+     http/https (qua `openExternalUrl`). Dùng cho `password_entries.note` (không mã hóa) và `knowledge_places.note`.
+   - `brands.knowledge_hidden`: Hãng đã xóa khỏi Kiến thức nhưng còn dùng nơi khác (`removeKnowledgeBrand`). Hãng
+     không còn dùng ở đâu thì xóa hẳn; viết bài / "Thêm Hãng" trùng tên thì hiện lại.
+   - Warranty: `project_id` (dự án Pre/Post-sales) **hoặc** `project_entry_id` (danh mục `warrantyProjects`), không
+     cả hai. Job Freelance: `freelance_job_companions` + `freelance_companion_payments` (+ ảnh); không bỏ được người đồng
+     hành đã có thanh toán trong job, danh mục `freelanceCompanions` đang dùng chỉ Deactivate.
+   - **Sự kiện tạm thời**: `temp_events` (+ `temp_event_files`, `temp_event_notes` qua `EVENT_NOTES`,
+     `temp_event_imports`); `openFile` / `openLocalLink` chấp nhận cả file / thư mục liên kết với sự kiện. Cột tham chiếu
+     danh mục mới phải khai báo trong `SPECS` của `master.ts` (vd `temp_events.brand_id`).
 
 ## Phát hành bản cập nhật
 

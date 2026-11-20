@@ -16,6 +16,11 @@ import type {
   FreelanceInput,
   FreelanceJob,
   FreelanceNote,
+  CompanionPayment,
+  CompanionPaymentInput,
+  TempEvent,
+  TempEventInput,
+  DayNote,
   FreelanceSaveOptions,
   OnlineTool,
   OnlineToolInput,
@@ -29,6 +34,8 @@ import type {
   JobType,
   JobYear,
   KnowledgeInput,
+  KnowledgePlace,
+  KnowledgePlaceInput,
   KnowledgeRecord,
   LinkedFile,
   MasterDeleteStrategy,
@@ -119,6 +126,30 @@ export interface Api {
   /** Nội dung rỗng thì xóa mục của ngày đó và trả về null. */
   saveFreelanceNote(jobId: string, input: ProjectNoteInput): Promise<FreelanceNote | null>;
   deleteFreelanceNote(id: string): Promise<void>;
+  /** Các lần thanh toán cho người đồng hành của job (mới nhất trước). */
+  listCompanionPayments(jobId: string): Promise<CompanionPayment[]>;
+  /** Ghi một lần thanh toán (ngày tự ghi là hôm nay). */
+  addCompanionPayment(jobId: string, companionId: string, input: CompanionPaymentInput): Promise<CompanionPayment>;
+  updateCompanionPayment(id: string, input: CompanionPaymentInput): Promise<CompanionPayment>;
+  deleteCompanionPayment(id: string): Promise<void>;
+
+  /* Sự kiện tạm thời (dưới Kho thiết bị) */
+  listEvents(): Promise<TempEvent[]>;
+  nextEventStt(): Promise<number>;
+  createEvent(input: TempEventInput, opts?: { noteHtml?: string }): Promise<TempEvent>;
+  updateEvent(id: string, input: TempEventInput): Promise<TempEvent>;
+  deleteEvent(id: string): Promise<void>;
+  setEventFiles(id: string, files: LinkedFile[]): Promise<TempEvent>;
+  /** Liên kết thư mục có sẵn trên máy (null = bỏ liên kết). */
+  setEventFolder(id: string, folder: string | null): Promise<TempEvent>;
+  listEventNotes(eventId: string): Promise<DayNote[]>;
+  saveEventNote(eventId: string, input: ProjectNoteInput): Promise<DayNote | null>;
+  deleteEventNote(id: string): Promise<void>;
+  listEventImports(eventId: string): Promise<ProjectImport[]>;
+  commitEventImport(eventId: string, payload: ImportPayload, replaceImportId?: string | null): Promise<ProjectImport>;
+  removeEventImport(eventId: string, importId: string): Promise<void>;
+  renameEventImport(eventId: string, importId: string, name: string): Promise<ProjectImport>;
+  reorderEventImports(eventId: string, ids: string[]): Promise<ProjectImport[]>;
 
   /** Import nhiều dòng từ .xlsx (đã map cột) vào Pre-sales / Post-sales / Warranty / Job Freelance. */
   bulkImport(spec: BulkImportSpec): Promise<BulkImportResult>;
@@ -182,6 +213,8 @@ export interface Api {
   addTodos(date: string, targets: TodoTarget[]): Promise<TodoItem[]>;
   setTodoDone(id: string, done: boolean): Promise<TodoItem[]>;
   reorderTodos(date: string, ids: string[]): Promise<TodoItem[]>;
+  /** Kéo việc sang ngày khác / mục Vô thời hạn (`date` = ''), vào vị trí `index`; trả về danh sách mới của ngày cũ và ngày đích. */
+  moveTodo(id: string, date: string, index: number): Promise<Record<string, TodoItem[]>>;
   deleteTodo(id: string): Promise<TodoItem[]>;
 
   pickImages(): Promise<ImageRef[]>;
@@ -210,6 +243,14 @@ export interface Api {
   createKnowledge(input: KnowledgeInput): Promise<KnowledgeRecord>;
   updateKnowledge(id: string, input: KnowledgeInput): Promise<KnowledgeRecord>;
   deleteKnowledge(id: string): Promise<void>;
+  /** "Thêm Hãng" ở trang Kiến thức (Hãng trùng tên đang bị ẩn khỏi Kiến thức thì hiện lại). */
+  addKnowledgeBrand(name: string): Promise<MasterItem>;
+  /** Xóa Hãng khỏi Kiến thức: bài kiến thức chuyển sang Kiến thức chung (hoặc xóa luôn); Hãng còn dùng nơi khác thì chỉ ẩn. */
+  removeKnowledgeBrand(brandId: string, deleteRecords: boolean): Promise<{ deletedBrand: boolean; moved: number; deleted: number }>;
+  listPlaces(): Promise<KnowledgePlace[]>;
+  createPlace(input: KnowledgePlaceInput): Promise<KnowledgePlace>;
+  updatePlace(id: string, input: KnowledgePlaceInput): Promise<KnowledgePlace>;
+  deletePlace(id: string): Promise<void>;
 
   listCalendarEvents(query: CalendarQuery): Promise<CalendarEvent[]>;
   /** Mục Calendar của Job Freelance và Kinh nghiệm (tính từ dữ liệu, chỉ đọc). */

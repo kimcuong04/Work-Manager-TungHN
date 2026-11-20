@@ -45,6 +45,7 @@ function initialInput(project: Project | undefined, defaults: ProjectDefaults | 
       brandIds: template.brands.map((b) => b.id),
       salespersonId: template.salespersonId,
       note: '',
+      erpLink: '',
       files: template.files,
       priorityPoint: template.priorityPoint,
       folderParent: null,
@@ -63,6 +64,7 @@ function initialInput(project: Project | undefined, defaults: ProjectDefaults | 
       brandIds: project.brands.map((b) => b.id),
       salespersonId: project.salespersonId,
       note: project.note,
+      erpLink: project.erpLink,
       files: project.files,
       priorityPoint: project.priorityPoint,
       folderParent: undefined,
@@ -79,6 +81,7 @@ function initialInput(project: Project | undefined, defaults: ProjectDefaults | 
     brandIds: [],
     salespersonId: null,
     note: '',
+    erpLink: '',
     files: [],
     priorityPoint: 3,
     folderParent: null,
@@ -409,6 +412,18 @@ export function ProjectForm({
                 <SearchableSelect options={opts('clients')} value={form.clientId} onChange={(id) => set('clientId', id)} onCreate={createMaster('clients')} createLabel="Thêm EU" placeholder="Không bắt buộc" />
               </Field>
             </div>
+          </div>
+          <div style={{ marginTop: 14 }}>
+            <Field label="Link ERP" error={show('erpLink')} hint="Không bắt buộc. Dán link dự án trên hệ thống ERP để mở nhanh." htmlFor="pf-erp">
+              <input
+                id="pf-erp"
+                className={`input ${show('erpLink') ? 'invalid' : ''}`}
+                placeholder="https://erp.congty.vn/…"
+                value={form.erpLink ?? ''}
+                onChange={(e) => set('erpLink', e.target.value)}
+                onBlur={() => touch('erpLink')}
+              />
+            </Field>
           </div>
         </section>
 

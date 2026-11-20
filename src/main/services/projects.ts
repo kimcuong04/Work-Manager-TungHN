@@ -15,9 +15,10 @@ import type {
 } from '../../shared/types';
 import { textToNoteHtml } from '../../shared/noteHtml';
 import { LINK_FILE_EXTENSIONS, LINK_FILE_LABEL } from '../../shared/types';
-import { IMPORT_TAB_NAME_MAX, LIMITS, defaultImportTabName, fileExtension, hasErrors, uniqueImportTabName, validateImportTabName, validateProjectInput } from '../../shared/validation';
+import { LIMITS, fileExtension, hasErrors, validateProjectInput } from '../../shared/validation';
 import { AppError, now, str, strOrNull, todayOf, type Ctx } from '../context';
 import { assertDirectory, ensureProjectFolder, moveProjectFolder, removeIfEmpty, undoFolderMove } from '../integration/folders';
+import * as imports from './imports';
 import { addProjectStartEvent, addProjectUpdateEvent, describeProjectChanges, hasProjectStartEvent, removeProjectEvents, syncProjectStartEvent } from './calendar';
 import { getYear } from './master';
 import { deleteUnreferencedImages, noteCalendarLine, projectNoteImageKeys, writeNote, type NoteWrite } from './notes';
@@ -85,6 +86,7 @@ function mapProject(r: Record<string, any>, brands: NamedRef[], files: LinkedFil
     folderPath: strOrNull(r.folder_path),
     folderAuto: r.folder_auto === undefined || r.folder_auto === null ? true : !!r.folder_auto,
     note: str(r.note),
+    erpLink: str(r.erp_link),
     files,
     filePath: files[0]?.path ?? null,
     fileName: files[0]?.name ?? null,
@@ -133,6 +135,7 @@ interface Normalized {
   brandIds: string[];
   salespersonId: string | null;
   note: string;
+  erpLink: string | undefined;
   files: LinkedFile[];
   priorityPoint: number;
   folderParent: string | null | undefined;
@@ -181,6 +184,7 @@ function normalizeInput(ctx: Ctx, input: ProjectInput, currentId?: string): Norm
     brandIds,
     salespersonId,
     note: (input.note ?? '').replace(/\r\n/g, '\n'),
+    erpLink: input.erpLink === undefined ? undefined : String(input.erpLink ?? '').trim(),
     files,
     priorityPoint: input.priorityPoint,
     folderParent: input.folderParent === undefined ? undefined : strOrNull(input.folderParent),
@@ -189,7 +193,7 @@ function normalizeInput(ctx: Ctx, input: ProjectInput, currentId?: string): Norm
 }
 
 /** Chuẩn hóa danh sách file liên kết: đúng đuôi cho phép, bỏ trùng đường dẫn (không phân biệt hoa thường). */
-function normalizeFiles(list: LinkedFile[]): LinkedFile[] {
+export function normalizeFiles(list: LinkedFile[]): LinkedFile[] {
   if (!Array.isArray(list)) throw new AppError('Danh sách file liên kết không hợp lệ.');
   if (list.length > 50) throw new AppError('Tối đa 50 file liên kết cho một dự án.');
   const seen = new Set<string>();
@@ -289,6 +293,7 @@ export function createProject(ctx: Ctx, raw: ProjectInput, opts: ProjectSaveOpti
           completed, completed ? stamp : null, stamp, stamp],
       );
       writeFiles(ctx, id, p.files);
+      if (p.erpLink) ctx.db.run('UPDATE projects SET erp_link = ? WHERE id = ?', [p.erpLink, id]);
       if (p.folderLink) ctx.db.run('UPDATE projects SET folder_auto = 0 WHERE id = ?', [id]);
       writeBrands(ctx, id, p.brandIds);
       if (p.receivedDate) addProjectStartEvent(ctx, id, p.projectName, p.receivedDate);
@@ -342,6 +347,7 @@ export function updateProject(ctx: Ctx, id: string, raw: ProjectInput, opts: Pro
           p.salespersonId, folderPath, p.priorityPoint, now(), id],
       );
       writeFiles(ctx, id, p.files);
+      if (p.erpLink !== undefined) ctx.db.run('UPDATE projects SET erp_link = ? WHERE id = ?', [p.erpLink, id]);
       writeBrands(ctx, id, p.brandIds);
       syncProjectStartEvent(ctx, before, p);
       if (opts.noteHtml !== undefined) note = writeNote(ctx, id, today, opts.noteHtml);
@@ -473,140 +479,31 @@ export function moveProject(ctx: Ctx, id: string, jobYearId: string, category: P
   return getProject(ctx, id);
 }
 
-/* ---------------- Import XLSX ---------------- */
-
-function mapImport(ctx: Ctx, imp: Record<string, any>): ProjectImport {
-  return {
-    id: imp.id,
-    projectId: imp.project_id,
-    name: imp.tab_name || defaultImportTabName(imp.source_file_name),
-    sortOrder: Number(imp.sort_order) || 0,
-    sourceFileName: imp.source_file_name,
-    sourcePath: strOrNull(imp.source_path),
-    sheetNames: JSON.parse(imp.sheet_names || '[]'),
-    importedAt: imp.imported_at,
-    status: imp.status,
-    info: ctx.db
-      .all<Record<string, any>>('SELECT * FROM imported_project_info WHERE project_import_id = ? ORDER BY display_order', [imp.id])
-      .map((r) => ({ fieldKey: r.field_key, fieldLabel: r.field_label, fieldValue: str(r.field_value) })),
-    requirements: ctx.db
-      .all<Record<string, any>>('SELECT * FROM imported_requirements WHERE project_import_id = ? ORDER BY sort_order', [imp.id])
-      .map((r) => ({ roundNumber: r.round_number, content: str(r.content), createdDate: strOrNull(r.created_date) })),
-    items: ctx.db
-      .all<Record<string, any>>('SELECT * FROM imported_items WHERE project_import_id = ? ORDER BY sort_order', [imp.id])
-      .map((r) => ({ model: str(r.model), brand: str(r.brand), description: str(r.description) })),
-  };
-}
+/* ---------------- Import XLSX (dùng chung với Sự kiện tạm thời, xem imports.ts) ---------------- */
 
 /** Các bảng thiết bị đã import của dự án theo thứ tự tab (trái → phải); mỗi lần import / import thêm là một bảng. */
 export function listProjectImports(ctx: Ctx, projectId: string): ProjectImport[] {
-  return ctx.db
-    .all<Record<string, any>>('SELECT * FROM project_imports WHERE project_id = ? ORDER BY sort_order, imported_at, rowid', [projectId])
-    .map((r) => mapImport(ctx, r));
+  return imports.listImports(ctx, imports.PROJECT_IMPORTS, projectId);
 }
 
-function tabNames(ctx: Ctx, projectId: string, exceptId: string | null): string[] {
-  return ctx.db
-    .all<{ tab_name: string }>('SELECT tab_name FROM project_imports WHERE project_id = ? AND id <> ?', [projectId, exceptId ?? ''])
-    .map((r) => r.tab_name);
-}
-
-/** Tên tab vẫn là tên tự đặt theo file cũ (chưa đổi tay) thì Import lại sẽ đặt theo file mới. */
-function isAutoTabName(name: string, fileName: string): boolean {
-  const base = defaultImportTabName(fileName);
-  if (name === base) return true;
-  const m = / \((\d+)\)$/.exec(name);
-  return !!m && name === base.slice(0, IMPORT_TAB_NAME_MAX - m[0].length).trimEnd() + m[0];
-}
-
-function getImport(ctx: Ctx, projectId: string, importId: string): ProjectImport {
-  const r = ctx.db.get<Record<string, any>>('SELECT * FROM project_imports WHERE id = ? AND project_id = ?', [importId, projectId]);
-  if (!r) throw new AppError('Không tìm thấy bảng import này (có thể đã bị gỡ).');
-  return mapImport(ctx, r);
-}
-
-function validatePayload(p: ImportPayload) {
-  if (!p || typeof p.sourceFileName !== 'string') throw new AppError('Dữ liệu import không hợp lệ.');
-  if (!Array.isArray(p.info) || !Array.isArray(p.requirements) || !Array.isArray(p.items))
-    throw new AppError('Dữ liệu import không hợp lệ.');
-  const hasData =
-    p.info.some((r) => str(r.fieldValue).trim()) || p.requirements.length > 0 || p.items.length > 0;
-  if (!hasData) throw new AppError('Không có dữ liệu nào được map. Hãy kiểm tra lại vùng dữ liệu và mapping.');
-}
-
-/**
- * Thêm một bảng import mới cho dự án; có `replaceImportId` thì thay đúng bảng đó (Import lại). Ghi toàn bộ trong một
- * transaction: lỗi giữa chừng thì các bảng import cũ được giữ nguyên.
- */
+/** Thêm một bảng import mới cho dự án; có `replaceImportId` thì thay đúng bảng đó (Import lại). */
 export function commitImport(ctx: Ctx, projectId: string, payload: ImportPayload, replaceImportId: string | null = null): ProjectImport {
-  getProject(ctx, projectId);
-  validatePayload(payload);
-  const old = replaceImportId ? getImport(ctx, projectId, replaceImportId) : null;
-  const others = tabNames(ctx, projectId, old?.id ?? null);
-  const name =
-    old && !isAutoTabName(old.name, old.sourceFileName) ? old.name : uniqueImportTabName(defaultImportTabName(payload.sourceFileName), others);
-  const order = old ? old.sortOrder : (ctx.db.scalar<number>('SELECT MAX(sort_order) FROM project_imports WHERE project_id = ?', [projectId]) ?? -1) + 1;
-  const importId = randomUUID();
-  const stamp = now();
-  ctx.db.tx(() => {
-    if (old) ctx.db.run('DELETE FROM project_imports WHERE id = ? AND project_id = ?', [old.id, projectId]);
-    ctx.db.run(
-      'INSERT INTO project_imports (id, project_id, source_file_name, source_path, sheet_names, imported_at, status, tab_name, sort_order) VALUES (?,?,?,?,?,?,?,?,?)',
-      [importId, projectId, payload.sourceFileName, payload.sourcePath, JSON.stringify(payload.sheetNames ?? []), stamp, 'IMPORTED', name, order],
-    );
-    payload.info.forEach((r, i) =>
-      ctx.db.run('INSERT INTO imported_project_info VALUES (?,?,?,?,?,?)', [
-        randomUUID(), importId, str(r.fieldKey), str(r.fieldLabel), str(r.fieldValue), i,
-      ]),
-    );
-    payload.requirements.forEach((r, i) =>
-      ctx.db.run('INSERT INTO imported_requirements VALUES (?,?,?,?,?,?)', [
-        randomUUID(), importId, Number(r.roundNumber) || i + 1, str(r.content), strOrNull(r.createdDate), i,
-      ]),
-    );
-    payload.items.forEach((r, i) =>
-      ctx.db.run('INSERT INTO imported_items VALUES (?,?,?,?,?,?)', [randomUUID(), importId, str(r.model), str(r.brand), str(r.description), i]),
-    );
-    if (payload.workbookSignature && Array.isArray(payload.mappings) && payload.mappings.length) {
-      ctx.db.run('DELETE FROM import_column_mappings WHERE workbook_signature = ?', [payload.workbookSignature]);
-      for (const m of payload.mappings)
-        ctx.db.run('INSERT OR REPLACE INTO import_column_mappings VALUES (?,?,?,?)', [
-          payload.workbookSignature, str(m.sheetName), str(m.sourceColumn), str(m.targetField),
-        ]);
-    }
-    ctx.db.run('UPDATE projects SET updated_at = ? WHERE id = ?', [stamp, projectId]);
-  });
-  return getImport(ctx, projectId, importId);
+  return imports.commitImport(ctx, imports.PROJECT_IMPORTS, projectId, payload, replaceImportId);
 }
 
 /** Gỡ một bảng import khỏi dự án (dự án và file .xlsx gốc không bị ảnh hưởng). */
 export function removeImport(ctx: Ctx, projectId: string, importId: string): void {
-  getProject(ctx, projectId);
-  getImport(ctx, projectId, importId);
-  ctx.db.tx(() => {
-    ctx.db.run('DELETE FROM project_imports WHERE id = ? AND project_id = ?', [importId, projectId]);
-    ctx.db.run('UPDATE projects SET updated_at = ? WHERE id = ?', [now(), projectId]);
-  });
+  imports.removeImport(ctx, imports.PROJECT_IMPORTS, projectId, importId);
 }
 
 /** Đổi tên tab của một bảng import (không trùng tên tab khác trong dự án, không phân biệt hoa/thường). */
 export function renameImport(ctx: Ctx, projectId: string, importId: string, name: string): ProjectImport {
-  getImport(ctx, projectId, importId);
-  const err = validateImportTabName(name, tabNames(ctx, projectId, importId));
-  if (err) throw new AppError(err);
-  ctx.db.tx(() => ctx.db.run('UPDATE project_imports SET tab_name = ? WHERE id = ? AND project_id = ?', [cleanName(name), importId, projectId]));
-  return getImport(ctx, projectId, importId);
+  return imports.renameImport(ctx, imports.PROJECT_IMPORTS, projectId, importId, name);
 }
 
 /** Xếp lại thứ tự tab: `ids` phải là đủ các bảng import hiện có của dự án, mỗi bảng một lần. */
 export function reorderImports(ctx: Ctx, projectId: string, ids: string[]): ProjectImport[] {
-  getProject(ctx, projectId);
-  const current = ctx.db.all<{ id: string }>('SELECT id FROM project_imports WHERE project_id = ?', [projectId]).map((r) => r.id);
-  const list = Array.isArray(ids) ? ids.map(String) : [];
-  if (list.length !== current.length || new Set(list).size !== list.length || !list.every((id) => current.includes(id)))
-    throw new AppError('Danh sách bảng import đã thay đổi — hãy tải lại trang rồi thử lại.');
-  ctx.db.tx(() => list.forEach((id, i) => ctx.db.run('UPDATE project_imports SET sort_order = ? WHERE id = ? AND project_id = ?', [i, id, projectId])));
-  return listProjectImports(ctx, projectId);
+  return imports.reorderImports(ctx, imports.PROJECT_IMPORTS, projectId, ids);
 }
 
 export function savedMappings(ctx: Ctx, signature: string) {

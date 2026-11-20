@@ -287,6 +287,13 @@ function detectInfo(sheet: WorkbookSheet, skip: Set<number>): InfoConfig | null 
 }
 
 /** Auto-detect: chỉ map khi nhãn header khớp alias; không đoán khi không chắc (TC-XLSX-002). */
+/** Tự nhận diện bảng thiết bị trong đúng một sheet (khi người dùng chọn sheet để import); null = không thấy header. */
+export function detectItemsInSheet(sheet: WorkbookSheet): ItemConfig | null {
+  const h = findHeaderRow(sheet, ITEM_FIELDS, ['model'], ['brand', 'description'], new Set());
+  if (!h) return null;
+  return { enabled: true, sheet: sheet.name, headerRow: h.row, endRow: detectTableEnd(sheet, h.row, Object.values(h.columns) as number[]), columns: h.columns };
+}
+
 export function autoDetect(sheets: WorkbookSheet[]): { config: ImportConfig; notes: string[] } {
   const notes: string[] = [];
   const config = emptyConfig(sheets[0]?.name ?? '');

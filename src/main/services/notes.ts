@@ -36,6 +36,14 @@ export const FREELANCE_NOTES: NoteStore = {
   missing: 'Không tìm thấy job Freelance (có thể đã bị xóa).',
 };
 
+export const EVENT_NOTES: NoteStore = {
+  notes: 'temp_event_notes',
+  images: 'temp_event_note_images',
+  owner: 'event_id',
+  parent: 'temp_events',
+  missing: 'Không tìm thấy sự kiện (có thể đã bị xóa).',
+};
+
 function mapDayNote(r: Record<string, any>): DayNote {
   return {
     id: r.id,
@@ -215,6 +223,25 @@ export function deleteProjectNote(ctx: Ctx, id: string): void {
 
 export function deleteFreelanceNote(ctx: Ctx, id: string): void {
   deleteNote(ctx, FREELANCE_NOTES, id);
+}
+
+export function listEventNotes(ctx: Ctx, eventId: string): DayNote[] {
+  return listNotes(ctx, EVENT_NOTES, eventId).map(mapDayNote);
+}
+
+export function saveEventNote(ctx: Ctx, eventId: string, input: ProjectNoteInput): DayNote | null {
+  if (!ctx.db.scalar<number>('SELECT COUNT(*) FROM temp_events WHERE id = ?', [eventId])) throw new AppError(EVENT_NOTES.missing);
+  let res: NoteWrite = { changed: false, removedKeys: [], html: '' };
+  ctx.db.tx(() => {
+    res = writeDayNote(ctx, EVENT_NOTES, eventId, input.noteDate, input.html);
+  });
+  deleteUnreferencedImages(ctx, res.removedKeys);
+  const row = ctx.db.get<Record<string, any>>('SELECT * FROM temp_event_notes WHERE event_id = ? AND note_date = ?', [eventId, input.noteDate]);
+  return row ? mapDayNote(row) : null;
+}
+
+export function deleteEventNote(ctx: Ctx, id: string): void {
+  deleteNote(ctx, EVENT_NOTES, id);
 }
 
 export function noteImageKeysOf(ctx: Ctx, store: NoteStore, ownerId: string): string[] {

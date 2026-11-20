@@ -15,6 +15,8 @@ import { EquipmentPage } from './pages/EquipmentPage';
 import { ExperienceBrandPage, ExperienceHomePage } from './pages/ExperiencePages';
 import { FreelanceDetailPage, FreelanceListPage } from './pages/FreelancePages';
 import { KnowledgeBrandPage, KnowledgeHomePage } from './pages/KnowledgePages';
+import { KnowledgePlacesPage } from './pages/KnowledgePlacesPage';
+import { EventDetailPage, EventsListPage } from './pages/EventsPages';
 import { ProjectDetailPage } from './pages/ProjectDetailPage';
 import { SearchPage } from './pages/SearchPage';
 import { SettingsPage } from './pages/SettingsPage';
@@ -44,7 +46,7 @@ function Shell() {
     );
   if (!ready) return <div className="empty">Đang tải dữ liệu…</div>;
 
-  const fillPage = /^\/(all|job\/|calendar|equipment)/.test(location.pathname) || /\/(experience|knowledge)\/.+/.test(location.pathname);
+  const fillPage = /^\/(all|job\/|calendar|equipment|events$)/.test(location.pathname) || /\/(experience|knowledge)\/.+/.test(location.pathname);
 
   return (
     <div className="app">
@@ -79,6 +81,8 @@ function Shell() {
             <Route path="/freelance" element={<FreelanceListPage />} />
             <Route path="/freelance/:id" element={<FreelanceDetailPage />} />
             <Route path="/equipment" element={<EquipmentPage />} />
+            <Route path="/events" element={<EventsListPage />} />
+            <Route path="/events/:id" element={<EventDetailPage />} />
             <Route path="/passwords" element={<PasswordPage />} />
             <Route path="/tools/app" element={<ToolAppPage />} />
             <Route path="/tools/app/:toolId" element={<ToolAppRunPage />} />
@@ -86,6 +90,7 @@ function Shell() {
             <Route path="/experience" element={<ExperienceHomePage />} />
             <Route path="/experience/:brandId" element={<ExperienceBrandPage />} />
             <Route path="/knowledge" element={<KnowledgeHomePage />} />
+            <Route path="/knowledge/places" element={<KnowledgePlacesPage />} />
             <Route path="/knowledge/:brandId" element={<KnowledgeBrandPage />} />
             <Route path="/calendar" element={<CalendarPage />} />
             <Route path="/todo" element={<TodoPage />} />

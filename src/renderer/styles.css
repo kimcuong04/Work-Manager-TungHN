@@ -25,6 +25,11 @@
   --shadow: 0 1px 2px rgba(30, 35, 25, 0.05), 0 2px 8px rgba(30, 35, 25, 0.05);
   --shadow-lg: 0 12px 40px rgba(30, 35, 25, 0.18);
   --overlay: rgba(25, 28, 20, 0.38);
+  --prio-1: #64748b;
+  --prio-2: #0284c7;
+  --prio-3: #ca8a04;
+  --prio-4: #ea580c;
+  --prio-5: #dc2626;
   color-scheme: light;
 }
 
@@ -54,6 +59,11 @@
   --shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
   --shadow-lg: 0 16px 48px rgba(0, 0, 0, 0.55);
   --overlay: rgba(0, 0, 0, 0.6);
+  --prio-1: #94a3b8;
+  --prio-2: #38bdf8;
+  --prio-3: #facc15;
+  --prio-4: #fb923c;
+  --prio-5: #f87171;
   color-scheme: dark;
 }
 
@@ -592,15 +602,31 @@ a.btn {
 .badge.prio {
   font-variant-numeric: tabular-nums;
 }
-.badge.prio.p1 {
-  background: color-mix(in srgb, var(--urgent) 14%, transparent);
-  color: var(--urgent);
-  border-color: transparent;
+/* v1.14: màu Priority Point — 1 thấp nhất (xám) … 5 cao nhất (đỏ). */
+.badge.prio.p1,
+.badge.prio.p2,
+.badge.prio.p3,
+.badge.prio.p4,
+.badge.prio.p5 {
+  background: color-mix(in srgb, var(--prio) 15%, var(--surface));
+  color: var(--prio);
+  border-color: color-mix(in srgb, var(--prio) 35%, transparent);
+  font-weight: 700;
 }
-.badge.prio.p2 {
-  background: color-mix(in srgb, var(--attention) 15%, transparent);
-  color: var(--attention);
-  border-color: transparent;
+.p1 {
+  --prio: var(--prio-1);
+}
+.p2 {
+  --prio: var(--prio-2);
+}
+.p3 {
+  --prio: var(--prio-3);
+}
+.p4 {
+  --prio: var(--prio-4);
+}
+.p5 {
+  --prio: var(--prio-5);
 }
 .badge.accent {
   background: var(--accent-soft);
@@ -1606,10 +1632,17 @@ table.tbl {
   cursor: pointer;
   font-weight: 700;
 }
+.prio-picker button {
+  color: var(--prio, var(--text));
+  border-color: color-mix(in srgb, var(--prio, var(--border-strong)) 45%, var(--border-strong));
+}
+.prio-picker button:hover {
+  background: color-mix(in srgb, var(--prio, var(--accent)) 12%, var(--surface));
+}
 .prio-picker button.on {
-  background: var(--accent);
-  border-color: var(--accent);
-  color: var(--accent-contrast);
+  background: var(--prio, var(--accent));
+  border-color: var(--prio, var(--accent));
+  color: #fff;
 }
 
 .theme-cards {
@@ -3406,7 +3439,7 @@ input.select-box {
   color: #1c1917;
 }
 
-/* ---------- v1.13: bảng import thiết bị dạng workbook Excel — mỗi bảng là một tab sheet ở thanh dưới ---------- */
+/* ---------- v1.13: bảng import thiết bị dạng workbook Excel — mỗi bảng là một tab sheet (v1.14: thanh tab ở trên bảng) ---------- */
 .xl-book {
   border: 1px solid var(--border);
   border-radius: 10px;
@@ -3434,7 +3467,7 @@ input.select-box {
   align-items: stretch;
   min-height: 34px;
   padding: 0 4px;
-  border-top: 1px solid var(--border-strong);
+  border-bottom: 1px solid var(--border-strong);
   background: var(--surface-2);
 }
 .xl-nav,
@@ -3722,4 +3755,285 @@ input.select-box {
   z-index: 1000;
   width: 250px;
   padding: 10px;
+}
+
+/* ---------- v1.14: To-do — kéo việc sang ngày khác, mục Vô thời hạn ---------- */
+.todo-board {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(240px, 300px);
+  gap: 14px;
+  align-items: start;
+}
+.todo-side {
+  position: sticky;
+  top: 8px;
+  min-width: 0;
+}
+.todo-zone.drop-on {
+  outline: 2px dashed var(--accent);
+  outline-offset: -2px;
+  background: var(--accent-soft);
+}
+.todo-day.nodate {
+  border-style: dashed;
+  background: var(--surface-2);
+}
+.todo-day.nodate .todo-item {
+  background: transparent;
+}
+/* Thanh nổi ở đáy màn hình: hiện khi bắt đầu kéo mà không đẩy nội dung (điểm thả không bị lệch). */
+.todo-drop-days {
+  position: fixed;
+  left: 50%;
+  bottom: 18px;
+  z-index: 60;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  max-width: calc(100vw - 32px);
+  flex-wrap: wrap;
+  padding: 8px 10px;
+  border: 1px dashed var(--accent);
+  border-radius: 12px;
+  background: var(--surface);
+  box-shadow: var(--shadow-lg);
+}
+.todo-drop-day {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-width: 68px;
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  font-size: 12px;
+}
+.todo-drop-day.on {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+@media (max-width: 900px) {
+  .todo-board {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .todo-side {
+    position: static;
+  }
+}
+
+/* ---------- v1.14: Ghi chú có link (Password, Website - App - Địa điểm), Kiến thức ---------- */
+.linked-text {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.note-link {
+  display: inline;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--new);
+  font: inherit;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+.note-link:hover {
+  color: var(--accent);
+}
+.note-cell {
+  min-width: 200px;
+  max-width: 420px;
+  font-size: 13px;
+}
+.link-note-form {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 6px;
+  padding: 8px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface-2);
+}
+.link-note-form .input {
+  flex: 1 1 180px;
+  min-width: 0;
+}
+.link-note-preview {
+  margin-top: 6px;
+  padding: 6px 8px;
+  border-left: 3px solid var(--border-strong);
+  background: var(--surface-2);
+  border-radius: 4px;
+}
+.brand-card-wrap {
+  position: relative;
+  display: flex;
+}
+.brand-card-wrap > .brand-card {
+  flex: 1;
+  min-width: 0;
+}
+.brand-card.fixed {
+  border-style: dashed;
+}
+.brand-card-del {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  color: var(--danger);
+  opacity: 0;
+}
+.brand-card-wrap:hover .brand-card-del,
+.brand-card-del:focus-visible {
+  opacity: 1;
+}
+.radio-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+.radio-list label {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  cursor: pointer;
+}
+.seg-count {
+  margin-left: 6px;
+  padding: 0 6px;
+  border-radius: 9px;
+  background: var(--surface-hover);
+  color: var(--text-muted);
+  font-size: 11px;
+}
+.place-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  background: var(--surface-hover);
+}
+.place-chip.c-website {
+  color: #2563eb;
+  background: color-mix(in srgb, #2563eb 12%, var(--surface));
+}
+.place-chip.c-app {
+  color: #7c3aed;
+  background: color-mix(in srgb, #7c3aed 12%, var(--surface));
+}
+.place-chip.c-place {
+  color: #c2410c;
+  background: color-mix(in srgb, #c2410c 12%, var(--surface));
+}
+
+/* ---------- v1.14: Job Freelance — Người đồng hành, các lần thanh toán ---------- */
+.companion-list {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  overflow: hidden;
+}
+.companion-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  padding: 10px 12px;
+  border: 0;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  cursor: pointer;
+}
+.companion-row:last-child {
+  border-bottom: 0;
+}
+.companion-row:hover {
+  background: var(--surface-hover);
+}
+.payment-log {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.payment-entry {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+}
+.payment-entry.editing {
+  border-color: var(--accent);
+  box-shadow: inset 3px 0 0 var(--accent);
+}
+.payment-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.payment-amount {
+  font-weight: 700;
+  color: var(--success);
+}
+[data-theme='dark'] .place-chip.c-website {
+  color: #93c5fd;
+}
+[data-theme='dark'] .place-chip.c-app {
+  color: #c4b5fd;
+}
+[data-theme='dark'] .place-chip.c-place {
+  color: #fdba74;
+}
+
+/* ---------- v1.14: Import xlsx — chọn sheet dạng nút, đánh dấu sheet đã import từ cùng file ---------- */
+.sheet-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.sheet-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 100%;
+  padding: 5px 10px;
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+.sheet-chip:hover {
+  background: var(--surface-hover);
+}
+.sheet-chip.on {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-weight: 600;
+}
+.sheet-chip .badge {
+  font-size: 10.5px;
+  padding: 0 6px;
 }

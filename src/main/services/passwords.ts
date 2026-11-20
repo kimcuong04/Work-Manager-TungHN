@@ -11,6 +11,7 @@ function mapPassword(r: Record<string, any>): PasswordEntry {
     siteName: r.site_name,
     username: r.username,
     url: str(r.site_url),
+    note: str(r.note),
     createdAt: r.created_at,
     updatedAt: r.updated_at,
   };
@@ -18,11 +19,11 @@ function mapPassword(r: Record<string, any>): PasswordEntry {
 
 /** STT là thứ tự thêm vào (cũ nhất = 1). Không bao giờ trả về mật khẩu ở đây. */
 export function listPasswords(ctx: Ctx): PasswordEntry[] {
-  return ctx.db.all('SELECT id, site_name, username, site_url, created_at, updated_at FROM password_entries ORDER BY created_at, id').map(mapPassword);
+  return ctx.db.all('SELECT id, site_name, username, site_url, note, created_at, updated_at FROM password_entries ORDER BY created_at, id').map(mapPassword);
 }
 
 function getPassword(ctx: Ctx, id: string): PasswordEntry {
-  const r = ctx.db.get('SELECT id, site_name, username, site_url, created_at, updated_at FROM password_entries WHERE id = ?', [id]);
+  const r = ctx.db.get('SELECT id, site_name, username, site_url, note, created_at, updated_at FROM password_entries WHERE id = ?', [id]);
   if (!r) throw new AppError('Không tìm thấy mục Password (có thể đã bị xóa).');
   return mapPassword(r);
 }
@@ -37,15 +38,10 @@ export function createPassword(ctx: Ctx, input: PasswordInput): PasswordEntry {
   const id = randomUUID();
   const stamp = now();
   ctx.db.tx(() =>
-    ctx.db.run('INSERT INTO password_entries VALUES (?,?,?,?,?,?,?)', [
-      id,
-      input.siteName.trim(),
-      input.username.trim(),
-      ctx.platform.encrypt(input.password!),
-      (input.url ?? '').trim() || null,
-      stamp,
-      stamp,
-    ]),
+    ctx.db.run(
+      'INSERT INTO password_entries (id, site_name, username, password_encrypted, site_url, note, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?)',
+      [id, input.siteName.trim(), input.username.trim(), ctx.platform.encrypt(input.password!), (input.url ?? '').trim() || null, (input.note ?? '').trim(), stamp, stamp],
+    ),
   );
   return getPassword(ctx, id);
 }
@@ -61,6 +57,7 @@ export function updatePassword(ctx: Ctx, id: string, input: PasswordInput): Pass
       now(),
       id,
     ]);
+    if (input.note !== undefined) ctx.db.run('UPDATE password_entries SET note = ? WHERE id = ?', [String(input.note ?? '').trim(), id]);
     if (input.password !== undefined) ctx.db.run('UPDATE password_entries SET password_encrypted = ? WHERE id = ?', [ctx.platform.encrypt(input.password), id]);
   });
   return getPassword(ctx, id);

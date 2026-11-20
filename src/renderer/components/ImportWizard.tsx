@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { AlertTriangle, FileSpreadsheet, Info, RefreshCw, Wand2 } from 'lucide-react';
-import type { ProjectImport, WorkbookData, WorkbookSheet } from '../../shared/types';
-import { ITEM_FIELDS, autoDetect, buildImport, cellText, colName, configFromMappings, configToMappings, detectTableEnd, getSheet, type ImportConfig } from '../../shared/xlsxMapping';
+import type { ImportPayload, ProjectImport, WorkbookData, WorkbookSheet } from '../../shared/types';
+import { ITEM_FIELDS, autoDetect, buildImport, cellText, colName, configFromMappings, configToMappings, detectItemsInSheet, detectTableEnd, getSheet, type ImportConfig } from '../../shared/xlsxMapping';
+import { importTabBase } from '../../shared/validation';
 import { api, errorMessage } from '../api';
 import { useUi } from '../state/ui';
 import { formatBytes } from './common';
@@ -80,10 +81,16 @@ export function ImportWizard({
   projectId,
   hasExisting,
   replaceImport,
+  commitTo,
+  existing,
   onClose,
   onDone,
 }: {
   projectId: string;
+  /** Các bảng đã import của cùng chủ sở hữu: import lại cùng file thì tự chọn sẵn sheet chưa import. */
+  existing?: ProjectImport[];
+  /** Lưu bảng import vào nơi khác dự án (vd Sự kiện tạm thời); bỏ trống = bảng import của dự án `projectId`. */
+  commitTo?: (payload: ImportPayload, replaceImportId: string | null) => Promise<ProjectImport>;
   hasExisting: boolean;
   /** Import lại: thay đúng bảng này; bỏ trống = thêm một bảng mới (Import thêm). */
   replaceImport?: ProjectImport | null;
@@ -97,6 +104,7 @@ export function ImportWizard({
   const [config, setConfig] = useState<ImportConfig | null>(null);
   const [notes, setNotes] = useState<string[]>([]);
   const [usedSaved, setUsedSaved] = useState(false);
+  const [info, setInfo] = useState<string | null>(null);
   const [saveMapping, setSaveMapping] = useState(true);
   const [saving, setSaving] = useState(false);
 
@@ -116,16 +124,50 @@ export function ImportWizard({
       const data = await api.readWorkbook(path);
       const saved = configFromMappings(data.sheets, data.savedMappings);
       setWb(data);
+      let cfg: ImportConfig;
+      let fromSaved = false;
+      let warn: string[] = [];
       if (saved && saved.items.enabled) {
-        setConfig(itemsOnly(saved));
-        setNotes([]);
-        setUsedSaved(true);
-      } else applyAuto(data.sheets);
+        cfg = itemsOnly(saved);
+        fromSaved = true;
+      } else {
+        const auto = autoDetect(data.sheets);
+        cfg = itemsOnly(auto.config);
+        if (!auto.config.items.enabled) warn = ['Không nhận diện được bảng thiết bị — hãy chọn sheet, dòng header và cột ở bên trái.'];
+      }
+      // Cùng một file đã import (vd sheet 1) thì chọn sẵn sheet chưa import có bảng thiết bị, để import tiếp sheet khác
+      // của file đó; không sheet nào khác có bảng thì giữ sheet cũ (import lại bản cập nhật vẫn được).
+      const done = importedSheetsOf(data);
+      let message: string | null = null;
+      if (!replaceImport && done.has(cfg.items.sheet)) {
+        const next = data.sheets.filter((s) => !done.has(s.name)).map((s) => detectItemsInSheet(s)).find((x) => !!x) ?? null;
+        const doneList = [...done].map((n) => `"${n}"`).join(', ');
+        if (next) {
+          cfg = { ...cfg, items: next };
+          fromSaved = false;
+          warn = [];
+          message = `File này đã import sheet ${doneList} — đã chọn sẵn sheet "${next.sheet}" chưa import. Bấm sheet khác ở trên nếu cần.`;
+        } else
+          message = `File này đã import sheet ${doneList} — vẫn import thêm được (tạo thêm một bảng). Muốn lấy sheet khác thì bấm sheet ở trên rồi chọn dòng header / cột.`;
+      }
+      setConfig(cfg);
+      setNotes(warn);
+      setUsedSaved(fromSaved);
+      setInfo(message);
       setPhase('map');
     } catch (e) {
       setError(errorMessage(e));
       setPhase('error');
     }
+  };
+
+  const importedSheetsOf = (data: WorkbookData) => {
+    const same = (existing ?? []).filter(
+      (i) =>
+        i.id !== replaceImport?.id &&
+        (i.sourcePath && data.filePath ? i.sourcePath.toLowerCase() === data.filePath.toLowerCase() : i.sourceFileName.toLowerCase() === data.fileName.toLowerCase()),
+    );
+    return new Set(same.flatMap((i) => i.sheetNames));
   };
 
   // StrictMode (dev) chạy effect 2 lần — không được mở hộp thoại chọn file 2 lần.
@@ -170,6 +212,20 @@ export function ImportWizard({
   const upd = (fn: (c: ImportConfig) => ImportConfig) => setConfig((c) => (c ? fn(structuredClone(c)) : c));
   const itemSheet = getSheet(sheets, config.items.sheet);
   const hasData = built.items.length > 0;
+  const importedSheets = importedSheetsOf(wb);
+  // Tên tab kèm tên sheet chỉ khi file có nhiều bảng thiết bị (hoặc chọn tay một sheet khác), để phân biệt các tab cùng file.
+  const needsSheetInName = () => {
+    const tables = sheets.filter((s) => detectItemsInSheet(s)).map((s) => s.name);
+    return tables.length > 1 || (sheets.length > 1 && !tables.includes(config.items.sheet));
+  };
+  const pickSheet = (name: string) => {
+    const sheet = getSheet(sheets, name);
+    if (!sheet) return;
+    const d = detectItemsInSheet(sheet);
+    upd((c) => ((c.items = d ?? { ...c.items, enabled: true, sheet: name, columns: {} }), c));
+    setNotes(d ? [] : [`Không nhận diện được bảng thiết bị trong sheet "${name}" — hãy chọn dòng header và cột ở bên trái.`]);
+    setUsedSaved(false);
+  };
 
   const commit = async () => {
     if (!hasData) return;
@@ -185,13 +241,13 @@ export function ImportWizard({
       return;
     setSaving(true);
     try {
-      const saved = await api.commitImport(
-        projectId,
+      const saved = await (commitTo ?? ((p: ImportPayload, r: string | null) => api.commitImport(projectId, p, r)))(
         {
         sourceFileName: wb.fileName,
         sourcePath: wb.filePath,
         sheetNames: [config.items.sheet],
         workbookSignature: wb.signature,
+        tabName: needsSheetInName() ? importTabBase(wb.fileName, config.items.sheet) : undefined,
         info: [],
         requirements: [],
         items: built.items,
@@ -252,6 +308,12 @@ export function ImportWizard({
               </button>
             </div>
           </div>
+          {info && (
+            <div className="alert info">
+              <Info size={15} />
+              <div>{info}</div>
+            </div>
+          )}
           {usedSaved && (
             <div className="alert info">
               <Info size={15} />
@@ -273,8 +335,24 @@ export function ImportWizard({
             <h3>Thông tin các thiết bị</h3>
             <div className="stack" style={{ gap: 8 }}>
               <div className="field">
-                <label>Sheet</label>
-                <SheetSelect sheets={sheets} value={config.items.sheet} onChange={(v) => upd((c) => ((c.items.enabled = true), (c.items.sheet = v), (c.items.columns = {}), c))} />
+                <label>Sheet {sheets.length > 1 && <span className="faint small">— mỗi lần import một sheet, import lại cùng file để lấy sheet khác</span>}</label>
+                <div className="sheet-chips" role="radiogroup" aria-label="Sheet cần import">
+                  {sheets.map((s) => (
+                    <button
+                      key={s.name}
+                      type="button"
+                      role="radio"
+                      aria-checked={config.items.sheet === s.name}
+                      className={`sheet-chip ${config.items.sheet === s.name ? 'on' : ''}`}
+                      title={`${s.name}: ${s.rowCount} dòng × ${s.colCount} cột${importedSheets.has(s.name) ? ' — đã import từ file này' : ''}`}
+                      onClick={() => pickSheet(s.name)}
+                    >
+                      <FileSpreadsheet size={13} />
+                      <span className="ellipsis">{s.name}</span>
+                      {importedSheets.has(s.name) && <span className="badge">đã import</span>}
+                    </button>
+                  ))}
+                </div>
               </div>
               <div className="map-grid">
                 <div className="field">

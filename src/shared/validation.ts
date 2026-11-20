@@ -9,6 +9,10 @@ import {
   type ExperienceInput,
   type FreelanceInput,
   type KnowledgeInput,
+  type KnowledgePlaceInput,
+  type CompanionPaymentInput,
+  type TempEventInput,
+  PLACE_CATEGORIES,
   type OnlineToolInput,
   type PasswordInput,
   type ProjectInput,
@@ -55,6 +59,9 @@ export function validateProjectInput(input: ProjectInput): FieldErrors {
     if (!Array.isArray(input.files) || input.files.length > 50) e.file = 'Tối đa 50 file liên kết cho một dự án.';
     else if (input.files.some((f) => !f?.path || !LINK_FILE_EXTENSIONS.includes(fileExtension(f.path)))) e.file = `Chỉ hỗ trợ file ${LINK_FILE_LABEL}.`;
   }
+  const erp = (input.erpLink ?? '').trim();
+  if (erp.length > LIMITS.url) e.erpLink = `Tối đa ${LIMITS.url} ký tự.`;
+  else if (erp && !isWebLink(erp)) e.erpLink = 'Link ERP phải là link website, vd https://erp.congty.vn/du-an/123';
   return e;
 }
 
@@ -80,6 +87,42 @@ export function validatePasswordInput(input: PasswordInput, creating: boolean): 
   checkLen(e, 'username', input.username ?? '', LIMITS.shortText);
   if (input.password !== undefined) checkLen(e, 'password', input.password, 1000);
   checkLen(e, 'url', input.url ?? '', LIMITS.url);
+  checkLen(e, 'note', input.note ?? '', LIMITS.note);
+  return e;
+}
+
+/** Sự kiện tạm thời: STT và Tên event bắt buộc, Ngày nếu có phải hợp lệ. */
+export function validateEventInput(input: TempEventInput): FieldErrors {
+  const e: FieldErrors = {};
+  if (input.stt === null) e.stt = 'Bắt buộc nhập STT.';
+  else if (input.stt !== undefined && !(Number.isInteger(input.stt) && input.stt >= 1 && input.stt <= 999999)) e.stt = 'STT phải là số nguyên dương.';
+  const name = cleanName(input.name ?? '');
+  if (!name) e.name = 'Bắt buộc nhập Tên event.';
+  else if (name.length > LIMITS.projectName) e.name = `Tối đa ${LIMITS.projectName} ký tự.`;
+  if (input.eventDate && !isValidISODate(input.eventDate)) e.eventDate = 'Ngày không hợp lệ (dd/mm/yyyy).';
+  return e;
+}
+
+export const PAYMENT_AMOUNT_MAX = 1_000_000_000_000;
+
+/** Một lần thanh toán cho người đồng hành: số tiền là số nguyên dương (VNĐ). */
+export function validateCompanionPayment(input: CompanionPaymentInput): FieldErrors {
+  const e: FieldErrors = {};
+  const a = input.amount;
+  if (!Number.isInteger(a) || a <= 0) e.amount = 'Nhập số tiền thanh toán (số nguyên dương, VNĐ).';
+  else if (a > PAYMENT_AMOUNT_MAX) e.amount = 'Số tiền quá lớn.';
+  checkLen(e, 'note', input.note ?? '', LIMITS.note);
+  if (!Array.isArray(input.images) || input.images.length > 30) e.images = 'Tối đa 30 ảnh cho một lần thanh toán.';
+  return e;
+}
+
+/** Website - App - Địa điểm: Tên bắt buộc; Phân loại để trống được. */
+export function validatePlaceInput(input: KnowledgePlaceInput): FieldErrors {
+  const e: FieldErrors = {};
+  if (!cleanName(input.name ?? '')) e.name = 'Bắt buộc nhập Tên.';
+  checkLen(e, 'name', input.name ?? '', LIMITS.projectName);
+  checkLen(e, 'note', input.note ?? '', LIMITS.note);
+  if (input.category !== null && input.category !== undefined && !PLACE_CATEGORIES.includes(input.category)) e.category = 'Phân loại không hợp lệ.';
   return e;
 }
 
@@ -108,6 +151,13 @@ export const IMPORT_TAB_NAME_MAX = 60;
 export function defaultImportTabName(fileName: string): string {
   const base = cleanName(String(fileName ?? '').replace(/\.[^.\\/]*$/, ''));
   return (base || 'Bảng').slice(0, IMPORT_TAB_NAME_MAX).trim();
+}
+
+/** Tên tab mặc định khi import một sheet của workbook có nhiều sheet: "Tên file - Tên sheet". */
+export function importTabBase(fileName: string, sheetName?: string | null): string {
+  const base = defaultImportTabName(fileName);
+  const sheet = cleanName(String(sheetName ?? ''));
+  return sheet ? `${base} - ${sheet}`.slice(0, IMPORT_TAB_NAME_MAX).trim() : base;
 }
 
 /** Như Excel: tên đã có (không phân biệt hoa/thường) thì thêm " (2)", " (3)"… */
@@ -158,6 +208,7 @@ function checkLen(e: FieldErrors, key: string, value: string, max: number) {
 
 export function validateWarrantyInput(input: WarrantyInput): FieldErrors {
   const e: FieldErrors = {};
+  if (input.projectId && input.projectEntryId) e.project = 'Chỉ chọn một Dự án.';
   if (input.stt === null) e.stt = 'Bắt buộc nhập STT.';
   else if (input.stt !== undefined && !(Number.isInteger(input.stt) && input.stt >= 1 && input.stt <= 999999)) e.stt = 'STT phải là số nguyên dương.';
   if (!input.jobYearId) e.jobYearId = 'Thiếu năm.';

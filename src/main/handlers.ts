@@ -14,6 +14,7 @@ import { bulkImport } from './services/bulkImport';
 import * as calendar from './services/calendar';
 import * as equipment from './services/equipment';
 import * as freelance from './services/freelance';
+import * as events from './services/events';
 import * as master from './services/master';
 import * as notes from './services/notes';
 import * as passwords from './services/passwords';
@@ -77,8 +78,8 @@ export function createHandlers(ctx: Ctx, desktop: Desktop): Handlers {
   const DANGEROUS = new Set(['exe', 'bat', 'cmd', 'com', 'msi', 'ps1', 'vbs', 'vbe', 'js', 'jse', 'wsf', 'scr', 'lnk', 'reg', 'hta', 'cpl', 'pif']);
 
   const assertLinkedFile = (p: string) => {
-    const linked = ctx.db.scalar<number>('SELECT COUNT(*) FROM project_files WHERE file_path = ?', [p]);
-    if (!linked) throw new AppError('File này không được liên kết với dự án nào.');
+    const linked = ctx.db.scalar<number>('SELECT (SELECT COUNT(*) FROM project_files WHERE file_path = ?) + (SELECT COUNT(*) FROM temp_event_files WHERE file_path = ?)', [p, p]);
+    if (!linked) throw new AppError('File này không được liên kết với dự án / sự kiện nào.');
   };
 
   return {
@@ -192,6 +193,26 @@ export function createHandlers(ctx: Ctx, desktop: Desktop): Handlers {
     listFreelanceNotes: (id) => notes.listFreelanceNotes(ctx, id),
     saveFreelanceNote: (id, input) => notes.saveFreelanceNote(ctx, id, input),
     deleteFreelanceNote: (id) => notes.deleteFreelanceNote(ctx, id),
+    listCompanionPayments: (jobId) => freelance.listCompanionPayments(ctx, String(jobId)),
+    addCompanionPayment: (jobId, companionId, input) => freelance.addCompanionPayment(ctx, String(jobId), String(companionId), input),
+    updateCompanionPayment: (id, input) => freelance.updateCompanionPayment(ctx, String(id), input),
+    deleteCompanionPayment: (id) => freelance.deleteCompanionPayment(ctx, String(id)),
+
+    listEvents: () => events.listEvents(ctx),
+    nextEventStt: () => events.nextEventStt(ctx),
+    createEvent: (input, opts) => events.createEvent(ctx, input, { noteHtml: typeof opts?.noteHtml === 'string' ? opts.noteHtml : undefined }),
+    updateEvent: (id, input) => events.updateEvent(ctx, String(id), input),
+    deleteEvent: (id) => events.deleteEvent(ctx, String(id)),
+    setEventFiles: (id, files) => events.setEventFiles(ctx, String(id), files),
+    setEventFolder: (id, folder) => events.setEventFolder(ctx, String(id), folder ? String(folder) : null),
+    listEventNotes: (id) => notes.listEventNotes(ctx, String(id)),
+    saveEventNote: (id, input) => notes.saveEventNote(ctx, String(id), input),
+    deleteEventNote: (id) => notes.deleteEventNote(ctx, String(id)),
+    listEventImports: (id) => events.listEventImports(ctx, String(id)),
+    commitEventImport: (id, payload, replaceImportId) => events.commitEventImport(ctx, String(id), payload, replaceImportId ? String(replaceImportId) : null),
+    removeEventImport: (id, importId) => events.removeEventImport(ctx, String(id), String(importId)),
+    renameEventImport: (id, importId, name) => events.renameEventImport(ctx, String(id), String(importId), String(name ?? '')),
+    reorderEventImports: (id, ids) => events.reorderEventImports(ctx, String(id), Array.isArray(ids) ? ids.map(String) : []),
 
     bulkImport: (spec) => bulkImport(ctx, spec),
 
@@ -293,6 +314,7 @@ export function createHandlers(ctx: Ctx, desktop: Desktop): Handlers {
     addTodos: (date, targets) => todos.addTodos(ctx, String(date), targets),
     setTodoDone: (id, done) => todos.setTodoDone(ctx, String(id), !!done),
     reorderTodos: (date, ids) => todos.reorderTodos(ctx, String(date), ids),
+    moveTodo: (id, date, index) => todos.moveTodo(ctx, String(id), String(date ?? ''), Number(index)),
     deleteTodo: (id) => todos.deleteTodo(ctx, String(id)),
 
     pickImages: async () => {
@@ -339,8 +361,8 @@ export function createHandlers(ctx: Ctx, desktop: Desktop): Handlers {
     },
     openLocalLink: async (p) => {
       const linked = ctx.db.scalar<number>(
-        'SELECT (SELECT COUNT(*) FROM experience_records WHERE local_path = ?) + (SELECT COUNT(*) FROM knowledge_records WHERE local_path = ?)',
-        [p, p],
+        'SELECT (SELECT COUNT(*) FROM experience_records WHERE local_path = ?) + (SELECT COUNT(*) FROM knowledge_records WHERE local_path = ?) + (SELECT COUNT(*) FROM temp_events WHERE folder_path = ?)',
+        [p, p, p],
       );
       if (!linked) throw new AppError('Đường dẫn này không được liên kết với mục nào.');
       if (!fs.existsSync(p)) throw new AppError('File/thư mục không còn tồn tại hoặc đã bị di chuyển — hãy chọn lại.');
@@ -365,6 +387,12 @@ export function createHandlers(ctx: Ctx, desktop: Desktop): Handlers {
     createKnowledge: (input) => records.createKnowledge(ctx, input),
     updateKnowledge: (id, input) => records.updateKnowledge(ctx, id, input),
     deleteKnowledge: (id) => records.deleteKnowledge(ctx, id),
+    addKnowledgeBrand: (name) => records.addKnowledgeBrand(ctx, String(name ?? '')),
+    removeKnowledgeBrand: (brandId, deleteRecords) => records.removeKnowledgeBrand(ctx, String(brandId), !!deleteRecords),
+    listPlaces: () => records.listPlaces(ctx),
+    createPlace: (input) => records.createPlace(ctx, input),
+    updatePlace: (id, input) => records.updatePlace(ctx, String(id), input),
+    deletePlace: (id) => records.deletePlace(ctx, String(id)),
 
     listCalendarFeed: (q) => calendar.listCalendarFeed(ctx, q ?? {}),
     listCalendarEvents: (q) => calendar.listCalendarEvents(ctx, q ?? {}),

@@ -97,7 +97,10 @@ export const SORT_LABEL: Record<SortKey, string> = {
 
 export const DEFAULT_SORT: SortState = { key: 'priority', dir: 'asc' };
 
-/** Mặc định: Priority tăng dần (1 trước 5), rồi ngày tới hạn tăng dần (SRS 5.2). */
+/**
+ * Mặc định: ưu tiên cao trước, rồi ngày tới hạn tăng dần (SRS 5.2). Từ v1.14 số Priority lớn hơn là ưu tiên cao hơn
+ * (5 cao nhất), nên chiều "tăng dần" của cột Priority vẫn là ưu tiên cao → thấp như trước.
+ */
 export function sortProjects(list: ProjectView[], s: SortState): ProjectView[] {
   const sign = s.dir === 'asc' ? 1 : -1;
   // Thiếu ngày/giá trị luôn xếp cuối, bất kể chiều sắp xếp.
@@ -105,13 +108,13 @@ export function sortProjects(list: ProjectView[], s: SortState): ProjectView[] {
   const byDue = (a: ProjectView, b: ProjectView) => (a.dueDate && b.dueDate ? a.dueDate.localeCompare(b.dueDate) : a.dueDate ? -1 : b.dueDate ? 1 : 0);
   const cmp: Record<SortKey, (a: ProjectView, b: ProjectView) => number> = {
     stt: (a, b) => sign * (a.stt - b.stt),
-    priority: (a, b) => sign * (a.priorityPoint - b.priorityPoint) || byDue(a, b),
-    due: (a, b) => nullsLast(a.dueDate, b.dueDate, (x, y) => x.localeCompare(y)) || a.priorityPoint - b.priorityPoint,
-    received: (a, b) => nullsLast(a.receivedDate, b.receivedDate, (x, y) => x.localeCompare(y)) || a.priorityPoint - b.priorityPoint,
+    priority: (a, b) => sign * (b.priorityPoint - a.priorityPoint) || byDue(a, b),
+    due: (a, b) => nullsLast(a.dueDate, b.dueDate, (x, y) => x.localeCompare(y)) || b.priorityPoint - a.priorityPoint,
+    received: (a, b) => nullsLast(a.receivedDate, b.receivedDate, (x, y) => x.localeCompare(y)) || b.priorityPoint - a.priorityPoint,
     name: (a, b) => sign * compareVi(a.projectName, b.projectName),
-    client: (a, b) => nullsLast(a.clientName, b.clientName, compareVi) || a.priorityPoint - b.priorityPoint,
-    si: (a, b) => nullsLast(a.siName, b.siName, compareVi) || a.priorityPoint - b.priorityPoint,
-    status: (a, b) => sign * (STATUS_ORDER.indexOf(a.status) - STATUS_ORDER.indexOf(b.status)) || a.priorityPoint - b.priorityPoint || byDue(a, b),
+    client: (a, b) => nullsLast(a.clientName, b.clientName, compareVi) || b.priorityPoint - a.priorityPoint,
+    si: (a, b) => nullsLast(a.siName, b.siName, compareVi) || b.priorityPoint - a.priorityPoint,
+    status: (a, b) => sign * (STATUS_ORDER.indexOf(a.status) - STATUS_ORDER.indexOf(b.status)) || b.priorityPoint - a.priorityPoint || byDue(a, b),
   };
   return [...list].sort(cmp[s.key]);
 }

@@ -71,7 +71,8 @@ describe('Nâng cấp dữ liệu v1.2 → v1.3', () => {
     const c2 = { ...ctx, db };
     expect(db.scalar<number>('PRAGMA user_version')).toBe(SCHEMA_VERSION);
     const [p] = projects.listProjects(c2);
-    expect(p).toMatchObject({ projectName: 'Dự án từ bản cũ', salespersonId: null, salespersonName: null, priorityPoint: 2 });
+    // Priority 2 (thang cũ: 1 cao nhất) thành 4 ở thang mới (5 cao nhất) — vẫn là mức "Cao".
+    expect(p).toMatchObject({ projectName: 'Dự án từ bản cũ', salespersonId: null, salespersonName: null, priorityPoint: 4 });
     const evs = calendar.listCalendarEvents(c2, { projectId: 'p1' });
     expect(evs).toHaveLength(1);
     expect(evs[0]).toMatchObject({ kind: 'PROJECT_START', eventDate: '2026-10-05', title: 'Dự án từ bản cũ', projectExists: true });

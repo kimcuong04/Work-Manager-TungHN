@@ -152,7 +152,7 @@ export function DashboardPage() {
   const active = counts.URGENT + counts.ATTENTION + counts.NEW;
   const urgent = useMemo(
     () =>
-      scoped.filter((p) => p.status === 'URGENT').sort((a, b) => a.priorityPoint - b.priorityPoint || (a.dueDate ?? '9999').localeCompare(b.dueDate ?? '9999')),
+      scoped.filter((p) => p.status === 'URGENT').sort((a, b) => b.priorityPoint - a.priorityPoint || (a.dueDate ?? '9999').localeCompare(b.dueDate ?? '9999')),
     [scoped],
   );
 

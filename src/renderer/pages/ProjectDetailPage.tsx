@@ -17,6 +17,7 @@ import { CATEGORY_LABEL, JOB_LABEL, type LinkedFile, type ProjectImport } from '
 import { api } from '../api';
 import { Breadcrumbs, EmptyState, PriorityBadge, StatusBadge, shortenPath } from '../components/common';
 import { FileStatusRow } from '../components/FileLink';
+import { WebLinkButton } from '../components/LinkFields';
 import { ProjectCalendarCard } from '../components/ProjectCalendarCard';
 import { ProjectFolderRow } from '../components/ProjectFolderRow';
 import { ProjectNotes } from '../components/ProjectNotes';
@@ -179,6 +180,8 @@ export function ProjectDetailPage() {
             <span>{p.clientName ?? <span className="faint">—</span>}</span>
             <span className="k">Vị trí</span>
             <span>{p.location}</span>
+            <span className="k">Link ERP</span>
+            <span style={{ minWidth: 0 }}>{p.erpLink ? <WebLinkButton text={p.erpLink} /> : <span className="faint">—</span>}</span>
           </div>
           <div className="small faint" style={{ marginTop: 14 }}>
             Tạo lúc {formatDateTime(p.createdAt)} · Cập nhật lúc {formatDateTime(p.updatedAt)}
@@ -205,7 +208,7 @@ export function ProjectDetailPage() {
             </span>
             <span className="k">Priority Point</span>
             <span>
-              <PriorityBadge value={p.priorityPoint} /> <span className="muted small">(1 cao nhất – 5 thấp nhất)</span>
+              <PriorityBadge value={p.priorityPoint} /> <span className="muted small">(5 cao nhất – 1 thấp nhất)</span>
             </span>
             {p.completedAt && (
               <>

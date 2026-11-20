@@ -404,7 +404,7 @@ try {
   check('Import XLSX thành công (3 thiết bị)', (await win.getByText('COLDSTORE 2U').isVisible()) && (await win.locator('.req-round').count()) === 0);
   await shot(win, '07-project-detail-imported');
 
-  // --- v1.10 + v1.13: Import thêm nhiều bảng xlsx — mỗi bảng là một tab sheet kiểu Excel ở dưới bảng ---
+  // --- v1.10 + v1.13/v1.14: Import thêm nhiều bảng xlsx — mỗi bảng là một tab sheet kiểu Excel, thanh tab ở trên bảng ---
   {
     const pid = created[2].id;
     const tabNames = async () => (await win.locator('.xl-tabs [role="tab"]').allInnerTexts()).map((t) => t.trim());
@@ -424,8 +424,8 @@ try {
     const barBox = await win.locator('.xl-tabbar').boundingBox();
     await shot(win, '54-project-imports-tabs');
     check(
-      'Import thêm xlsx: mỗi bảng là một tab sheet ở dưới cùng (kiểu Excel), tên theo file, trùng thì thêm (2); bảng mới tự mở',
-      imps.length === 2 && /Import thêm/.test(addTitle) && names1.join('|') === 'Bao gia XYZ|Bao gia XYZ (2)' && active1 === 'Bao gia XYZ (2)' && barBox.y >= sheetBox.y + sheetBox.height - 2,
+      'Import thêm xlsx: mỗi bảng là một tab sheet (kiểu Excel), thanh tab nằm phía trên bảng, tên theo file, trùng thì thêm (2); bảng mới tự mở',
+      imps.length === 2 && /Import thêm/.test(addTitle) && names1.join('|') === 'Bao gia XYZ|Bao gia XYZ (2)' && active1 === 'Bao gia XYZ (2)' && barBox.y + barBox.height <= sheetBox.y + 2,
       `${names1.join(' | ')} · đang mở: ${active1}`,
     );
 
@@ -799,19 +799,20 @@ try {
   await go(win, '#/calendar');
   await win.waitForSelector('.cal-month');
   await win.waitForTimeout(300);
-  const startChips = await win.locator('.ev-chip', { hasText: 'Nhà máy Đông Á' }).count();
-  check('Calendar: dự án mới tự có ở ngày tiếp nhận', startChips >= 1, `${startChips} chip`);
-  // Ô hôm nay còn có mục Kinh nghiệm (hiện tự động) nên tạm bỏ tick nguồn Kinh nghiệm để chip dự án không bị dồn vào “+N”.
+  // Ô hôm nay còn có mục Kinh nghiệm (hiện tự động) và hạn chót, nên tạm bỏ tick nguồn Kinh nghiệm để chip dự án không bị dồn
+  // vào “+N” (số mục trong ô phụ thuộc dự án nào đã được kéo sang Hoàn thành ở bước Board).
   await win.locator('.cal-layer', { hasText: 'Kinh nghiệm' }).locator('input').uncheck();
   await win.waitForTimeout(150);
+  const startChips = await win.locator('.ev-chip', { hasText: 'Nhà máy Đông Á' }).count();
+  check('Calendar: dự án mới tự có ở ngày tiếp nhận', startChips >= 1, `${startChips} chip`);
   check('Calendar: hiển thị mục "Cập nhật dự án" hôm nay', (await win.locator('.cal-cell.today .ev-chip', { hasText: 'Trường THCS' }).count()) === 1);
-  await win.locator('.cal-layer', { hasText: 'Kinh nghiệm' }).locator('input').check();
   await shot(win, '19-calendar-month');
   await win.locator('.ev-chip', { hasText: 'Nhà máy Đông Á' }).first().click();
   await win.waitForSelector('.cal-pop');
   check('Bấm sự kiện mở thẻ chi tiết', await win.locator('.cal-pop').getByRole('button', { name: 'Mở dự án' }).isVisible());
   await shot(win, '19b-calendar-popover');
   await win.keyboard.press('Escape');
+  await win.locator('.cal-layer', { hasText: 'Kinh nghiệm' }).locator('input').check();
   await win.getByRole('button', { name: /Tạo sự kiện/ }).click();
   await win.waitForSelector('.modal');
   await win.locator('.modal input.input').first().fill('Họp khảo sát hiện trường');
@@ -858,7 +859,7 @@ try {
   await go(win, '#/settings');
   await win.getByRole('button', { name: 'Danh mục (Master Data)' }).click();
   const masterTabs = await win.locator('.tabs.small button').allInnerTexts();
-  check('Settings › Master Data không còn tab Đơn vị thiết kế / Giai đoạn', masterTabs.join('|') === 'EU|Tên SI|Hãng|Sale & Phòng ban', masterTabs.join(' | '));
+  check('Settings › Master Data không còn tab Đơn vị thiết kế / Giai đoạn', masterTabs.join('|') === 'EU|Tên SI|Hãng|Sale & Phòng ban|Dự án (Warranty)', masterTabs.join(' | '));
   await win.getByRole('button', { name: 'Sale & Phòng ban' }).click();
   await win.waitForTimeout(250);
   await shot(win, '16e-settings-sale-dept');
@@ -1001,7 +1002,7 @@ try {
     JSON.stringify(flJobs.map((j) => [j.stt, j.projectName, j.statusName])),
   );
   const flHeads = (await win.locator('.freelance-table th').allInnerTexts()).map((t) => t.replace(/[▲▼]/g, '').trim()).filter(Boolean);
-  check('Bảng Freelance: STT / Tên dự án / Bên thuê / Ngày bắt đầu / Tình trạng / Thanh toán / Ghi chú', flHeads.join('|') === 'STT|Tên dự án|Bên thuê|Ngày bắt đầu|Tình trạng|Thanh toán|Ghi chú gần nhất', flHeads.join(' | '));
+  check('Bảng Freelance: STT / Tên dự án / Bên thuê / Ngày bắt đầu / Tình trạng / Thanh toán / Ghi chú', flHeads.join('|') === 'STT|Tên dự án|Bên thuê|Ngày bắt đầu|Tình trạng|Thanh toán|Người đồng hành|TT đồng hành|Ghi chú gần nhất', flHeads.join(' | '));
   const statuses = await call(win, 'listMaster', 'freelanceStatuses');
   await win.locator('.freelance-table select').first().selectOption({ label: 'Đang làm' });
   await win.waitForTimeout(400);
@@ -1039,13 +1040,13 @@ try {
   const st2 = (await call(win, 'listMaster', 'freelanceStatuses')).map((x) => x.name);
   check(
     'Master Data › Job Freelance › Tình trạng: thêm mới, sắp xếp lên/xuống',
-    flTabs.join('|') === 'Tình trạng|Trạng thái thanh toán|Bên thuê' && statuses.length === 5 && st2.length === 6 && st2[4] === 'Chờ nghiệm thu',
+    flTabs.join('|') === 'Tình trạng|Trạng thái thanh toán|Bên thuê|Người đồng hành' && statuses.length === 5 && st2.length === 6 && st2[4] === 'Chờ nghiệm thu',
     st2.join(' > '),
   );
   await shot(win, '33-settings-freelance-status');
   await win.locator('[aria-label="Phân loại danh mục"]').getByRole('button', { name: 'Job Chính' }).click();
   await win.waitForTimeout(200);
-  check('Phân loại Job Chính vẫn có EU / Tên SI / Hãng / Sale', (await win.locator('.tabs.small button').allInnerTexts()).join('|') === 'EU|Tên SI|Hãng|Sale & Phòng ban');
+  check('Phân loại Job Chính vẫn có EU / Tên SI / Hãng / Sale (+ Dự án (Warranty))', (await win.locator('.tabs.small button').allInnerTexts()).join('|') === 'EU|Tên SI|Hãng|Sale & Phòng ban|Dự án (Warranty)');
 
   // --- v1.5: Import hàng loạt từ .xlsx (mapping cột) ---
   const bulkProjects = path.join(fixtures, 'Danh sach du an.xlsx');
@@ -1774,8 +1775,8 @@ try {
     const view = win.locator('[aria-label="Chế độ xem"]');
     await view.getByRole('button', { name: '3 ngày' }).click();
     await win.waitForSelector('.todo-day.v-column');
-    const cols3 = await win.locator('.todo-day.v-column').count();
-    const boxes3 = await Promise.all((await win.locator('.todo-day.v-column').all()).map((l) => l.boundingBox()));
+    const cols3 = await win.locator('.todo-day.v-column:not(.nodate)').count();
+    const boxes3 = await Promise.all((await win.locator('.todo-day.v-column:not(.nodate)').all()).map((l) => l.boundingBox()));
     const tomorrowInput = win.locator(`input[aria-label="Thêm việc mới ngày ${dmy(day(1))}"]`);
     await tomorrowInput.fill('Chuẩn bị tài liệu nghiệm thu');
     await tomorrowInput.press('Enter');
@@ -1790,8 +1791,8 @@ try {
     );
     await view.getByRole('button', { name: '5 ngày' }).click();
     await win.waitForTimeout(400);
-    const cols5 = await win.locator('.todo-day.v-column').count();
-    const boxes5 = await Promise.all((await win.locator('.todo-day.v-column').all()).map((l) => l.boundingBox()));
+    const cols5 = await win.locator('.todo-day.v-column:not(.nodate)').count();
+    const boxes5 = await Promise.all((await win.locator('.todo-day.v-column:not(.nodate)').all()).map((l) => l.boundingBox()));
     await shot(win, '56-todo-5-days');
     await view.getByRole('button', { name: '7 ngày' }).click();
     await win.waitForTimeout(400);
@@ -1812,6 +1813,403 @@ try {
     await win.getByRole('button', { name: 'Hôm nay', exact: true }).click();
     await win.waitForTimeout(300);
     check('To-do: nút sau / trước nhảy theo số ngày đang xem; quay lại 1 ngày', next7.includes(dmy(day(7))) && (await win.locator('#todo-date').inputValue()) === dmy(day(0)), next7.replace(/\s+/g, ' '));
+  }
+
+  // --- v1.14: To-do — mục Vô thời hạn, kéo việc sang ngày khác ---
+  {
+    const view = win.locator('[aria-label="Chế độ xem"]');
+    await win.locator('.todo-day.nodate').waitFor();
+    const nd = win.locator('input[aria-label="Thêm việc mới Vô thời hạn"]');
+    await nd.fill('Đọc tài liệu SDK mới');
+    await nd.press('Enter');
+    await win.waitForTimeout(400);
+    const seen = [];
+    for (const label of ['3 ngày', '5 ngày', '7 ngày', '1 ngày']) {
+      await view.getByRole('button', { name: label }).click();
+      await win.waitForTimeout(300);
+      seen.push(await win.locator('.todo-day.nodate').isVisible());
+    }
+    let today = await call(win, 'listTodos', day(0));
+    const mover = today.find((t) => !t.doneAt && t.kind === 'TASK') ?? today.find((t) => !t.doneAt);
+    await win.locator('[data-grip="' + mover.id + '"]').dragTo(win.locator('.todo-day.nodate .todo-day-head'), { targetPosition: { x: 20, y: 8 } });
+    await win.waitForTimeout(700);
+    let undated = await call(win, 'listTodos', '');
+    today = await call(win, 'listTodos', day(0));
+    await shot(win, '63-todo-no-date');
+    check(
+      'To-do: mục Vô thời hạn luôn hiện ở 1 / 3 / 5 / 7 ngày; thêm việc mới tại đây; kéo việc của ngày vào Vô thời hạn',
+      seen.every(Boolean) && undated.some((t) => t.title === 'Đọc tài liệu SDK mới' && t.todoDate === '') && undated.some((t) => t.id === mover.id) && !today.some((t) => t.id === mover.id),
+      undated.map((t) => t.title).join(' | '),
+    );
+
+    await view.getByRole('button', { name: '3 ngày' }).click();
+    await win.waitForTimeout(400);
+    let tomorrow = await call(win, 'listTodos', day(1));
+    const first = tomorrow.find((t) => !t.doneAt);
+    await win.locator('[data-grip="' + mover.id + '"]').dragTo(win.locator('li[data-todo="' + first.id + '"]'), { targetPosition: { x: 30, y: 3 } });
+    await win.waitForTimeout(700);
+    tomorrow = await call(win, 'listTodos', day(1));
+    await shot(win, '64-todo-drag-to-day');
+
+    await view.getByRole('button', { name: '1 ngày' }).click();
+    await win.waitForTimeout(400);
+    today = await call(win, 'listTodos', day(0));
+    const m2 = today.find((t) => !t.doneAt);
+    const gb = await win.locator('[data-grip="' + m2.id + '"]').boundingBox();
+    await win.mouse.move(gb.x + gb.width / 2, gb.y + gb.height / 2);
+    await win.mouse.down();
+    await win.mouse.move(gb.x + 40, gb.y + 40, { steps: 6 });
+    const chip = win.locator('[data-drop-day="' + day(2) + '"]');
+    const chipShown = await chip.waitFor({ timeout: 3000 }).then(() => true, () => false);
+    if (chipShown) {
+      await shot(win, '65-todo-drop-days');
+      const cb = await chip.boundingBox();
+      await win.mouse.move(cb.x + cb.width / 2, cb.y + cb.height / 2, { steps: 10 });
+    }
+    await win.mouse.up();
+    await win.waitForTimeout(700);
+    const d2 = await call(win, 'listTodos', day(2));
+    check(
+      'To-do: kéo việc từ Vô thời hạn vào đầu danh sách ngày mai (3 ngày); xem 1 ngày thì thả lên ô ngày khác',
+      tomorrow[0]?.id === mover.id && tomorrow[0].todoDate === day(1) && chipShown && d2.some((t) => t.id === m2.id),
+      'ngày mai: ' + tomorrow.map((t) => t.title).join(' > ') + ' · ' + dmy(day(2)) + ': ' + d2.map((t) => t.title).join(', '),
+    );
+  }
+
+  // --- v1.14: Password — Ghi chú chèn được link ---
+  {
+    await win.locator('.sidebar a[href="#/passwords"]').click();
+    await win.waitForSelector('code.secret');
+    await win.getByRole('button', { name: 'Sửa Cổng hãng Axis' }).click();
+    await win.locator('#pw-note').fill('Đăng nhập bằng mã đối tác. ');
+    await win.locator('.modal').getByRole('button', { name: 'Chèn link' }).click();
+    await win.locator('input[aria-label="Tên hiển thị của link"]').fill('Hướng dẫn');
+    await win.locator('.link-note-form input[aria-label="Link website"]').fill('https://www.axis.com/partner');
+    await win.locator('.link-note-form').getByRole('button', { name: 'Chèn', exact: true }).click();
+    const preview = await win.locator('.link-note-preview .note-link').innerText();
+    await shot(win, '66-password-note-form');
+    await win.locator('.modal-foot').getByRole('button', { name: 'Lưu' }).click();
+    await win.waitForTimeout(400);
+    await app.evaluate(({ shell }) => {
+      globalThis.__opened = [];
+      shell.openExternal = async (u) => {
+        globalThis.__opened.push(u);
+      };
+    });
+    await win.locator('.note-cell .note-link', { hasText: 'Hướng dẫn' }).click();
+    await win.waitForTimeout(300);
+    const opened = await app.evaluate(() => globalThis.__opened);
+    const saved = (await call(win, 'listPasswords')).find((x) => x.siteName === 'Cổng hãng Axis');
+    await shot(win, '67-password-note');
+    check(
+      'Password: trường Ghi chú, Chèn link → hiện thành link bấm mở trình duyệt',
+      saved.note === 'Đăng nhập bằng mã đối tác. [Hướng dẫn](https://www.axis.com/partner)' && preview === 'Hướng dẫn' && opened?.[0]?.startsWith('https://www.axis.com/partner'),
+      saved.note + ' → ' + (opened?.[0] ?? '(không mở)'),
+    );
+  }
+
+  // --- v1.14: Kiến thức — xóa trên dòng, xóa Hãng, mục Website - App - Địa điểm ---
+  {
+    const tmpBrand = await call(win, 'createMaster', 'brands', 'Hãng tạm thử');
+    await call(win, 'createKnowledge', { brandId: tmpBrand.id, knowledgeDate: day(0), title: 'Ghi chú tạm', deviceModel: '', content: 'abc', webUrl: '', images: [] });
+    await win.reload();
+    await win.waitForSelector('.sidebar');
+    await go(win, '#/knowledge');
+    await win.waitForSelector('.brand-card');
+    const placesCard = await win.locator('.brand-card', { hasText: 'Website - App - Địa điểm' }).isVisible();
+    await win.locator('.brand-card-wrap', { hasText: 'Hãng tạm thử' }).hover();
+    await win.getByRole('button', { name: 'Xóa Hãng Hãng tạm thử khỏi Kiến thức' }).click();
+    await win.waitForSelector('.modal .radio-list');
+    const dlg = await win.locator('.modal').innerText();
+    await shot(win, '68-knowledge-remove-brand');
+    await win.locator('.modal-foot').getByRole('button', { name: 'Xóa Hãng' }).click();
+    await win.waitForTimeout(600);
+    const brandsNow = await call(win, 'listMaster', 'brands');
+    const general = await call(win, 'listKnowledge', { brandId: null });
+    const cardGone = (await win.locator('.brand-card-wrap', { hasText: 'Hãng tạm thử' }).count()) === 0;
+    check(
+      'Kiến thức: xóa Hãng (chưa dùng ở đâu khác → xóa hẳn khỏi danh mục), bài chuyển sang Kiến thức chung',
+      placesCard && /chưa được dùng ở đâu khác/.test(dlg) && !brandsNow.some((b) => b.id === tmpBrand.id) && general.some((k) => k.title === 'Ghi chú tạm') && cardGone,
+      general.map((k) => k.title).join(' | '),
+    );
+    await go(win, '#/knowledge/general');
+    await win.waitForTimeout(400);
+    await win.getByRole('button', { name: 'Xóa Ghi chú tạm' }).click();
+    await win.locator('.modal').getByRole('button', { name: 'Xóa', exact: true }).click();
+    await win.waitForTimeout(500);
+    check('Kiến thức: nút xóa ngay trên từng dòng', !(await call(win, 'listKnowledge', { brandId: null })).some((k) => k.title === 'Ghi chú tạm'));
+
+    await go(win, '#/knowledge');
+    await win.locator('.brand-card', { hasText: 'Website - App - Địa điểm' }).click();
+    await win.waitForSelector('text=Chưa có mục nào trong Website - App - Địa điểm');
+    await win.locator('.page-head').getByRole('button', { name: 'Thêm' }).click();
+    await win.locator('#pl-cat').selectOption('PLACE');
+    await win.locator('#pl-name').fill('Kho thiết bị Bắc Ninh');
+    await win.locator('#pl-note').fill('Cổng sau, gọi bảo vệ. ');
+    await win.locator('.modal').getByRole('button', { name: 'Chèn link' }).click();
+    await win.locator('input[aria-label="Tên hiển thị của link"]').fill('Bản đồ');
+    await win.locator('.link-note-form input[aria-label="Link website"]').fill('https://maps.google.com/?q=Bac+Ninh');
+    await win.locator('.link-note-form').getByRole('button', { name: 'Chèn', exact: true }).click();
+    await win.locator('.modal-foot').getByRole('button', { name: 'Lưu' }).click();
+    await win.waitForTimeout(400);
+    await call(win, 'createPlace', { category: 'WEBSITE', name: 'Tra cứu bảo hành Axis', note: 'https://www.axis.com/support/warranty' });
+    await call(win, 'createPlace', { category: 'APP', name: 'Axis Site Designer', note: '' });
+    await call(win, 'createPlace', { category: null, name: 'Danh bạ đối tác', note: '' });
+    await win.reload();
+    await win.waitForSelector('.places-table');
+    const all = await win.locator('.places-table tbody tr').count();
+    await win.locator('[aria-label="Lọc theo Phân loại"]').getByRole('button', { name: /^App/ }).click();
+    const apps = await win.locator('.places-table tbody tr').allInnerTexts();
+    await win.locator('[aria-label="Lọc theo Phân loại"]').getByRole('button', { name: /^Chưa phân loại/ }).click();
+    const none = await win.locator('.places-table tbody tr').allInnerTexts();
+    await win.locator('[aria-label="Lọc theo Phân loại"]').getByRole('button', { name: /^Tất cả/ }).click();
+    await win.getByPlaceholder('Tìm theo Tên…').fill('bao hanh');
+    await win.waitForTimeout(200);
+    const found = await win.locator('.places-table tbody tr').allInnerTexts();
+    await win.getByPlaceholder('Tìm theo Tên…').fill('');
+    await win.waitForTimeout(200);
+    const linkTxt = await win.locator('.places-table .note-link', { hasText: 'Bản đồ' }).count();
+    await shot(win, '69-knowledge-places');
+    check(
+      'Kiến thức › Website - App - Địa điểm: bảng STT / Phân loại / Tên / Note (link), lọc theo Phân loại, tìm theo Tên',
+      all === 4 && apps.length === 1 && /Axis Site Designer/.test(apps[0]) && none.length === 1 && /Danh bạ/.test(none[0]) && found.length === 1 && /Tra cứu bảo hành/.test(found[0]) && /^1\b/.test(found[0].trim()) === false && linkTxt === 1,
+      all + ' mục · App: ' + apps.length + ' · tìm "bao hanh": ' + found.map((t) => t.replace(/\s+/g, ' ')).join(''),
+    );
+  }
+
+  // --- v1.14: Pre/Post-sales — Link ERP ---
+  {
+    const pErp = created[1];
+    await go(win, '#/project/' + pErp.id);
+    await win.waitForTimeout(400);
+    await win.getByRole('button', { name: 'Chỉnh sửa', exact: true }).click();
+    await win.waitForSelector('#pf-erp');
+    await win.locator('#pf-erp').fill('khong phai link');
+    await win.locator('#pf-erp').blur();
+    const erpErr = await win.locator('.modal .field-error', { hasText: 'Link ERP' }).count();
+    await win.locator('#pf-erp').fill('https://erp.congty.vn/du-an/' + pErp.stt);
+    await win.locator('.modal-foot').getByRole('button', { name: 'Lưu', exact: true }).click();
+    await win.waitForTimeout(600);
+    const chip = await win.locator('.info-grid .link-chip').innerText().catch(() => '');
+    const pSaved = (await call(win, 'listProjects')).find((x) => x.id === pErp.id);
+    await shot(win, '70-project-erp-link');
+    check('Pre/Post-sales: Link ERP (không bắt buộc, phải là link), hiện ở thông tin dự án', erpErr === 1 && pSaved.erpLink === 'https://erp.congty.vn/du-an/' + pErp.stt && chip.includes('erp.congty.vn'), pSaved.erpLink);
+  }
+
+  // --- v1.14: Warranty — Dự án (dự án Pre/Post-sales hoặc nhập mới vào danh mục), Tên SI + Dự án cùng dòng, MAC + Serial cùng dòng ---
+  {
+    const mainYear = (await call(win, 'listYears')).find((y) => y.jobType === 'MAIN');
+    await go(win, '#/job/MAIN/' + mainYear.id + '/warranty');
+    await win.waitForTimeout(500);
+    await win.locator('.page-head').getByRole('button', { name: 'Add Record' }).click();
+    await win.waitForSelector('.modal');
+    const fieldY = async (label) => (await win.locator('.modal .field', { has: win.locator('label', { hasText: new RegExp('^' + label) }) }).first().boundingBox()).y;
+    const [ySi, yProject, yMac, ySerial, yModel] = [await fieldY('Tên SI'), await fieldY('Dự án'), await fieldY('MAC'), await fieldY('Serial number'), await fieldY('Model')];
+    await win.locator('.modal .form-section', { hasText: 'Thiết bị' }).locator('input.input').first().fill('AXIS M3086-V');
+    const projCombo = win.locator('.modal .field', { has: win.locator('label', { hasText: /^Dự án/ }) }).locator('input[role="combobox"]');
+    await projCombo.click();
+    await projCombo.fill('Showroom Ô tô Hòa Bình');
+    await win.getByRole('button', { name: /Thêm dự án mới “Showroom Ô tô Hòa Bình”/ }).click();
+    await win.waitForTimeout(400);
+    await shot(win, '71-warranty-project');
+    await win.locator('.modal-foot').getByRole('button', { name: 'Lưu', exact: true }).click();
+    await win.waitForTimeout(600);
+    const recs = await call(win, 'listWarranty', mainYear.id);
+    const rec = recs.find((r) => r.model === 'AXIS M3086-V');
+    const entries = await call(win, 'listMaster', 'warrantyProjects');
+    const proj = (await call(win, 'listProjects')).find((x) => x.workCategory === 'PRE_SALES');
+    const r2 = await call(win, 'updateWarranty', rec.id, { ...rec, projectId: proj.id, projectEntryId: null });
+    check(
+      'Warranty: trường Dự án — nhập mới tự lưu vào danh mục Dự án (Warranty), chọn được dự án Pre/Post-sales; Tên SI + Dự án cùng dòng, MAC + Serial cùng dòng',
+      Math.abs(ySi - yProject) < 2 && Math.abs(yMac - ySerial) < 2 && yMac > ySi && ySi > yModel &&
+        rec?.projectName === 'Showroom Ô tô Hòa Bình' && entries.some((m) => m.name === 'Showroom Ô tô Hòa Bình' && m.usageCount === 1) && r2.projectName === proj.stt + '. ' + proj.projectName,
+      (rec?.projectName ?? '—') + ' · ' + r2.projectName,
+    );
+  }
+
+  // --- v1.14: Job Freelance — Người đồng hành (nhiều người) và các lần thanh toán ---
+  {
+    const job = (await call(win, 'listFreelance'))[0];
+    await go(win, '#/freelance');
+    await win.waitForTimeout(400);
+    await win.getByRole('button', { name: 'Sửa ' + job.projectName, exact: true }).click();
+    await win.waitForSelector('.modal');
+    const comp = win.locator('.modal .field', { has: win.locator('label', { hasText: /^Người đồng hành/ }) }).locator('input[role="combobox"]');
+    for (const name of ['Anh Tuấn', 'Chị Lan']) {
+      await comp.click();
+      await comp.fill(name);
+      await win.getByRole('button', { name: new RegExp('Thêm người đồng hành “' + name + '”') }).click();
+      await win.waitForTimeout(300);
+    }
+    await win.locator('.modal-foot').getByRole('button', { name: 'Lưu', exact: true }).click();
+    await win.waitForTimeout(600);
+    await go(win, '#/freelance/' + job.id);
+    await win.waitForTimeout(400);
+    await win.getByRole('button', { name: 'Xem thanh toán cho Anh Tuấn' }).click();
+    await win.waitForSelector('#cp-amount');
+    for (const [amount, note] of [['1500000', 'Đợt 1 — vẽ shopdrawing'], ['500000', 'Đợt 2']]) {
+      await win.locator('#cp-amount').fill(amount);
+      await win.locator('#cp-note').fill(note);
+      if (note === 'Đợt 2') {
+        await fakeClipboardImage(app, png);
+        await win.locator('.modal .payment-form .form-section h3, .modal .payment-form h3').first().click();
+        await pasteImageEvent(win);
+        await win.waitForTimeout(800);
+      }
+      await win.locator('.modal').getByRole('button', { name: 'Ghi thanh toán' }).click();
+      await win.waitForTimeout(600);
+    }
+    const shown = await win.locator('.modal .payment-entry').count();
+    const amountTxt = await win.locator('.modal .payment-entry .payment-amount').first().innerText();
+    await shot(win, '72-freelance-companion-payments');
+    await win.locator('.modal-foot').getByRole('button', { name: 'Đóng' }).click();
+    const pays = await call(win, 'listCompanionPayments', job.id);
+    const rowTxt = await win.locator('.companion-row', { hasText: 'Anh Tuấn' }).innerText();
+    await go(win, '#/freelance');
+    await win.waitForTimeout(500);
+    const tableRow = await win.locator('.freelance-table tbody tr', { hasText: job.projectName }).innerText();
+    await shot(win, '73-freelance-companions-table');
+    check(
+      'Job Freelance: nhiều Người đồng hành (danh mục), ghi các lần thanh toán (số tiền / note / ảnh, tự log ngày), bảng tổng hợp hiện số lần đã thanh toán',
+      shown === 2 && pays.length === 2 && pays.every((x) => x.paidDate === day(0)) && pays.some((x) => x.images.length === 1) && /500\.000/.test(amountTxt) &&
+        /2 lần/.test(rowTxt) && /Anh Tuấn, Chị Lan/.test(tableRow) && /2 lần/.test(tableRow),
+      tableRow.replace(/\s+/g, ' ').slice(0, 160),
+    );
+  }
+
+  // --- v1.14: Sự kiện tạm thời (dưới Kho thiết bị) ---
+  {
+    await win.locator('.sidebar').getByRole('link', { name: 'Sự kiện tạm thời' }).click();
+    await win.waitForSelector('text=Chưa có sự kiện nào');
+    const sideOrder = await win.evaluate(() => [...document.querySelectorAll('.sidebar .nav-row .nav-label')].map((e) => e.textContent.trim()));
+    await win.locator('.page-head').getByRole('button', { name: 'Thêm sự kiện' }).click();
+    await win.waitForSelector('#ev-name');
+    await win.waitForFunction(() => document.querySelector('#ev-stt')?.value !== '', null, { timeout: 3000 }).catch(() => undefined);
+    const sttSuggest = await win.locator('#ev-stt').inputValue();
+    await win.locator('#ev-name').fill('Triển lãm Secutech 2026');
+    const brandCombo = win.locator('.modal .field', { has: win.locator('label', { hasText: /^Hãng/ }) }).locator('input[role="combobox"]');
+    await brandCombo.click();
+    await brandCombo.fill('Axis');
+    await win.locator('.popover .opt', { hasText: /^Axis$/ }).first().click();
+    await win.locator('.modal .note-editor').click();
+    await win.keyboard.type('Mang 3 camera demo, 1 NVR');
+    await win.locator('.modal-foot').getByRole('button', { name: 'Thêm sự kiện' }).click();
+    await win.waitForFunction(() => location.hash.startsWith('#/events/'), null, { timeout: 8000 });
+    await win.waitForSelector('text=Chưa có dữ liệu Excel');
+    await win.waitForTimeout(400);
+    const evId = (await win.evaluate(() => location.hash)).split('/').pop();
+    const evDir = path.join(root, 'su-kien-secutech');
+    fs.mkdirSync(evDir, { recursive: true });
+    const evDoc = path.join(evDir, 'Ke hoach trien lam.docx');
+    const evPdf = path.join(evDir, 'Layout gian hang.pdf');
+    fs.writeFileSync(evDoc, 'docx');
+    fs.writeFileSync(evPdf, 'pdf');
+    await stubOpen(app, [evDir]);
+    await win.getByRole('button', { name: 'Liên kết thư mục…' }).click();
+    await win.waitForTimeout(400);
+    await stubOpen(app, [evDoc, evPdf]);
+    await win.locator('section', { hasText: 'File & Attachments' }).getByRole('button', { name: 'Chọn file' }).click();
+    await win.waitForTimeout(500);
+    await stubOpen(app, [xlsxFile]);
+    await win.getByRole('button', { name: 'Import .xlsx' }).click();
+    await win.waitForSelector('.wizard', { timeout: 10000 });
+    await win.getByRole('button', { name: 'Xác nhận Import' }).click();
+    await win.waitForTimeout(700);
+    await stubOpen(app, [path.join(fixtures, 'Tu rack.xlsx')]);
+    await win.getByRole('button', { name: 'Thêm bảng mới (import xlsx)' }).click();
+    await win.waitForSelector('.wizard', { timeout: 10000 });
+    await win.getByRole('button', { name: 'Xác nhận Import' }).click();
+    await win.waitForTimeout(700);
+    const tabs = (await win.locator('.xl-tabs [role="tab"]').allInnerTexts()).map((t) => t.trim());
+    await win.locator('.xl-book').scrollIntoViewIfNeeded();
+    const sheetBox = await win.locator('.xl-sheet').boundingBox();
+    const barBox = await win.locator('.xl-tabbar').boundingBox();
+    await win.locator('.page-head').scrollIntoViewIfNeeded();
+    await shot(win, '74-event-detail');
+    await win.locator('.xl-book').scrollIntoViewIfNeeded();
+    await shot(win, '75-event-imports');
+    const ev = (await call(win, 'listEvents')).find((e) => e.id === evId);
+    const evNotes = await call(win, 'listEventNotes', evId);
+    const evImports = await call(win, 'listEventImports', evId);
+    check(
+      'Sự kiện tạm thời: thêm sự kiện (STT tự gợi ý, Hãng dùng chung), ghi chú hôm nay, liên kết thư mục + file, import nhiều xlsx dạng tab sheet (thanh tab ở trên)',
+      sideOrder.indexOf('Sự kiện tạm thời') === sideOrder.indexOf('Kho thiết bị') + 1 && sttSuggest === '1' && ev?.brandName === 'Axis' && ev.folderPath === evDir &&
+        ev.files.map((f) => f.extension).join(',') === 'docx,pdf' && evNotes.length === 1 && /Mang 3 camera demo/.test(evNotes[0].text) &&
+        evImports.length === 2 && tabs.join('|') === 'Bao gia XYZ|Tu rack' && barBox.y + barBox.height <= sheetBox.y + 2,
+      JSON.stringify({ side: sideOrder.slice(sideOrder.indexOf('Kho thiết bị'), sideOrder.indexOf('Kho thiết bị') + 2), stt: sttSuggest, brand: ev?.brandName, folder: ev?.folderPath === evDir, files: ev?.files.length, notes: evNotes.map((n) => n.text), tabs, bar: [barBox.y + barBox.height, sheetBox.y] }),
+    );
+    await win.locator('.sidebar').getByRole('link', { name: 'Sự kiện tạm thời' }).click();
+    await win.waitForSelector('.events-table');
+    const row = await win.locator('.events-table tbody tr').first().innerText();
+    await shot(win, '76-events-list');
+    check('Bảng Sự kiện tạm thời: STT / Tên event / Ngày / Hãng / Note', /^1\s/.test(row.trim()) && row.includes('Triển lãm Secutech 2026') && row.includes(dmy(day(0))) && row.includes('Axis') && row.includes('Mang 3 camera demo'), row.replace(/\s+/g, ' '));
+  }
+
+  // --- v1.14: Priority Point có màu, 5 là cao nhất / 1 thấp nhất ---
+  {
+    const pr = created[3];
+    await go(win, '#/project/' + pr.id);
+    await win.waitForTimeout(400);
+    await win.getByRole('button', { name: 'Chỉnh sửa', exact: true }).click();
+    await win.waitForSelector('.prio-picker');
+    await win.locator('.prio-picker button', { hasText: '5' }).click();
+    const hint = await win.locator('.prio-picker + .field-hint').innerText();
+    const pickColors = await win.locator('.prio-picker button').evaluateAll((bs) => bs.map((b) => getComputedStyle(b).color));
+    await shot(win, '77-priority-picker');
+    await win.locator('.modal-foot').getByRole('button', { name: 'Lưu', exact: true }).click();
+    await win.waitForTimeout(500);
+    const badge = win.locator('.page-head .badge.prio').first();
+    const badgeTxt = await badge.innerText().catch(() => '');
+    const c5 = await badge.evaluate((el) => getComputedStyle(el).color).catch(() => '');
+    const detailHint = await win.locator('.info-grid', { hasText: 'Priority Point' }).innerText();
+    await call(win, 'updateProject', pr.id, { ...(await call(win, 'listProjects')).find((x) => x.id === pr.id), priorityPoint: 1, brandIds: [] });
+    await win.reload();
+    await win.waitForSelector('.page-head .badge.prio');
+    const c1 = await win.locator('.page-head .badge.prio').first().evaluate((el) => getComputedStyle(el).color);
+    check(
+      'Priority Point: mỗi mức một màu; 5 là cao nhất, 1 thấp nhất',
+      /5: Cao nhất — 5 là ưu tiên cao nhất, 1 thấp nhất/.test(hint) && new Set(pickColors).size === 5 && badgeTxt === 'P5' && c5 !== c1 && /5 cao nhất – 1 thấp nhất/.test(detailHint),
+      hint + ' · P5 ' + c5 + ' / P1 ' + c1,
+    );
+  }
+
+  // --- v1.14: Import cùng một file xlsx nhiều lần — lần sau tự chọn sheet chưa import ---
+  {
+    const target = created[4];
+    const twoSheets = path.join(fixtures, 'BOQ 2 sheet.xlsx');
+    {
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([['Model', 'Brand', 'Description'], ['P3265-LVE', 'Axis', 'Camera dome'], ['Q6135-LE', 'Axis', 'PTZ']]), 'Camera');
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([['Danh sách switch'], [], ['Model', 'Hãng', 'Mô tả'], ['GS950/28PS', 'Allied Telesis', '24 port PoE']]), 'Switch');
+      fs.writeFileSync(twoSheets, XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' }));
+    }
+    await go(win, '#/project/' + target.id);
+    await win.waitForTimeout(400);
+    await stubOpen(app, [twoSheets]);
+    await win.getByRole('button', { name: 'Import .xlsx' }).click();
+    await win.waitForSelector('.wizard', { timeout: 10000 });
+    const firstSheet = await win.locator('.sheet-chip.on').innerText();
+    await win.waitForTimeout(100);
+    await win.getByRole('button', { name: 'Xác nhận Import' }).click();
+    await win.waitForTimeout(700);
+    await stubOpen(app, [twoSheets]);
+    await win.getByRole('button', { name: 'Thêm bảng mới (import xlsx)' }).click();
+    await win.waitForSelector('.wizard', { timeout: 10000 });
+    const secondSheet = await win.locator('.sheet-chip.on').innerText();
+    const infoTxt = await win.locator('.wizard .alert.info').first().innerText().catch(() => '');
+    const doneBadge = await win.locator('.sheet-chip', { hasText: 'Camera' }).locator('.badge').innerText().catch(() => '');
+    const preview = await win.locator('.wizard-right').innerText();
+    await shot(win, '78-import-second-sheet');
+    await win.getByRole('button', { name: 'Xác nhận Import' }).click();
+    await win.waitForTimeout(700);
+    const imps = await call(win, 'listProjectImports', target.id);
+    const tabs = (await win.locator('.xl-tabs [role="tab"]').allInnerTexts()).map((t) => t.trim());
+    check(
+      'Import cùng một file nhiều lần: lần sau tự chọn sheet chưa import (đánh dấu sheet đã import), tên tab "file - sheet"',
+      /Camera/.test(firstSheet) && /Switch/.test(secondSheet) && /đã import sheet "Camera"/.test(infoTxt) && /đã import/.test(doneBadge) && /GS950\/28PS/.test(preview) &&
+        imps.map((i) => i.sheetNames[0]).join('|') === 'Camera|Switch' && tabs.join('|') === 'BOQ 2 sheet - Camera|BOQ 2 sheet - Switch' && imps[1].items[0]?.model === 'GS950/28PS',
+      tabs.join(' | ') + ' · ' + infoTxt.replace(/\s+/g, ' ').slice(0, 90),
+    );
   }
 
   // --- NFR-001: 1.100 dự án — board/dashboard <= 2s, search <= 300ms ---

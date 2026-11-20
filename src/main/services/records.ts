@@ -4,21 +4,27 @@ import type {
   ExperienceRecord,
   ImageRef,
   KnowledgeInput,
+  KnowledgePlace,
+  KnowledgePlaceInput,
   KnowledgeRecord,
+  MasterItem,
+  PlaceCategory,
   WarrantyInput,
   WarrantyRecord,
 } from '../../shared/types';
-import { hasErrors, validateExperienceInput, validateKnowledgeInput, validateWarrantyInput } from '../../shared/validation';
+import { cleanName, nameKey } from '../../shared/text';
+import { hasErrors, validateExperienceInput, validateKnowledgeInput, validateMasterName, validatePlaceInput, validateWarrantyInput } from '../../shared/validation';
 import { AppError, now, str, strOrNull, type Ctx } from '../context';
 import { assertStorageKey, deleteImageFiles, imageExists } from '../integration/images';
-import { getYear } from './master';
+import { brandUsageOutsideKnowledge, createMaster, getYear, listMaster } from './master';
 
 export type ImageTable =
   | { table: 'warranty_images'; owner: 'warranty_record_id' }
   | { table: 'equipment_images'; owner: 'equipment_id' }
   | { table: 'equipment_loan_images'; owner: 'loan_id' }
   | { table: 'experience_images'; owner: 'experience_id' }
-  | { table: 'knowledge_images'; owner: 'knowledge_id' };
+  | { table: 'knowledge_images'; owner: 'knowledge_id' }
+  | { table: 'freelance_payment_images'; owner: 'payment_id' };
 const WARRANTY_IMG: ImageTable = { table: 'warranty_images', owner: 'warranty_record_id' };
 const EXPERIENCE_IMG: ImageTable = { table: 'experience_images', owner: 'experience_id' };
 const KNOWLEDGE_IMG: ImageTable = { table: 'knowledge_images', owner: 'knowledge_id' };
@@ -59,11 +65,14 @@ export function syncImages(ctx: Ctx, t: ImageTable, ownerId: string, images: Ima
 /* ---------------- Warranty ---------------- */
 
 const SELECT_WARRANTY = `
-SELECT w.*, y.job_type, y.year_label, b.name AS brand_name, si.name AS si_name
+SELECT w.*, y.job_type, y.year_label, b.name AS brand_name, si.name AS si_name,
+  wp.stt AS wp_stt, wp.project_name AS wp_name, we.name AS we_name
 FROM warranty_records w
 JOIN job_years y ON y.id = w.job_year_id
 LEFT JOIN brands b ON b.id = w.brand_id
-LEFT JOIN si_partners si ON si.id = w.si_id`;
+LEFT JOIN si_partners si ON si.id = w.si_id
+LEFT JOIN projects wp ON wp.id = w.project_id
+LEFT JOIN warranty_projects we ON we.id = w.project_entry_id`;
 
 function mapWarranty(r: Record<string, any>, images: ImageRef[]): WarrantyRecord {
   return {
@@ -89,6 +98,9 @@ function mapWarranty(r: Record<string, any>, images: ImageRef[]): WarrantyRecord
     result: str(r.result),
     resolution: str(r.resolution),
     caseNumber: str(r.case_number),
+    projectId: strOrNull(r.project_id),
+    projectEntryId: strOrNull(r.project_entry_id),
+    projectName: r.wp_name ? `${r.wp_stt}. ${r.wp_name}` : strOrNull(r.we_name),
     images,
     createdAt: r.created_at,
     updatedAt: r.updated_at,
@@ -136,6 +148,16 @@ function checkWarranty(ctx: Ctx, input: WarrantyInput) {
     throw new AppError('Hãng không tồn tại.');
   if (input.siId && !ctx.db.scalar<number>('SELECT COUNT(*) FROM si_partners WHERE id = ?', [input.siId]))
     throw new AppError('Tên SI không tồn tại.');
+  if (input.projectId && !ctx.db.scalar<number>("SELECT COUNT(*) FROM projects WHERE id = ? AND work_category IN ('PRE_SALES','POST_SALES')", [input.projectId]))
+    throw new AppError('Dự án không còn tồn tại (chỉ chọn được dự án Pre-sales / Post-sales).');
+  if (input.projectEntryId && !ctx.db.scalar<number>('SELECT COUNT(*) FROM warranty_projects WHERE id = ?', [input.projectEntryId]))
+    throw new AppError('Dự án không còn trong danh mục "Dự án (Warranty)".');
+}
+
+/** Dự án của Warranty: dự án Pre/Post-sales hoặc mục danh mục "Dự án (Warranty)" (chỉ một trong hai). */
+function writeWarrantyProject(ctx: Ctx, id: string, input: WarrantyInput) {
+  if (input.projectId === undefined && input.projectEntryId === undefined) return;
+  ctx.db.run('UPDATE warranty_records SET project_id = ?, project_entry_id = ? WHERE id = ?', [input.projectId || null, input.projectId ? null : input.projectEntryId || null, id]);
 }
 
 const t = (s: string) => s.replace(/\r\n/g, '\n').trim();
@@ -161,6 +183,7 @@ export function createWarranty(ctx: Ctx, input: WarrantyInput): WarrantyRecord {
         t(input.resolution), t(input.caseNumber), stamp, stamp],
     );
     ctx.db.run('UPDATE warranty_records SET si_id = ? WHERE id = ?', [input.siId || null, id]);
+    writeWarrantyProject(ctx, id, input);
     syncImages(ctx, WARRANTY_IMG, id, input.images);
   });
   return getWarranty(ctx, id);
@@ -183,6 +206,7 @@ export function updateWarranty(ctx: Ctx, id: string, input: WarrantyInput): Warr
     if (input.password !== undefined)
       ctx.db.run('UPDATE warranty_records SET password_encrypted = ? WHERE id = ?', [input.password ? ctx.platform.encrypt(input.password) : null, id]);
     if (input.siId !== undefined) ctx.db.run('UPDATE warranty_records SET si_id = ? WHERE id = ?', [input.siId || null, id]);
+    writeWarrantyProject(ctx, id, input);
     removed = syncImages(ctx, WARRANTY_IMG, id, input.images);
   });
   deleteImageFiles(ctx, removed);
@@ -366,6 +390,7 @@ export function createKnowledge(ctx: Ctx, input: KnowledgeInput): KnowledgeRecor
       [id, input.brandId || null, input.knowledgeDate, t(input.title), t(input.deviceModel), t(input.content), input.webUrl.trim(), (input.localPath ?? '').trim() || null, stamp, stamp],
     );
     syncImages(ctx, KNOWLEDGE_IMG, id, input.images);
+    if (input.brandId) ctx.db.run('UPDATE brands SET knowledge_hidden = 0 WHERE id = ?', [input.brandId]);
   });
   return getKnowledge(ctx, id);
 }
@@ -380,6 +405,7 @@ export function updateKnowledge(ctx: Ctx, id: string, input: KnowledgeInput): Kn
       [input.brandId || null, input.knowledgeDate, t(input.title), t(input.deviceModel), t(input.content), input.webUrl.trim(), (input.localPath ?? '').trim() || null, now(), id],
     );
     removed = syncImages(ctx, KNOWLEDGE_IMG, id, input.images);
+    if (input.brandId) ctx.db.run('UPDATE brands SET knowledge_hidden = 0 WHERE id = ?', [input.brandId]);
   });
   deleteImageFiles(ctx, removed);
   return getKnowledge(ctx, id);
@@ -389,6 +415,98 @@ export function deleteKnowledge(ctx: Ctx, id: string): void {
   const rec = getKnowledge(ctx, id);
   ctx.db.tx(() => ctx.db.run('DELETE FROM knowledge_records WHERE id = ?', [id]));
   deleteImageFiles(ctx, rec.images.map((i) => i.storageKey));
+}
+
+/**
+ * "Thêm Hãng" ở trang Kiến thức: Hãng trùng tên mà đã bị xóa khỏi Kiến thức (đang ẩn) thì hiện lại thay vì báo trùng.
+ */
+export function addKnowledgeBrand(ctx: Ctx, rawName: string): MasterItem {
+  const err = validateMasterName(rawName);
+  if (err) throw new AppError(err);
+  const key = nameKey(cleanName(rawName));
+  const hidden = listMaster(ctx, 'brands').find((b) => b.knowledgeHidden && nameKey(b.name) === key);
+  if (!hidden) return createMaster(ctx, 'brands', rawName);
+  ctx.db.tx(() => ctx.db.run('UPDATE brands SET knowledge_hidden = 0, is_active = 1, updated_at = ? WHERE id = ?', [now(), hidden.id]));
+  return listMaster(ctx, 'brands').find((b) => b.id === hidden.id)!;
+}
+
+export interface KnowledgeBrandRemoval {
+  /** true = Hãng không còn dùng ở đâu nên đã xóa khỏi danh mục Hãng; false = chỉ ẩn khỏi Kiến thức. */
+  deletedBrand: boolean;
+  moved: number;
+  deleted: number;
+}
+
+/**
+ * Xóa một Hãng khỏi mục Kiến thức. Bài kiến thức của Hãng được chuyển sang Kiến thức chung (mặc định) hoặc xóa luôn.
+ * Hãng còn được dùng ở Dự án / Warranty / Experience / Kho thiết bị thì chỉ ẩn khỏi Kiến thức (danh mục dùng chung
+ * giữ nguyên); không còn dùng ở đâu thì xóa hẳn khỏi danh mục Hãng.
+ */
+export function removeKnowledgeBrand(ctx: Ctx, brandId: string, deleteRecords: boolean): KnowledgeBrandRemoval {
+  if (!ctx.db.scalar<number>('SELECT COUNT(*) FROM brands WHERE id = ?', [brandId])) throw new AppError('Không tìm thấy Hãng (có thể đã bị xóa).');
+  const records = listKnowledge(ctx, brandId);
+  const keys = records.flatMap((r) => r.images.map((i) => i.storageKey));
+  const stamp = now();
+  let deletedBrand = false;
+  ctx.db.tx(() => {
+    if (deleteRecords) ctx.db.run('DELETE FROM knowledge_records WHERE brand_id = ?', [brandId]);
+    else ctx.db.run('UPDATE knowledge_records SET brand_id = NULL, updated_at = ? WHERE brand_id = ?', [stamp, brandId]);
+    deletedBrand = brandUsageOutsideKnowledge(ctx, brandId) === 0;
+    if (deletedBrand) ctx.db.run('DELETE FROM brands WHERE id = ?', [brandId]);
+    else ctx.db.run('UPDATE brands SET knowledge_hidden = 1, updated_at = ? WHERE id = ?', [stamp, brandId]);
+  });
+  if (deleteRecords) deleteImageFiles(ctx, keys);
+  return { deletedBrand, moved: deleteRecords ? 0 : records.length, deleted: deleteRecords ? records.length : 0 };
+}
+
+/* ---------------- Kiến thức › Website - App - Địa điểm ---------------- */
+
+const mapPlace = (r: Record<string, any>): KnowledgePlace => ({
+  id: r.id,
+  category: (r.category as PlaceCategory | null) ?? null,
+  name: r.name,
+  note: str(r.note),
+  createdAt: r.created_at,
+  updatedAt: r.updated_at,
+});
+
+/** Theo thứ tự thêm vào (STT = vị trí trong danh sách, cũ nhất = 1). */
+export function listPlaces(ctx: Ctx): KnowledgePlace[] {
+  return ctx.db.all<Record<string, any>>('SELECT * FROM knowledge_places ORDER BY created_at, rowid').map(mapPlace);
+}
+
+function getPlace(ctx: Ctx, id: string): KnowledgePlace {
+  const r = ctx.db.get<Record<string, any>>('SELECT * FROM knowledge_places WHERE id = ?', [id]);
+  if (!r) throw new AppError('Không tìm thấy mục này (có thể đã bị xóa).');
+  return mapPlace(r);
+}
+
+function placeValues(input: KnowledgePlaceInput): [PlaceCategory | null, string, string] {
+  const e = validatePlaceInput(input);
+  if (hasErrors(e)) throw new AppError(Object.values(e).filter(Boolean).join(' '));
+  return [input.category || null, cleanName(input.name), String(input.note ?? '').trim()];
+}
+
+export function createPlace(ctx: Ctx, input: KnowledgePlaceInput): KnowledgePlace {
+  const [category, name, note] = placeValues(input);
+  const id = randomUUID();
+  const stamp = now();
+  ctx.db.tx(() =>
+    ctx.db.run('INSERT INTO knowledge_places (id, category, name, note, created_at, updated_at) VALUES (?,?,?,?,?,?)', [id, category, name, note, stamp, stamp]),
+  );
+  return getPlace(ctx, id);
+}
+
+export function updatePlace(ctx: Ctx, id: string, input: KnowledgePlaceInput): KnowledgePlace {
+  getPlace(ctx, id);
+  const [category, name, note] = placeValues(input);
+  ctx.db.tx(() => ctx.db.run('UPDATE knowledge_places SET category = ?, name = ?, note = ?, updated_at = ? WHERE id = ?', [category, name, note, now(), id]));
+  return getPlace(ctx, id);
+}
+
+export function deletePlace(ctx: Ctx, id: string): void {
+  getPlace(ctx, id);
+  ctx.db.tx(() => ctx.db.run('DELETE FROM knowledge_places WHERE id = ?', [id]));
 }
 
 /**

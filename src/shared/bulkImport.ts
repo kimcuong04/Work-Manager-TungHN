@@ -83,7 +83,7 @@ const PROJECT_FIELDS: BulkField[] = [
     label: 'Priority',
     aliases: ['priority', 'priority point', 'uu tien', 'do uu tien'],
     type: 'priority',
-    hint: '1–5, bỏ trống = 3',
+    hint: '1–5 (5 cao nhất), bỏ trống = 3',
   },
   NOTE,
 ];

@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { diffDays, formatDate, isValidISODate } from '../../shared/dates';
 import { cleanName } from '../../shared/text';
-import { CATEGORY_LABEL, type ProjectCategory, type TodoItem, type TodoTarget } from '../../shared/types';
+import { CATEGORY_LABEL, TODO_NO_DATE, TODO_NO_DATE_LABEL, type ProjectCategory, type TodoItem, type TodoTarget } from '../../shared/types';
 import { AppError, now, type Ctx } from '../context';
 
 const SELECT_TODO = `
@@ -32,11 +32,16 @@ function mapTodo(r: Record<string, any>): TodoItem {
   };
 }
 
+/** Ngày của To-do: yyyy-mm-dd, hoặc `TODO_NO_DATE` ('') cho mục Vô thời hạn. */
 function checkDate(date: string) {
-  if (!isValidISODate(date)) throw new AppError('Ngày của To-do list không hợp lệ.');
+  if (date !== TODO_NO_DATE && !isValidISODate(date)) throw new AppError('Ngày của To-do list không hợp lệ.');
 }
 
-/** Việc của một ngày: việc chưa xong theo thứ tự ưu tiên (kéo thả), sau đó các việc đã hoàn thành. */
+const dayLabel = (date: string) => (date === TODO_NO_DATE ? TODO_NO_DATE_LABEL : formatDate(date));
+
+const ORDER = 'ORDER BY t.todo_date, (t.done_at IS NOT NULL), t.sort_order, t.done_at, t.created_at';
+
+/** Việc của một ngày (hoặc mục Vô thời hạn): việc chưa xong theo thứ tự ưu tiên (kéo thả), sau đó các việc đã hoàn thành. */
 export function listTodos(ctx: Ctx, date: string): TodoItem[] {
   checkDate(date);
   return ctx.db
@@ -44,12 +49,9 @@ export function listTodos(ctx: Ctx, date: string): TodoItem[] {
     .map(mapTodo);
 }
 
-const ORDER = 'ORDER BY t.todo_date, (t.done_at IS NOT NULL), t.sort_order, t.done_at, t.created_at';
-
-/** Việc của các ngày từ `from` đến `to` (tối đa 31 ngày), theo ngày rồi theo thứ tự ưu tiên. */
+/** Việc của các ngày từ `from` đến `to` (tối đa 31 ngày), theo ngày rồi theo thứ tự ưu tiên. Không gồm mục Vô thời hạn. */
 export function listTodosRange(ctx: Ctx, from: string, to: string): TodoItem[] {
-  checkDate(from);
-  checkDate(to);
+  if (!isValidISODate(from) || !isValidISODate(to)) throw new AppError('Ngày của To-do list không hợp lệ.');
   if (to < from || diffDays(to, from) > 31) throw new AppError('Khoảng ngày của To-do list không hợp lệ.');
   return ctx.db.all<Record<string, any>>(`${SELECT_TODO} WHERE t.todo_date BETWEEN ? AND ? ${ORDER}`, [from, to]).map(mapTodo);
 }
@@ -63,7 +65,7 @@ function taskTitle(raw: string): string {
   return title;
 }
 
-/** Thêm một việc tự nhập (chỉ có tên) vào cuối danh sách chưa xong của ngày `date`. */
+/** Thêm một việc tự nhập (chỉ có tên) vào cuối danh sách chưa xong của ngày `date` (hoặc mục Vô thời hạn). */
 export function addTodoTask(ctx: Ctx, date: string, title: string): TodoItem[] {
   checkDate(date);
   const name = taskTitle(title);
@@ -109,7 +111,7 @@ export function addTodos(ctx: Ctx, date: string, targets: TodoTarget[]): TodoIte
 
 function dateOf(ctx: Ctx, id: string): string {
   const date = ctx.db.scalar<string>('SELECT todo_date FROM todo_items WHERE id = ?', [id]);
-  if (!date) throw new AppError('Không tìm thấy việc này trong To-do list.');
+  if (date === null || date === undefined) throw new AppError('Không tìm thấy việc này trong To-do list.');
   return date;
 }
 
@@ -134,6 +136,40 @@ export function reorderTodos(ctx: Ctx, date: string, ids: string[]): TodoItem[] 
   const stamp = now();
   ctx.db.tx(() => ids.forEach((id, i) => ctx.db.run('UPDATE todo_items SET sort_order = ?, updated_at = ? WHERE id = ? AND todo_date = ?', [i, stamp, String(id), date])));
   return listTodos(ctx, date);
+}
+
+/**
+ * Kéo một việc sang ngày khác (hoặc vào / ra khỏi mục Vô thời hạn), đặt ở vị trí `index` trong danh sách chưa xong của
+ * ngày đích. Dự án / job đã có trong ngày đích thì không chuyển được. Trả về danh sách mới của ngày cũ và ngày đích.
+ */
+export function moveTodo(ctx: Ctx, id: string, date: string, index: number): Record<string, TodoItem[]> {
+  checkDate(date);
+  const row = ctx.db.get<{ todo_date: string; project_id: string | null; freelance_job_id: string | null; done_at: string | null }>(
+    'SELECT todo_date, project_id, freelance_job_id, done_at FROM todo_items WHERE id = ?',
+    [id],
+  );
+  if (!row) throw new AppError('Không tìm thấy việc này trong To-do list.');
+  const from = row.todo_date;
+  if (from !== date) {
+    const dup = row.project_id
+      ? ctx.db.scalar<number>('SELECT COUNT(*) FROM todo_items WHERE todo_date = ? AND project_id = ?', [date, row.project_id])
+      : row.freelance_job_id
+        ? ctx.db.scalar<number>('SELECT COUNT(*) FROM todo_items WHERE todo_date = ? AND freelance_job_id = ?', [date, row.freelance_job_id])
+        : 0;
+    if (dup) throw new AppError(`${row.project_id ? 'Dự án' : 'Job'} này đã có trong To-do ${dayLabel(date)}.`);
+  }
+  const stamp = now();
+  ctx.db.tx(() => {
+    ctx.db.run('UPDATE todo_items SET todo_date = ?, updated_at = ? WHERE id = ?', [date, stamp, id]);
+    if (row.done_at) return;
+    const ids = ctx.db
+      .all<{ id: string }>('SELECT id FROM todo_items WHERE todo_date = ? AND done_at IS NULL AND id <> ? ORDER BY sort_order, created_at', [date, id])
+      .map((r) => r.id);
+    const at = Number.isInteger(index) ? Math.max(0, Math.min(index, ids.length)) : ids.length;
+    ids.splice(at, 0, id);
+    ids.forEach((x, i) => ctx.db.run('UPDATE todo_items SET sort_order = ? WHERE id = ?', [i, x]));
+  });
+  return { [from]: listTodos(ctx, from), [date]: listTodos(ctx, date) };
 }
 
 export function deleteTodo(ctx: Ctx, id: string): TodoItem[] {

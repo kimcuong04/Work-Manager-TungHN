@@ -92,12 +92,14 @@ Backup/Restore trong **Settings › Dữ liệu & Backup** xuất một file `.z
   biến mất khỏi Calendar (sự kiện tự tạo có liên kết dự án chỉ bị gỡ liên kết).
 - **Sidebar**: tên workspace (mặc định *My Workspace*, bấm đúp hoặc bút chì để đổi; cũng đổi được ở Settings › Giao diện) ›
   Dashboard, Tất cả mục, Calendar, **To-do list**, Job Chính › Năm › Pre-sales / Post-sales / Warranty,
-  **Job Freelance** (một bảng), **Kho thiết bị**, Experience / Kiến thức › Hãng, **Tiện ích › Password, Tools (Tool app / Tool online)**,
+  **Job Freelance** (một bảng), **Kho thiết bị**, **Sự kiện tạm thời**, Experience / Kiến thức › Hãng (+ Website - App - Địa điểm), **Tiện ích › Password, Tools (Tool app / Tool online)**,
   AI Assistant (Coming Soon), Settings. Thêm/đổi tên/xóa năm, “+” thêm Project theo ngữ cảnh.
 - **Job Freelance**: một bảng chung cho mọi năm, quản lý riêng với Job Chính — STT (tự +1, không trùng), **Tên dự án**
   (bắt buộc), **Bên thuê** (danh mục riêng), Ngày bắt đầu, **Tình trạng** và **Trạng thái thanh toán** (hai danh mục riêng,
   đổi ngay trên bảng; thêm/sửa/sắp xếp và **chọn màu** ở Settings › Master Data › Job Freelance — ô trên bảng tô theo màu)
-  và **ghi chú theo ngày** như Job Chính (sửa được ngày cũ, dán ảnh). Lọc theo Tình trạng / Thanh toán / Bên thuê / năm,
+  và **ghi chú theo ngày** như Job Chính (sửa được ngày cũ, dán ảnh). **Người đồng hành** (danh mục riêng, một job có nhiều
+  người): ở trang chi tiết job bấm vào từng người để **ghi các lần thanh toán** — Số tiền / Note / Ảnh, ngày tự ghi là hôm nay
+  (sửa / xóa được); bảng tổng hợp có cột Người đồng hành và **số lần đã thanh toán**. Lọc theo Tình trạng / Thanh toán / Bên thuê / năm,
   tìm không dấu; import xlsx nhận cả cột Trạng thái thanh toán. Dữ liệu Freelance cũ (Pre/Post-sales) được chuyển sang bảng này khi cập nhật lên v1.5; Warranty
   Freelance cũ chuyển sang Warranty Job Chính cùng năm.
 - **Kho thiết bị**: bảng riêng (không thuộc Job Chính) cho thiết bị cho mượn — STT (tự +1, không trùng), **Tên sp**
@@ -110,7 +112,13 @@ Backup/Restore trong **Settings › Dữ liệu & Backup** xuất một file `.z
   **→ Trong kho** (sau khi hoàn trả). **Tình trạng tự lấy theo “Tình trạng khi trả” của lần trả mới nhất** (vẫn sửa tay
   được). Bảng có cột riêng **Tên SI mượn** / **Sale mượn**; lọc theo trạng thái, Phân loại, Hãng, Tên SI đã mượn, Ngày mượn
   / hẹn trả hiện tại / Ngày nhận bàn giao; tìm không dấu; panel phải, View info, Duplicate, Chọn nhiều để xóa.
+- **Sự kiện tạm thời** (dưới Kho thiết bị): bảng STT (tự +1, không trùng) / **Tên event** / **Ngày** / **Hãng** (danh mục
+  dùng chung) / Note (ghi chú gần nhất); tìm, lọc theo Hãng, sắp xếp. Trang chi tiết mỗi sự kiện có **File & Attachments**
+  (liên kết một thư mục có sẵn trên máy + nhiều file .pdf / .xlsx / .docx / .txt / .dwg), **Ghi chú theo ngày** (dán ảnh,
+  kéo đổi cỡ ảnh) và ở dưới cùng **Import nhiều xlsx** xem dạng tab sheet (thanh tab ở trên bảng) như dự án.
 - **To-do list** (dưới Calendar): chọn ngày (mặc định hôm nay); gõ **việc mới** chỉ cần Tên rồi Enter (bấm đúp để đổi tên),
+  có mục **Vô thời hạn** (việc không gắn ngày) luôn hiện cạnh các ngày ở mọi chế độ xem; **kéo ☰ sang ngày khác** hoặc vào /
+  ra khỏi Vô thời hạn để chuyển (xem 1 ngày thì khi kéo hiện các ô ngày lân cận để thả),
   hoặc **Chọn dự án / job** — một hoặc nhiều dự án Pre-sales / Post-sales (Job Chính, không gồm Warranty) và job Freelance.
   Xem **1 ngày** (danh sách), **3 ngày / 5 ngày** (các cột dọc cạnh nhau, mỗi cột có ô thêm việc riêng) hoặc **7 ngày** (từng
   ngày xếp từ trên xuống); nút trước / sau nhảy theo số ngày đang xem. **Kéo biểu tượng ☰** (hoặc phím mũi tên khi đang
@@ -126,7 +134,8 @@ Backup/Restore trong **Settings › Dữ liệu & Backup** xuất một file `.z
 - **Chọn nhiều để xóa** (Pre-sales / Post-sales / Tất cả mục / Warranty / Job Freelance): bấm **Chọn**, tick từng dòng
   (hoặc bấm vào dòng) hay ô tick đầu bảng để chọn tất cả dòng đang hiển thị, rồi **Xóa**. Dự án có thêm lựa chọn
   *Xóa cả folder local* như khi xóa từng dự án.
-- **Password**: danh sách STT / Tên website / Username / Password / Link website — thêm, sửa, xóa, tìm theo Tên website.
+- **Password**: danh sách STT / Tên website / Username / Password / Link website / **Ghi chú** (nút **Chèn link** hoặc dán
+  link thẳng — hiện thành link bấm mở trình duyệt; ghi chú không mã hóa) — thêm, sửa, xóa, tìm theo Tên website.
   Mật khẩu mã hóa theo tài khoản Windows, che mặc định, bấm mắt để xem (tự ẩn sau 20 giây), sao chép không cần hiện.
 - **Tools**: *Tool app* — các tool nhỏ chạy trong app (đăng ký trong `src/renderer/tools/registry.ts`); *Tool online* —
   danh sách STT / Tên tool / Mục đích / Link (bắt buộc là link), thêm, sửa, xóa, tìm theo tên, bấm để mở trình duyệt.
@@ -135,7 +144,8 @@ Backup/Restore trong **Settings › Dữ liệu & Backup** xuất một file `.z
   cuộn được); chuyển sang **Tiến độ** để xem board.
 - **Thông tin dự án**: **STT** (tự +1 và không trùng **trong từng danh sách** năm × Pre-sales/Post-sales — Pre-sales và
   Post-sales có dãy số riêng) và **Tên dự án** là bắt buộc; Tên SI, Hãng (chọn nhiều), Sale
-  (kèm Phòng ban), EU, Ngày bắt đầu, Ngày tới hạn, Priority không bắt buộc. File liên kết (**.dwg, .txt, .docx, .pdf, .xlsx**,
+  (kèm Phòng ban), EU, Ngày bắt đầu, Ngày tới hạn, Priority không bắt buộc (**1 thấp nhất → 5 cao nhất**, mỗi mức một màu;
+  dữ liệu trước v1.14 — khi 1 là cao nhất — được tự đảo lại để giữ đúng mức ưu tiên). File liên kết (**.dwg, .txt, .docx, .pdf, .xlsx**,
   **nhiều file** cho một dự án — chọn nhiều file một lần) nằm trong mục thu gọn "File liên kết".
 - **Thư mục dự án trên máy** (không bắt buộc): khi tạo dự án, tick **Tạo thư mục mới** thì chọn nơi lưu (lần sau mặc định
   nơi đã chọn) và app tự tạo thư mục `STT.Tên dự án_Tên SI_Hãng`, đổi tên theo khi sửa các trường đó; bỏ tick thì có thể
@@ -149,27 +159,36 @@ Backup/Restore trong **Settings › Dữ liệu & Backup** xuất một file `.z
 - **Board 4 cột** Khẩn cấp / Cần chú ý / Mới tiếp nhận / Đã hoàn thành — trạng thái luôn tính tự động từ ngày tới hạn
   và ngưỡng. Kéo thả chỉ bật khi bấm *Chỉnh sửa Board* và chỉ dùng để hoàn thành / bỏ hoàn thành (có xác nhận).
 - **Tìm kiếm không dấu** (`thiet ke` ↔ `Thiết kế`), lọc nhiều EU/Tên SI/Hãng/Sale, sắp xếp; bộ lọc giữ trong phiên.
-- **Project Detail**: thông tin, thời hạn & ưu tiên, **nhiều file liên kết** .dwg/.txt/.docx/.pdf/.xlsx (Thêm file, mở bằng
+- **Project Detail**: thông tin (kèm **Link ERP** không bắt buộc — bấm để mở), thời hạn & ưu tiên, **nhiều file liên kết** .dwg/.txt/.docx/.pdf/.xlsx (Thêm file, mở bằng
   ứng dụng mặc định của Windows, cảnh báo khi mất liên kết, thay / gỡ từng file), **Ghi chú theo ngày** (mỗi ngày một mục, định dạng tự do: đậm/nghiêng/màu/
   danh sách/bảng, dán ảnh Ctrl+V; ảnh lớn tự thu vừa khung; **bấm ảnh rồi kéo góc** để phóng to / thu nhỏ, **chuột phải vào
   ảnh** để nhập tỉ lệ (1 = cỡ gốc, tối đa 2 chữ số thập phân) và căn trái / giữa / phải; sửa được ghi chú ngày cũ), **Import .xlsx** chỉ lấy bảng **Thông tin các thiết bị**
   (tự nhận diện + mapping cột, preview, lưu mapping tái sử dụng, không ghi đè âm thầm). **Import thêm xlsx** để có nhiều
-  bảng thiết bị trong một dự án, xem như **workbook Excel**: mỗi bảng là một **tab sheet** ở thanh dưới cùng (tên mặc định
-  là tên file, trùng thì thêm (2)…; nút + để import thêm). **Bấm đúp / F2 / chuột phải › Đổi tên** để đổi tên tab; **kéo tab**,
+  bảng thiết bị trong một dự án, xem như **workbook Excel**: mỗi bảng là một **tab sheet** trên thanh tab phía trên bảng (tên mặc định
+  là tên file, trùng thì thêm (2)…; nút + để import thêm). **Một file import được nhiều lần**: mỗi lần chọn một sheet (nút
+  sheet trong cửa sổ import, tự nhận diện bảng của sheet đó); import lại cùng file thì tự chọn sẵn sheet chưa import và đánh
+  dấu sheet đã import; workbook nhiều sheet thì tab tên "Tên file - Tên sheet". **Bấm đúp / F2 / chuột phải › Đổi tên** để đổi tên tab; **kéo tab**,
   chuột phải › Di chuyển hoặc **Alt + ←/→** để đổi thứ tự. Mỗi bảng ghi ngày giờ import (dòng thông tin trên bảng); có
   **Import lại** (thay đúng bảng đó, giữ vị trí tab) và nút gỡ riêng. Tab đang mở được nhớ theo dự án; mở kết quả tìm Model
   thì tự mở đúng tab có Model đó.
 - **Warranty**: bảng riêng theo Job/Năm, có **STT** (tự +1 trong năm, sửa được) và Case no (nhập tự do), bấm một dòng mở panel chi tiết bên cạnh (vẫn cuộn/chọn dòng khác được), nút
   **View info** xem đầy đủ trên màn hình lớn (có Edit, chuyển bản trước/sau), form đầy đủ trường, Pass che mặc định + mã hóa (Windows DPAPI),
   lọc khoảng ngày / theo tháng / quick filter, chọn Ngày nhận hoặc Ngày test, lọc Hãng, search, sort, ẩn/hiện cột, ảnh.
+  Trường **Dự án**: chọn dự án Pre-sales / Post-sales có sẵn, hoặc gõ tên mới — tự lưu vào danh mục *Dự án (Warranty)*
+  (Settings › Master Data › Job Chính). Form: Tên SI + Dự án cùng một dòng, MAC + Serial number cùng một dòng.
 - **Experience**: theo Hãng (danh mục dùng chung), liên kết Project nội bộ hoặc nhập text, **Hyperlink** tới file/thư mục
   trên máy, **Link website** nhập tự do (là link thì mở, không phải link thì tìm kiếm trên trình duyệt), ảnh.
 - **Kiến thức**: tổng hợp kiến thức theo Hãng hoặc *Kiến thức chung* — tiêu đề, nội dung, Mode Device, link, ảnh; tìm
-  không dấu trong toàn bộ nội dung.
+  không dấu trong toàn bộ nội dung. Xóa bài ngay trên dòng (hoặc trong panel / View info). **Xóa Hãng** khỏi Kiến thức (thẻ
+  Hãng hoặc nút ở trang Hãng): các bài chuyển sang Kiến thức chung hoặc xóa luôn; Hãng còn dùng ở Dự án / Warranty / Experience
+  / Kho thiết bị / Sự kiện thì chỉ ẩn khỏi Kiến thức, không dùng ở đâu thì xóa khỏi danh mục. Mục cố định **Website - App -
+  Địa điểm**: bảng STT / Phân loại (Website, App, Địa điểm hoặc để trống) / Tên / Note (chèn được link), tìm theo Tên, lọc
+  theo Phân loại.
 - **Ảnh**: ngoài nút *Thêm ảnh*, **kéo thả** file ảnh từ thư mục, hoặc chụp màn hình (Win+Shift+S) / copy ảnh rồi **Ctrl+V**;
   trong trình xem ảnh có *Sao chép ảnh* (Ctrl+C).
 - **Settings**: Light/Dark, ngưỡng trạng thái có preview, Master Data theo **phân loại Job Chính** (EU / Tên SI / Hãng /
-  Sale & Phòng ban) **/ Job Freelance** (Tình trạng, Trạng thái thanh toán — sắp xếp lên/xuống, chọn màu; Bên thuê) **/ Kho
+  Sale & Phòng ban, Dự án (Warranty)) **/ Job Freelance** (Tình trạng, Trạng thái thanh toán — sắp xếp lên/xuống, chọn màu;
+  Bên thuê; Người đồng hành) **/ Kho
   thiết bị** (Phân loại) — chống trùng, chặn xóa khi đang dùng (gán lại
   hoặc gỡ liên kết; Hãng chỉ Deactivate), quản lý năm (Job Chính), backup/restore, dung lượng ảnh, giới hạn XLSX.
 
@@ -208,7 +227,7 @@ Hợp đồng IPC nằm ở `src/shared/api.ts`; main process chỉ chấp nhậ
 | ID | Áp dụng |
 |----|---------|
 | Q-01, Q-02 | Đơn vị thiết kế, Giai đoạn: **đã bỏ** (cột cũ trong database giữ nguyên, không còn hiển thị/sửa) |
-| Q-03 | Priority mặc định **3** |
+| Q-03 | Priority mặc định **3**; từ v1.14 **5 là cao nhất, 1 thấp nhất** |
 | Q-04 | Ngày tới hạn phải ≥ Ngày tiếp nhận; **dự án mới** có hạn < hôm nay (nhập bù) được lưu ở trạng thái Đã hoàn thành — chỉ dự án có hạn trong tương lai mới chuyển Khẩn cấp/quá hạn khi tới hạn |
 | Q-05 | Tính theo **ngày lịch** |
 | Q-06, Q-07 | Một file liên kết/dự án, chỉ lưu đường dẫn (không copy/upload) |

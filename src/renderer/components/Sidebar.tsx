@@ -7,6 +7,7 @@ import {
   Briefcase,
   CalendarClock,
   CalendarDays,
+  CalendarRange,
   ChevronRight,
   FolderOpen,
   Globe,
@@ -26,6 +27,7 @@ import {
   Tag,
   Trash2,
   Wrench,
+  LayoutList,
 } from 'lucide-react';
 import { nameKey } from '../../shared/text';
 import { CATEGORY_LABEL, JOB_LABEL, JOB_TYPES, PROJECT_CATEGORIES, type JobType, type JobYear, type ProjectCategory } from '../../shared/types';
@@ -268,7 +270,7 @@ function JobNode({ jobType, openMap, toggle }: { jobType: JobType; openMap: Open
 function ExperienceNode({ openMap, toggle }: { openMap: OpenMap; toggle: (k: string, def?: boolean) => void }) {
   const { masters } = useAppData();
   const open = openMap.experience ?? false;
-  const brands = masters.brands.filter((b) => b.isActive || b.usageCount > 0);
+  const brands = masters.brands.filter((b) => (b.isActive && !b.knowledgeHidden) || (b.knowledgeCount ?? 0) > 0);
   return (
     <>
       <div className="row" style={{ gap: 0 }}>
@@ -333,6 +335,10 @@ function KnowledgeNode({ openMap, toggle }: { openMap: OpenMap; toggle: (k: stri
           <NavLink to="/knowledge/general" className={({ isActive }) => `nav-row small ${isActive ? 'active' : ''}`}>
             <BookMarked size={13} />
             <span className="nav-label">Kiến thức chung</span>
+          </NavLink>
+          <NavLink to="/knowledge/places" className={({ isActive }) => `nav-row small ${isActive ? 'active' : ''}`}>
+            <LayoutList size={13} />
+            <span className="nav-label">Website - App - Địa điểm</span>
           </NavLink>
           {brands.map((b) => (
             <NavLink key={b.id} to={`/knowledge/${b.id}`} className={({ isActive }) => `nav-row small ${isActive ? 'active' : ''} ${b.isActive ? '' : 'muted'}`}>
@@ -429,6 +435,9 @@ export function Sidebar({ collapsed, onExpand }: { collapsed: boolean; onExpand:
           <NavLink to="/equipment" className={({ isActive }) => `nav-row ${isActive ? 'active' : ''}`} title="Kho thiết bị">
             <Package size={18} />
           </NavLink>
+          <NavLink to="/events" className={({ isActive }) => `nav-row ${isActive ? 'active' : ''}`} title="Sự kiện tạm thời">
+            <CalendarRange size={18} />
+          </NavLink>
           <NavLink to="/experience" className={({ isActive }) => `nav-row ${isActive ? 'active' : ''}`} title="Experience">
             <Lightbulb size={18} />
           </NavLink>
@@ -482,6 +491,10 @@ export function Sidebar({ collapsed, onExpand }: { collapsed: boolean; onExpand:
         <NavLink to="/equipment" className={({ isActive }) => `nav-row lvl-strong ${isActive ? 'active' : ''}`}>
           <Package size={16} />
           <span className="nav-label">Kho thiết bị</span>
+        </NavLink>
+        <NavLink to="/events" className={({ isActive }) => `nav-row lvl-strong ${isActive ? 'active' : ''}`}>
+          <CalendarRange size={16} />
+          <span className="nav-label">Sự kiện tạm thời</span>
         </NavLink>
 
         <div className="sidebar-section">KINH NGHIỆM &amp; KIẾN THỨC</div>

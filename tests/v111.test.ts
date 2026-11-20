@@ -16,9 +16,12 @@ describe('Nâng cấp v1.10 → v1.11', () => {
   it('việc cũ (job Freelance) giữ nguyên, sau đó thêm được việc tự nhập', async () => {
     const file = path.join(tmpDir(), 'ppm.sqlite');
     const old = await Db.open(file, MIGRATIONS.slice(0, 10));
-    const c1 = { ...ctx, db: old };
-    const j = freelance.createFreelance(c1, { projectName: 'Logo', hirerId: null, startDate: null, statusId: null });
-    todos.addTodos(c1, TEST_TODAY, [{ kind: 'FREELANCE', targetId: j.id }]);
+    // Dữ liệu cũ ghi bằng SQL: code mới đọc các bảng chưa có ở schema 10.
+    const j = { id: 'fl-1' };
+    old.tx(() => {
+      old.run("INSERT INTO freelance_jobs (id, stt, project_name, note, created_at, updated_at) VALUES ('fl-1', 1, 'Logo', '', 't', 't')");
+      old.run('INSERT INTO todo_items (id, todo_date, freelance_job_id, sort_order, created_at, updated_at) VALUES (?,?,?,?,?,?)', ['td-1', TEST_TODAY, 'fl-1', 0, 't', 't']);
+    });
     old.close();
     const db = await Db.open(file);
     expect(db.scalar<number>('PRAGMA user_version')).toBe(SCHEMA_VERSION);
