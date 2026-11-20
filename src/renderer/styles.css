@@ -4037,3 +4037,21 @@ input.select-box {
   font-size: 10.5px;
   padding: 0 6px;
 }
+
+/* ---------- v1.15: Sự kiện tạm thời — xem nhanh nội dung ở panel phải ---------- */
+.preview-note {
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface-2);
+}
+.preview-note .note-content {
+  max-height: 150px;
+  overflow: hidden;
+  -webkit-mask-image: linear-gradient(to bottom, #000 75%, transparent);
+  mask-image: linear-gradient(to bottom, #000 75%, transparent);
+}
+.preview-note .note-content img {
+  max-height: 90px;
+  width: auto;
+}

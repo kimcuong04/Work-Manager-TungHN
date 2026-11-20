@@ -795,6 +795,22 @@ const V15 = `
 UPDATE projects SET priority_point = 6 - priority_point WHERE priority_point BETWEEN 1 AND 5;
 `;
 
+/**
+ * v1.15: một Sự kiện tạm thời có nhiều Hãng — bảng nối temp_event_brands (chép Hãng cũ sang); cột temp_events.brand_id
+ * không còn dùng (để NULL).
+ */
+const V16 = `
+CREATE TABLE temp_event_brands (
+  event_id TEXT NOT NULL REFERENCES temp_events(id) ON DELETE CASCADE,
+  brand_id TEXT NOT NULL REFERENCES brands(id) ON DELETE CASCADE,
+  sort_order INTEGER NOT NULL DEFAULT 0,
+  PRIMARY KEY (event_id, brand_id)
+);
+CREATE INDEX idx_temp_event_brands_brand ON temp_event_brands(brand_id);
+INSERT INTO temp_event_brands (event_id, brand_id, sort_order) SELECT id, brand_id, 0 FROM temp_events WHERE brand_id IS NOT NULL;
+UPDATE temp_events SET brand_id = NULL WHERE brand_id IS NOT NULL;
+`;
+
 const DEFAULT_STATUS_COLORS: Record<string, string> = {
   'mới nhận': '#3b82f6',
   'đang làm': '#f59e0b',
@@ -948,6 +964,10 @@ export const MIGRATIONS: Migration[] = [
   {
     version: 15,
     up: (db) => db.exec(V15),
+  },
+  {
+    version: 16,
+    up: (db) => db.exec(V16),
   },
 ];
 

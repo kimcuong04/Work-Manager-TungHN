@@ -4,7 +4,7 @@ import { formatDate } from '../../shared/dates';
 import { CATEGORY_LABEL, SEARCH_MODE_LABEL, type SearchHit, type SearchMode } from '../../shared/types';
 import { api } from '../api';
 import { EmptyState } from '../components/common';
-import { HitIcon, SEARCH_PLACEHOLDER, SearchDateFilter, useOpenHit, useSearchState } from '../components/GlobalSearch';
+import { HitIcon, SEARCH_PLACEHOLDER, SearchDateFilter, hitKindLabel, useOpenHit, useSearchState } from '../components/GlobalSearch';
 import { useAppData } from '../state/AppData';
 import { usePageTitle, useUi } from '../state/ui';
 import { resolveDateRange } from './WarrantyPage';
@@ -96,7 +96,7 @@ export function SearchPage() {
                 <tr key={`${h.kind}:${h.id}`} data-row={`${h.kind}:${h.id}`} className="clickable" onClick={() => openHit(h, st.text)}>
                   <td className="nowrap">
                     <span className="row" style={{ gap: 6 }}>
-                      <HitIcon kind={h.kind} /> {h.kind === 'freelance' ? 'Job Freelance' : h.kind === 'equipment' ? 'Kho thiết bị' : h.workCategory ? CATEGORY_LABEL[h.workCategory] : 'Warranty'}
+                      <HitIcon kind={h.kind} /> {hitKindLabel(h, h.workCategory ? CATEGORY_LABEL[h.workCategory] : null)}
                     </span>
                   </td>
                   <td style={{ fontWeight: 600, minWidth: 220 }}>{h.title}</td>

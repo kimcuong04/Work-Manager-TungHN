@@ -61,6 +61,7 @@ export function ProjectImports({
   onChanged,
   ops: opsProp,
   ownerLabel = 'Project',
+  ownerKind = 'project',
 }: {
   /** Id của chủ sở hữu (dự án hoặc sự kiện). */
   projectId: string;
@@ -68,6 +69,8 @@ export function ProjectImports({
   onChanged: () => void;
   ops?: ImportOps;
   ownerLabel?: string;
+  /** Loại chủ sở hữu để hộp thoại chọn file mở sẵn đúng thư mục. */
+  ownerKind?: 'project' | 'event';
 }) {
   const { confirm, toast, toastError } = useUi();
   const ops = useMemo(() => opsProp ?? projectOps(projectId), [opsProp, projectId]);
@@ -500,6 +503,7 @@ export function ProjectImports({
           hasExisting={sheets.length > 0}
           replaceImport={wizard.replace ?? null}
           existing={own ?? []}
+          owner={{ kind: ownerKind, id: projectId }}
           commitTo={opsProp ? (payload, replaceImportId) => ops.commit(payload, replaceImportId) : undefined}
           onClose={() => setWizard(null)}
           onDone={(saved) => {

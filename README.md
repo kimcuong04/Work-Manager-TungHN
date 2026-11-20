@@ -113,7 +113,9 @@ Backup/Restore trong **Settings › Dữ liệu & Backup** xuất một file `.z
   được). Bảng có cột riêng **Tên SI mượn** / **Sale mượn**; lọc theo trạng thái, Phân loại, Hãng, Tên SI đã mượn, Ngày mượn
   / hẹn trả hiện tại / Ngày nhận bàn giao; tìm không dấu; panel phải, View info, Duplicate, Chọn nhiều để xóa.
 - **Sự kiện tạm thời** (dưới Kho thiết bị): bảng STT (tự +1, không trùng) / **Tên event** / **Ngày** / **Hãng** (danh mục
-  dùng chung) / Note (ghi chú gần nhất); tìm, lọc theo Hãng, sắp xếp. Trang chi tiết mỗi sự kiện có **File & Attachments**
+  dùng chung, **một sự kiện có nhiều Hãng**) / Note (ghi chú gần nhất); tìm, lọc theo Hãng, sắp xếp. **Bấm một dòng để xem
+  nhanh** ở panel phải (Hãng, ghi chú gần nhất rút gọn, file, thư mục, các bảng import); bấm đúp hoặc *Mở chi tiết* để vào
+  trang chi tiết. Trang chi tiết mỗi sự kiện có **File & Attachments**
   (liên kết một thư mục có sẵn trên máy + nhiều file .pdf / .xlsx / .docx / .txt / .dwg), **Ghi chú theo ngày** (dán ảnh,
   kéo đổi cỡ ảnh) và ở dưới cùng **Import nhiều xlsx** xem dạng tab sheet (thanh tab ở trên bảng) như dự án.
 - **To-do list** (dưới Calendar): chọn ngày (mặc định hôm nay); gõ **việc mới** chỉ cần Tên rồi Enter (bấm đúp để đổi tên),
@@ -153,7 +155,9 @@ Backup/Restore trong **Settings › Dữ liệu & Backup** xuất một file `.z
   Liên kết thư mục có sẵn… / Bỏ liên kết). Xóa dự án có 3 lựa chọn: Hủy / Xóa / Xóa cả folder local (vào Thùng rác).
 - **Duplicate** (cạnh View info ở Pre-sales / Post-sales / Warranty): mở form Thêm mới điền sẵn thông tin của mục đang chọn
   (STT tiếp theo, tên thêm “(bản sao)”; Warranty dùng lại mật khẩu của bản gốc, không chép ảnh).
-- **Tìm kiếm** trên topbar theo Tên dự án / Tên SI / Serial number / Hãng / Model-Mã thiết bị, kèm bộ lọc ngày/tháng;
+- **Tìm kiếm** trên topbar theo Tên dự án / Tên SI / Serial number / Hãng / Model-Mã thiết bị / **Ghi chú** (ghi chú theo
+  ngày của dự án, Job Freelance, Sự kiện tạm thời và Ghi chú của Password, Website - App - Địa điểm — kèm đoạn trích chỗ
+  khớp; lọc ngày theo ngày ghi chú), kèm bộ lọc ngày/tháng;
   Enter mở trang kết quả đầy đủ. Bấm một kết quả thì mở đúng chỗ đó và **tô sáng từ khóa** vừa tìm (không phân biệt dấu,
   hoa thường); bấm chuột bất kỳ đâu để bỏ tô sáng.
 - **Board 4 cột** Khẩn cấp / Cần chú ý / Mới tiếp nhận / Đã hoàn thành — trạng thái luôn tính tự động từ ngày tới hạn
@@ -163,7 +167,8 @@ Backup/Restore trong **Settings › Dữ liệu & Backup** xuất một file `.z
   ứng dụng mặc định của Windows, cảnh báo khi mất liên kết, thay / gỡ từng file), **Ghi chú theo ngày** (mỗi ngày một mục, định dạng tự do: đậm/nghiêng/màu/
   danh sách/bảng, dán ảnh Ctrl+V; ảnh lớn tự thu vừa khung; **bấm ảnh rồi kéo góc** để phóng to / thu nhỏ, **chuột phải vào
   ảnh** để nhập tỉ lệ (1 = cỡ gốc, tối đa 2 chữ số thập phân) và căn trái / giữa / phải; sửa được ghi chú ngày cũ), **Import .xlsx** chỉ lấy bảng **Thông tin các thiết bị**
-  (tự nhận diện + mapping cột, preview, lưu mapping tái sử dụng, không ghi đè âm thầm). **Import thêm xlsx** để có nhiều
+  (tự nhận diện + mapping cột, preview, lưu mapping tái sử dụng, không ghi đè âm thầm; hộp thoại chọn file **mở sẵn thư
+  mục của dự án** nếu có, không thì thư mục chọn file import gần nhất, lần đầu là Downloads). **Import thêm xlsx** để có nhiều
   bảng thiết bị trong một dự án, xem như **workbook Excel**: mỗi bảng là một **tab sheet** trên thanh tab phía trên bảng (tên mặc định
   là tên file, trùng thì thêm (2)…; nút + để import thêm). **Một file import được nhiều lần**: mỗi lần chọn một sheet (nút
   sheet trong cửa sổ import, tự nhận diện bảng của sheet đó); import lại cùng file thì tự chọn sẵn sheet chưa import và đánh

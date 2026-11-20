@@ -2088,9 +2088,11 @@ try {
     const sttSuggest = await win.locator('#ev-stt').inputValue();
     await win.locator('#ev-name').fill('Triển lãm Secutech 2026');
     const brandCombo = win.locator('.modal .field', { has: win.locator('label', { hasText: /^Hãng/ }) }).locator('input[role="combobox"]');
-    await brandCombo.click();
-    await brandCombo.fill('Axis');
-    await win.locator('.popover .opt', { hasText: /^Axis$/ }).first().click();
+    for (const b of ['Axis', 'Hikvision']) {
+      await brandCombo.click();
+      await brandCombo.fill(b);
+      await win.locator('.popover .opt', { hasText: new RegExp('^' + b + '$') }).first().click();
+    }
     await win.locator('.modal .note-editor').click();
     await win.keyboard.type('Mang 3 camera demo, 1 NVR');
     await win.locator('.modal-foot').getByRole('button', { name: 'Thêm sự kiện' }).click();
@@ -2133,16 +2135,30 @@ try {
     const evImports = await call(win, 'listEventImports', evId);
     check(
       'Sự kiện tạm thời: thêm sự kiện (STT tự gợi ý, Hãng dùng chung), ghi chú hôm nay, liên kết thư mục + file, import nhiều xlsx dạng tab sheet (thanh tab ở trên)',
-      sideOrder.indexOf('Sự kiện tạm thời') === sideOrder.indexOf('Kho thiết bị') + 1 && sttSuggest === '1' && ev?.brandName === 'Axis' && ev.folderPath === evDir &&
+      sideOrder.indexOf('Sự kiện tạm thời') === sideOrder.indexOf('Kho thiết bị') + 1 && sttSuggest === '1' && ev?.brands.map((b) => b.name).join(',') === 'Axis,Hikvision' && ev.folderPath === evDir &&
         ev.files.map((f) => f.extension).join(',') === 'docx,pdf' && evNotes.length === 1 && /Mang 3 camera demo/.test(evNotes[0].text) &&
         evImports.length === 2 && tabs.join('|') === 'Bao gia XYZ|Tu rack' && barBox.y + barBox.height <= sheetBox.y + 2,
-      JSON.stringify({ side: sideOrder.slice(sideOrder.indexOf('Kho thiết bị'), sideOrder.indexOf('Kho thiết bị') + 2), stt: sttSuggest, brand: ev?.brandName, folder: ev?.folderPath === evDir, files: ev?.files.length, notes: evNotes.map((n) => n.text), tabs, bar: [barBox.y + barBox.height, sheetBox.y] }),
+      JSON.stringify({ side: sideOrder.slice(sideOrder.indexOf('Kho thiết bị'), sideOrder.indexOf('Kho thiết bị') + 2), stt: sttSuggest, brand: ev?.brands.map((b) => b.name), folder: ev?.folderPath === evDir, files: ev?.files.length, notes: evNotes.map((n) => n.text), tabs, bar: [barBox.y + barBox.height, sheetBox.y] }),
     );
     await win.locator('.sidebar').getByRole('link', { name: 'Sự kiện tạm thời' }).click();
     await win.waitForSelector('.events-table');
     const row = await win.locator('.events-table tbody tr').first().innerText();
+    check('Bảng Sự kiện tạm thời: STT / Tên event / Ngày / Hãng / Note', /^1\s/.test(row.trim()) && row.includes('Triển lãm Secutech 2026') && row.includes(dmy(day(0))) && row.includes('Axis, Hikvision') && row.includes('Mang 3 camera demo'), row.replace(/\s+/g, ' '));
+    // v1.15: bấm một dòng → xem nhanh ở panel phải (không rời trang); nút Mở chi tiết mới vào trang chi tiết.
+    await win.locator('.events-table tbody tr').first().click();
+    await win.waitForSelector('.side-panel .preview-note');
+    await win.waitForFunction(() => /\(\d+\)/.test(document.querySelector('.side-panel')?.textContent ?? ''), null, { timeout: 5000 }).catch(() => undefined);
+    const hashAfterClick = await win.evaluate(() => location.hash);
+    const panel = await win.locator('.side-panel').innerText();
     await shot(win, '76-events-list');
-    check('Bảng Sự kiện tạm thời: STT / Tên event / Ngày / Hãng / Note', /^1\s/.test(row.trim()) && row.includes('Triển lãm Secutech 2026') && row.includes(dmy(day(0))) && row.includes('Axis') && row.includes('Mang 3 camera demo'), row.replace(/\s+/g, ' '));
+    await win.locator('.side-panel').getByRole('button', { name: /Mở chi tiết/ }).click();
+    await win.waitForTimeout(400);
+    const hashOpened = await win.evaluate(() => location.hash);
+    check(
+      'Sự kiện tạm thời: bấm một dòng → panel xem nhanh (Hãng, ghi chú gần nhất, file, bảng import); Mở chi tiết → trang chi tiết',
+      hashAfterClick === '#/events' && /Axis/.test(panel) && /Hikvision/.test(panel) && /Mang 3 camera demo/.test(panel) && /Ke hoach trien lam\.docx/.test(panel) && /Tu rack \(1\)/.test(panel) && hashOpened.startsWith('#/events/'),
+      hashAfterClick + ' → ' + hashOpened,
+    );
   }
 
   // --- v1.14: Priority Point có màu, 5 là cao nhất / 1 thấp nhất ---
@@ -2209,6 +2225,66 @@ try {
       /Camera/.test(firstSheet) && /Switch/.test(secondSheet) && /đã import sheet "Camera"/.test(infoTxt) && /đã import/.test(doneBadge) && /GS950\/28PS/.test(preview) &&
         imps.map((i) => i.sheetNames[0]).join('|') === 'Camera|Switch' && tabs.join('|') === 'BOQ 2 sheet - Camera|BOQ 2 sheet - Switch' && imps[1].items[0]?.model === 'GS950/28PS',
       tabs.join(' | ') + ' · ' + infoTxt.replace(/\s+/g, ' ').slice(0, 90),
+    );
+  }
+
+  // --- v1.15: Tìm kiếm theo Ghi chú ---
+  {
+    await go(win, '#/');
+    await win.waitForTimeout(300);
+    await win.locator('select[aria-label="Kiểu tìm kiếm"]').selectOption('note');
+    await win.locator('.gsearch-input').fill('camera demo');
+    await win.waitForSelector('.gsearch-results .opt');
+    const opts = await win.locator('.gsearch-results .opt').allInnerTexts();
+    await shot(win, '79-search-note');
+    await win.locator('.gsearch-results .opt', { hasText: 'Triển lãm Secutech 2026' }).first().click();
+    await win.waitForFunction(() => (CSS.highlights?.get('ppm-search')?.size ?? 0) > 0, null, { timeout: 5000 }).catch(() => undefined);
+    const hl = await win.evaluate(() => ({ hash: location.hash, hit: [...(CSS.highlights?.get('ppm-search') ?? [])].map((r) => r.toString()) }));
+    await win.locator('.page-head h1').click();
+    await win.locator('.gsearch-input').fill('huong dan');
+    await win.waitForFunction(() => [...document.querySelectorAll('.gsearch-results .opt')].some((o) => /Password/.test(o.textContent ?? '')), null, { timeout: 5000 }).catch(() => undefined);
+    const pwOpt = await win.locator('.gsearch-results .opt').allInnerTexts();
+    await win.locator('.gsearch-input').fill('');
+    await win.locator('select[aria-label="Kiểu tìm kiếm"]').selectOption('name');
+    check(
+      'Tìm kiếm theo Ghi chú: ra dự án / sự kiện / Password có ghi chú khớp, kèm đoạn trích; mở kết quả thì tô sáng trong ghi chú',
+      opts.some((t) => /Triển lãm Secutech 2026/.test(t) && /Mang 3 camera demo/.test(t)) && hl.hash.startsWith('#/events/') && hl.hit.some((t) => t.toLowerCase() === 'camera demo') &&
+        pwOpt.some((t) => /Cổng hãng Axis/.test(t) && /Password/.test(t)),
+      JSON.stringify({ opts: opts.map((t) => t.replace(/\s+/g, ' ').slice(0, 60)), hash: hl.hash, hit: hl.hit, pw: pwOpt.map((t) => t.replace(/\s+/g, ' ').slice(0, 60)) }),
+    );
+  }
+
+  // --- v1.15: Import xlsx — hộp thoại mở sẵn thư mục dự án / thư mục import gần nhất ---
+  {
+    const capture = (file) =>
+      app.evaluate(({ dialog }, f) => {
+        globalThis.__openOpts = [];
+        dialog.showOpenDialog = async (...args) => {
+          globalThis.__openOpts.push(args[args.length - 1] ?? {});
+          return { canceled: false, filePaths: [f] };
+        };
+      }, file);
+    const lastPath = async () => (await app.evaluate(() => globalThis.__openOpts.at(-1)?.defaultPath ?? null));
+    const withFolder = (await call(win, 'listProjects')).find((x) => x.folderPath);
+    const noFolder = (await call(win, 'listProjects')).find((x) => !x.folderPath && x.workCategory === 'POST_SALES');
+    await go(win, '#/project/' + withFolder.id);
+    await win.waitForTimeout(400);
+    await capture(xlsxFile);
+    await win.getByRole('button', { name: /^Import (\.xlsx|thêm xlsx)$/ }).first().click();
+    await win.waitForSelector('.wizard', { timeout: 10000 });
+    const fromProject = await lastPath();
+    await win.locator('.modal-foot').getByRole('button', { name: 'Hủy' }).click();
+    await go(win, '#/project/' + noFolder.id);
+    await win.waitForTimeout(400);
+    await capture(xlsxFile);
+    await win.getByRole('button', { name: /^Import (\.xlsx|thêm xlsx)$/ }).first().click();
+    await win.waitForSelector('.wizard', { timeout: 10000 });
+    const fromLast = await lastPath();
+    await win.locator('.modal-foot').getByRole('button', { name: 'Hủy' }).click();
+    check(
+      'Import xlsx: hộp thoại mở sẵn thư mục của dự án; dự án chưa có thư mục thì mở thư mục chọn file import gần nhất',
+      fromProject === withFolder.folderPath && fromLast === path.dirname(xlsxFile),
+      (fromProject ?? '—') + ' · ' + (fromLast ?? '—'),
     );
   }
 

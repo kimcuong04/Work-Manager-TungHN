@@ -143,10 +143,11 @@ async function start() {
   });
 
   const desktop: Desktop = {
-    async pickFiles({ title, filters, multi }) {
+    async pickFiles({ title, filters, multi, defaultPath }) {
       const r = await dialog.showOpenDialog(mainWindow!, {
         title,
         filters,
+        defaultPath,
         properties: multi ? ['openFile', 'multiSelections'] : ['openFile'],
       });
       return r.canceled ? [] : r.filePaths;
@@ -155,6 +156,7 @@ async function start() {
       const r = await dialog.showSaveDialog(mainWindow!, { title, defaultPath: defaultName, filters });
       return r.canceled || !r.filePath ? null : r.filePath;
     },
+    downloadsDir: () => app.getPath('downloads'),
     openPath: (p) => shell.openPath(p),
     showItemInFolder: (p) => shell.showItemInFolder(p),
     openExternal: (url) => shell.openExternal(url),

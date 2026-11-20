@@ -1,18 +1,18 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router';
-import { ArrowLeft, CalendarRange, FileSpreadsheet, FileText, FolderOpen, Link2Off, Pencil, Plus, Trash2, Upload, X } from 'lucide-react';
+import { ArrowLeft, ArrowRight, CalendarRange, FileSpreadsheet, FileText, FolderOpen, Link2Off, Pencil, Plus, Trash2, Upload, X } from 'lucide-react';
 import { formatDate, formatDateTime } from '../../shared/dates';
 import { isNoteEmpty } from '../../shared/noteHtml';
 import { buildHaystack, compareVi, matchesQuery, normalizeText } from '../../shared/text';
-import type { LinkedFile, ProjectImport, TempEvent, TempEventInput } from '../../shared/types';
+import type { DayNote, LinkedFile, ProjectImport, TempEvent, TempEventInput } from '../../shared/types';
 import { hasErrors, validateEventInput } from '../../shared/validation';
 import { api } from '../api';
-import { Breadcrumbs, DateInput, EmptyState, Field, MultiSelect, SearchInput, SearchableSelect, SortHeader } from '../components/common';
+import { Breadcrumbs, DateInput, EmptyState, Field, MultiSearchSelect, MultiSelect, SearchInput, SortHeader } from '../components/common';
 import { FileStatusRow } from '../components/FileLink';
 import { LocalLinkButton } from '../components/LinkFields';
-import { Modal } from '../components/Modal';
+import { Modal, SidePanel } from '../components/Modal';
 import { ProjectImports, type ImportOps } from '../components/ProjectImports';
-import { DayNotes, type NoteSource } from '../components/ProjectNotes';
+import { DayNotes, NoteContent, noteDayLabel, type NoteSource } from '../components/ProjectNotes';
 import { RichNoteEditor } from '../components/RichNoteEditor';
 import { latestNote } from '../lib/projects';
 import { useLocalState, useSessionState } from '../lib/persist';
@@ -30,7 +30,7 @@ function EventForm({ event, onClose, onSaved }: { event?: TempEvent; onClose: ()
   const { toast, toastError } = useUi();
   const brands = useBrandOptions();
   const [form, setForm] = useState<TempEventInput>(() =>
-    event ? { stt: event.stt, name: event.name, eventDate: event.eventDate, brandId: event.brandId } : { stt: undefined, name: '', eventDate: today, brandId: null },
+    event ? { stt: event.stt, name: event.name, eventDate: event.eventDate, brandIds: event.brands.map((b) => b.id) } : { stt: undefined, name: '', eventDate: today, brandIds: [] },
   );
   const [note, setNote] = useState('');
   const [submitted, setSubmitted] = useState(false);
@@ -103,8 +103,8 @@ function EventForm({ event, onClose, onSaved }: { event?: TempEvent; onClose: ()
             <DateInput value={form.eventDate} onChange={(v) => setForm({ ...form, eventDate: v })} clearable />
           </Field>
         </div>
-        <Field label="Hãng" hint="Danh mục Hãng dùng chung (Settings › Master Data › Job Chính).">
-          <SearchableSelect options={brands.options} value={form.brandId} onChange={(v) => setForm({ ...form, brandId: v })} onCreate={brands.create} createLabel="Thêm Hãng" placeholder="Không bắt buộc" />
+        <Field label="Hãng" hint="Chọn được nhiều Hãng — danh mục Hãng dùng chung (Settings › Master Data › Job Chính).">
+          <MultiSearchSelect options={brands.options} value={form.brandIds} onChange={(ids) => setForm({ ...form, brandIds: ids })} onCreate={brands.create} createLabel="Thêm Hãng" placeholder="Không bắt buộc" />
         </Field>
         {!event && (
           <Field label={`Note · hôm nay ${formatDate(today)}`} hint="Không bắt buộc. Ghi chú theo ngày, dán ảnh Ctrl+V; các ngày sau ghi ở trang chi tiết sự kiện.">
@@ -137,7 +137,120 @@ async function confirmDeleteEvent(e: TempEvent, confirm: ReturnType<typeof useUi
   });
 }
 
-/** Bảng Sự kiện tạm thời: STT, Tên event, Ngày, Hãng, Note (ghi chú gần nhất); bấm một dòng để mở chi tiết. */
+const brandNames = (e: TempEvent) => e.brands.map((b) => b.name).join(', ');
+
+/**
+ * Xem nhanh một sự kiện (panel bên phải bảng): thông tin, các ghi chú gần nhất (rút gọn), file / thư mục và các bảng
+ * import — trước khi mở trang chi tiết.
+ */
+function EventPreview({ event, onClose, onOpen, onEdit, onDelete }: { event: TempEvent; onClose: () => void; onOpen: () => void; onEdit: () => void; onDelete: () => void }) {
+  const { today } = useAppData();
+  const { toastError } = useUi();
+  const [notes, setNotes] = useState<DayNote[] | null>(null);
+  const [imports, setImports] = useState<ProjectImport[] | null>(null);
+  useEffect(() => {
+    let alive = true;
+    setNotes(null);
+    setImports(null);
+    api
+      .listEventNotes(event.id)
+      .then((n) => alive && setNotes(n))
+      .catch(toastError);
+    api
+      .listEventImports(event.id)
+      .then((i) => alive && setImports(i))
+      .catch(toastError);
+    return () => {
+      alive = false;
+    };
+  }, [event.id, event.updatedAt, toastError]);
+
+  return (
+    <SidePanel
+      title={`${event.stt}. ${event.name}`}
+      subtitle={[event.eventDate ? formatDate(event.eventDate) : null, brandNames(event) || null].filter(Boolean).join(' · ') || EVENTS_TITLE}
+      label="Xem nhanh sự kiện"
+      onClose={onClose}
+      footer={
+        <>
+          <button className="btn danger left" onClick={onDelete}>
+            <Trash2 size={15} /> Xóa
+          </button>
+          <button className="btn" onClick={onEdit}>
+            <Pencil size={15} /> Sửa
+          </button>
+          <button className="btn primary" onClick={onOpen}>
+            Mở chi tiết <ArrowRight size={15} />
+          </button>
+        </>
+      }
+    >
+      <div className="info-grid">
+        <span className="k">Ngày</span>
+        <span>{event.eventDate ? formatDate(event.eventDate) : dash}</span>
+        <span className="k">Hãng</span>
+        <span>
+          {event.brands.length ? (
+            <span className="row wrap" style={{ gap: 4 }}>
+              {event.brands.map((b) => (
+                <span key={b.id} className="badge">
+                  {b.name}
+                </span>
+              ))}
+            </span>
+          ) : (
+            dash
+          )}
+        </span>
+        <span className="k">Thư mục</span>
+        <span style={{ minWidth: 0 }}>{event.folderPath ? <LocalLinkButton path={event.folderPath} /> : dash}</span>
+        <span className="k">File</span>
+        <span className="stack" style={{ gap: 4, minWidth: 0 }}>
+          {event.files.length
+            ? event.files.map((f) => (
+                <button key={f.path} className="btn sm link-chip" title={`Mở ${f.path}`} onClick={() => void api.openFile(f.path).catch(toastError)}>
+                  <FileText size={13} /> <span className="ellipsis">{f.name}</span>
+                </button>
+              ))
+            : dash}
+        </span>
+        <span className="k">Bảng import</span>
+        <span>
+          {imports === null
+            ? '…'
+            : imports.length
+              ? imports.map((i) => `${i.name} (${i.items.length})`).join(' · ')
+              : dash}
+        </span>
+      </div>
+      <h3 className="card-title" style={{ marginTop: 18, fontSize: 14 }}>
+        Ghi chú gần nhất {notes && notes.length > 0 && <span className="badge">{notes.length}</span>}
+      </h3>
+      {notes === null ? (
+        <div className="faint small">Đang tải…</div>
+      ) : notes.length === 0 ? (
+        <div className="faint small">Chưa có ghi chú.</div>
+      ) : (
+        <div className="stack" style={{ gap: 10 }}>
+          {notes.slice(0, 3).map((n) => (
+            <div key={n.id} className="preview-note">
+              <div className="small muted" style={{ marginBottom: 4 }}>
+                {noteDayLabel(n.noteDate, today)}
+              </div>
+              <NoteContent html={n.html} />
+            </div>
+          ))}
+          {notes.length > 3 && <div className="small faint">+ {notes.length - 3} ngày ghi chú khác — mở chi tiết để xem đầy đủ.</div>}
+        </div>
+      )}
+      <div className="small faint" style={{ marginTop: 16 }}>
+        Tạo {formatDateTime(event.createdAt)} · Cập nhật {formatDateTime(event.updatedAt)}
+      </div>
+    </SidePanel>
+  );
+}
+
+/** Bảng Sự kiện tạm thời: STT, Tên event, Ngày, Hãng, Note (ghi chú gần nhất); bấm một dòng để xem nhanh, bấm đúp để mở chi tiết. */
 export function EventsListPage() {
   usePageTitle(EVENTS_TITLE);
   const tableRef = useTableResize('temp-events');
@@ -149,6 +262,7 @@ export function EventsListPage() {
   const [brandIds, setBrandIds] = useSessionState<string[]>('events-brands', []);
   const [sort, setSort] = useLocalState<{ key: SortKey; dir: 'asc' | 'desc' }>('events-sort', { key: 'stt', dir: 'desc' });
   const [form, setForm] = useState<{ event?: TempEvent } | null>(null);
+  const [selId, setSelId] = useState<string | null>(null);
 
   const load = useCallback(() => {
     api.listEvents().then(setItems).catch(toastError);
@@ -159,10 +273,10 @@ export function EventsListPage() {
     const nq = normalizeText(q);
     const sign = sort.dir === 'asc' ? 1 : -1;
     return (items ?? [])
-      .filter((e) => (!brandIds.length || (e.brandId !== null && brandIds.includes(e.brandId))) && matchesQuery(nq, buildHaystack([String(e.stt), e.name, e.brandName, e.note])))
+      .filter((e) => (!brandIds.length || e.brands.some((b) => brandIds.includes(b.id))) && matchesQuery(nq, buildHaystack([String(e.stt), e.name, ...e.brands.map((b) => b.name), e.note])))
       .sort((a, b) => {
         if (sort.key === 'name') return sign * compareVi(a.name, b.name);
-        if (sort.key === 'brand') return sign * compareVi(a.brandName ?? '', b.brandName ?? '') || b.stt - a.stt;
+        if (sort.key === 'brand') return sign * compareVi(brandNames(a), brandNames(b)) || b.stt - a.stt;
         if (sort.key === 'eventDate') return sign * (a.eventDate ?? '').localeCompare(b.eventDate ?? '') || b.stt - a.stt;
         return sign * (a.stt - b.stt);
       });
@@ -173,6 +287,7 @@ export function EventsListPage() {
     try {
       await api.deleteEvent(e.id);
       toast('success', 'Đã xóa sự kiện.');
+      if (selId === e.id) setSelId(null);
       load();
     } catch (x) {
       toastError(x);
@@ -220,6 +335,7 @@ export function EventsListPage() {
           <EmptyState icon={<CalendarRange size={36} />} title="Chưa có sự kiện nào" text="Thêm sự kiện để gom file, ghi chú và danh sách thiết bị (import xlsx) vào một chỗ." action={add} />
         </div>
       ) : (
+        <div className="split">
         <div className="table-wrap">
           <table className="tbl events-table" ref={tableRef}>
             <thead>
@@ -247,11 +363,21 @@ export function EventsListPage() {
                 </tr>
               )}
               {shown.map((e) => (
-                <tr key={e.id} data-row={e.id} className="clickable" onClick={() => navigate(`/events/${e.id}`)}>
+                <tr
+                  key={e.id}
+                  data-row={e.id}
+                  className={`clickable ${e.id === selId ? 'selected' : ''}`}
+                  tabIndex={0}
+                  aria-selected={e.id === selId}
+                  title="Bấm để xem nhanh, bấm đúp để mở chi tiết"
+                  onClick={() => setSelId(e.id)}
+                  onDoubleClick={() => navigate(`/events/${e.id}`)}
+                  onKeyDown={(x) => x.key === 'Enter' && (selId === e.id ? navigate(`/events/${e.id}`) : setSelId(e.id))}
+                >
                   <td className="num">{e.stt}</td>
                   <td style={{ fontWeight: 600, minWidth: 180 }}>{e.name}</td>
                   <td className="nowrap">{e.eventDate ? formatDate(e.eventDate) : dash}</td>
-                  <td className="nowrap">{e.brandName ?? dash}</td>
+                  <td className="wrap" style={{ minWidth: 110 }}>{e.brands.length ? brandNames(e) : dash}</td>
                   <td className="clamp small muted">
                     <div>{latestNote(e) || dash}</div>
                   </td>
@@ -276,6 +402,18 @@ export function EventsListPage() {
                   </td>
                   <td>
                     <div className="row nowrap" style={{ gap: 2 }}>
+                      <button
+                        className="btn sm icon ghost"
+                        aria-label={`Mở chi tiết ${e.name}`}
+                        title="Mở chi tiết"
+                        onClick={(x) => {
+                          x.stopPropagation();
+                          navigate(`/events/${e.id}`);
+                        }}
+                        onDoubleClick={(x) => x.stopPropagation()}
+                      >
+                        <ArrowRight size={14} />
+                      </button>
                       <button
                         className="btn sm icon ghost"
                         aria-label={`Sửa ${e.name}`}
@@ -305,6 +443,20 @@ export function EventsListPage() {
               ))}
             </tbody>
           </table>
+        </div>
+        {(() => {
+          const sel = items.find((x) => x.id === selId);
+          return sel ? (
+            <EventPreview
+              key={sel.id}
+              event={sel}
+              onClose={() => setSelId(null)}
+              onOpen={() => navigate(`/events/${sel.id}`)}
+              onEdit={() => setForm({ event: sel })}
+              onDelete={() => void remove(sel)}
+            />
+          ) : null;
+        })()}
         </div>
       )}
       {form && (
@@ -446,7 +598,11 @@ export function EventDetailPage() {
           </h1>
           <div className="row" style={{ marginTop: 8, gap: 6 }}>
             {event.eventDate && <span className="badge accent">{formatDate(event.eventDate)}</span>}
-            {event.brandName && <span className="badge">{event.brandName}</span>}
+            {event.brands.map((b) => (
+              <span key={b.id} className="badge">
+                {b.name}
+              </span>
+            ))}
           </div>
         </div>
         <div className="actions">
@@ -474,7 +630,7 @@ export function EventDetailPage() {
               <span className="k">Ngày</span>
               <span>{event.eventDate ? formatDate(event.eventDate) : dash}</span>
               <span className="k">Hãng</span>
-              <span>{event.brandName ?? dash}</span>
+              <span>{event.brands.length ? brandNames(event) : dash}</span>
             </div>
             <div className="small faint" style={{ marginTop: 14 }}>
               Tạo lúc {formatDateTime(event.createdAt)} · Cập nhật lúc {formatDateTime(event.updatedAt)}
@@ -517,7 +673,7 @@ export function EventDetailPage() {
         <DayNotes source={source} version={event.updatedAt} />
       </div>
 
-      <ProjectImports key={event.id} projectId={event.id} imports={imports} ops={ops} ownerLabel="sự kiện" onChanged={load} />
+      <ProjectImports key={event.id} projectId={event.id} imports={imports} ops={ops} ownerLabel="sự kiện" ownerKind="event" onChanged={load} />
       {editing && <EventForm event={event} onClose={() => setEditing(false)} onSaved={() => load()} />}
     </div>
   );

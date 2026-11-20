@@ -40,7 +40,7 @@ const SPECS: Record<MasterKind, MasterSpec> = {
       { table: 'knowledge_records', column: 'brand_id', nullable: true },
       { table: 'project_brands', column: 'brand_id', nullable: false },
       { table: 'equipment_items', column: 'brand_id', nullable: true },
-      { table: 'temp_events', column: 'brand_id', nullable: true },
+      { table: 'temp_event_brands', column: 'brand_id', nullable: false },
     ],
   },
   warrantyProjects: { table: 'warranty_projects', usage: [{ table: 'warranty_records', column: 'project_entry_id', nullable: true }] },

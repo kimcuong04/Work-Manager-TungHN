@@ -270,13 +270,13 @@ describe('Job Freelance: Người đồng hành và các lần thanh toán', () 
 describe('Sự kiện tạm thời', () => {
   it('thêm / sửa / xóa; STT tự cấp và không trùng; Hãng dùng chung; ghi chú ban đầu thành ghi chú hôm nay', () => {
     const brand = master.createMaster(ctx, 'brands', 'Hikvision');
-    const e = events.createEvent(ctx, { name: ' Triển lãm  Secutech ', eventDate: TEST_TODAY, brandId: brand.id }, { noteHtml: '<div>Mang 3 camera demo</div>' });
-    expect(e).toMatchObject({ stt: 1, name: 'Triển lãm Secutech', brandName: 'Hikvision', eventDate: TEST_TODAY });
+    const e = events.createEvent(ctx, { name: ' Triển lãm  Secutech ', eventDate: TEST_TODAY, brandIds: [brand.id] }, { noteHtml: '<div>Mang 3 camera demo</div>' });
+    expect(e).toMatchObject({ stt: 1, name: 'Triển lãm Secutech', brands: [{ id: brand.id, name: 'Hikvision' }], eventDate: TEST_TODAY });
     expect(e.note).toMatch(/Mang 3 camera demo/);
-    const e2 = events.createEvent(ctx, { name: 'Hội thảo', eventDate: null, brandId: null });
+    const e2 = events.createEvent(ctx, { name: 'Hội thảo', eventDate: null, brandIds: [] });
     expect(e2.stt).toBe(2);
-    expect(() => events.updateEvent(ctx, e2.id, { stt: 1, name: 'Hội thảo', eventDate: null, brandId: null })).toThrow(/STT 1 đã được dùng/);
-    expect(() => events.createEvent(ctx, { name: '', eventDate: null, brandId: null })).toThrow(/Tên event/);
+    expect(() => events.updateEvent(ctx, e2.id, { stt: 1, name: 'Hội thảo', eventDate: null, brandIds: [] })).toThrow(/STT 1 đã được dùng/);
+    expect(() => events.createEvent(ctx, { name: '', eventDate: null, brandIds: [] })).toThrow(/Tên event/);
     expect(master.listMaster(ctx, 'brands').find((b) => b.id === brand.id)!.usageCount).toBe(1);
 
     notes.saveEventNote(ctx, e.id, { noteDate: '2026-11-15', html: '<div>Chuẩn bị</div>' });
@@ -298,7 +298,7 @@ describe('Sự kiện tạm thời', () => {
   });
 
   it('import nhiều bảng xlsx dạng tab sheet: thêm, đổi tên, đổi thứ tự, import lại, gỡ — tách biệt với dự án', () => {
-    const e = events.createEvent(ctx, { name: 'Demo', eventDate: null, brandId: null });
+    const e = events.createEvent(ctx, { name: 'Demo', eventDate: null, brandIds: [] });
     const a = events.commitEventImport(ctx, e.id, payload('BOQ.xlsx', ['P1375']));
     const b = events.commitEventImport(ctx, e.id, payload('BOQ.xlsx', ['M3086', 'Q6135']));
     expect(events.listEventImports(ctx, e.id).map((i) => [i.name, i.items.length, i.projectId])).toEqual([

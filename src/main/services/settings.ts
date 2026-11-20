@@ -17,6 +17,23 @@ const KEY_MAP: Record<keyof SettingsPatch, string> = {
 
 export const DEFAULT_WORKSPACE_NAME = 'My Workspace';
 
+/** Thư mục chọn file import xlsx gần nhất (mở sẵn ở lần import sau khi dự án / sự kiện chưa có thư mục). */
+export const LAST_IMPORT_DIR = 'last_import_dir';
+
+/** Giá trị cài đặt nội bộ (không hiện ở Settings). */
+export function readSettingValue({ db }: Ctx, key: string): string | null {
+  return db.scalar<string>('SELECT value FROM app_settings WHERE key = ?', [key]) ?? null;
+}
+
+export function writeSettingValue(ctx: Ctx, key: string, value: string): void {
+  ctx.db.tx(() =>
+    ctx.db.run(
+      'INSERT INTO app_settings(key,value,updated_at) VALUES (?,?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value, updated_at=excluded.updated_at',
+      [key, value, now()],
+    ),
+  );
+}
+
 export function getSettings({ db }: Ctx): AppSettings {
   const rows = db.all<{ key: string; value: string; updated_at: string }>('SELECT * FROM app_settings');
   const m = new Map(rows.map((r) => [r.key, r.value]));

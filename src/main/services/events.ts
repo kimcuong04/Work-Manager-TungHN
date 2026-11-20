@@ -9,9 +9,23 @@ import { EVENT_NOTES, deleteUnreferencedImages, noteImageKeysOf, writeDayNote } 
 import { normalizeFiles } from './projects';
 
 const SELECT_EVENT = `
-SELECT e.*, b.name AS brand_name, (SELECT COUNT(*) FROM temp_event_imports i WHERE i.event_id = e.id) AS import_count
-FROM temp_events e
-LEFT JOIN brands b ON b.id = e.brand_id`;
+SELECT e.*, (SELECT COUNT(*) FROM temp_event_imports i WHERE i.event_id = e.id) AS import_count
+FROM temp_events e`;
+
+function brandsByEvent(ctx: Ctx, eventId?: string): Map<string, { id: string; name: string }[]> {
+  const rows = ctx.db.all<{ event_id: string; id: string; name: string }>(
+    `SELECT eb.event_id, b.id, b.name FROM temp_event_brands eb JOIN brands b ON b.id = eb.brand_id ${eventId ? 'WHERE eb.event_id = ?' : ''} ORDER BY eb.sort_order, b.name`,
+    eventId ? [eventId] : [],
+  );
+  const map = new Map<string, { id: string; name: string }[]>();
+  for (const r of rows) map.set(r.event_id, [...(map.get(r.event_id) ?? []), { id: r.id, name: r.name }]);
+  return map;
+}
+
+function writeBrands(ctx: Ctx, eventId: string, brandIds: string[]) {
+  ctx.db.run('DELETE FROM temp_event_brands WHERE event_id = ?', [eventId]);
+  brandIds.forEach((b, i) => ctx.db.run('INSERT INTO temp_event_brands (event_id, brand_id, sort_order) VALUES (?,?,?)', [eventId, b, i]));
+}
 
 function filesByEvent(ctx: Ctx, eventId?: string): Map<string, LinkedFile[]> {
   const rows = ctx.db.all<Record<string, any>>(
@@ -23,14 +37,13 @@ function filesByEvent(ctx: Ctx, eventId?: string): Map<string, LinkedFile[]> {
   return map;
 }
 
-function mapEvent(r: Record<string, any>, files: LinkedFile[]): TempEvent {
+function mapEvent(r: Record<string, any>, files: LinkedFile[], brands: { id: string; name: string }[]): TempEvent {
   return {
     id: r.id,
     stt: r.stt,
     name: r.name,
     eventDate: strOrNull(r.event_date),
-    brandId: strOrNull(r.brand_id),
-    brandName: strOrNull(r.brand_name),
+    brands,
     note: str(r.note),
     folderPath: strOrNull(r.folder_path),
     files,
@@ -43,13 +56,14 @@ function mapEvent(r: Record<string, any>, files: LinkedFile[]): TempEvent {
 /** Bảng Sự kiện tạm thời theo STT. */
 export function listEvents(ctx: Ctx): TempEvent[] {
   const files = filesByEvent(ctx);
-  return ctx.db.all<Record<string, any>>(`${SELECT_EVENT} ORDER BY e.stt`).map((r) => mapEvent(r, files.get(r.id) ?? []));
+  const brands = brandsByEvent(ctx);
+  return ctx.db.all<Record<string, any>>(`${SELECT_EVENT} ORDER BY e.stt`).map((r) => mapEvent(r, files.get(r.id) ?? [], brands.get(r.id) ?? []));
 }
 
 export function getEvent(ctx: Ctx, id: string): TempEvent {
   const r = ctx.db.get<Record<string, any>>(`${SELECT_EVENT} WHERE e.id = ?`, [id]);
   if (!r) throw new AppError(EVENT_NOTES.missing);
-  return mapEvent(r, filesByEvent(ctx, id).get(id) ?? []);
+  return mapEvent(r, filesByEvent(ctx, id).get(id) ?? [], brandsByEvent(ctx, id).get(id) ?? []);
 }
 
 export function nextEventStt(ctx: Ctx): number {
@@ -59,13 +73,15 @@ export function nextEventStt(ctx: Ctx): number {
 function normalize(ctx: Ctx, input: TempEventInput, currentId?: string) {
   const e = validateEventInput(input);
   if (hasErrors(e)) throw new AppError(Object.values(e).filter(Boolean).join(' '));
-  const brandId = strOrNull(input.brandId);
-  if (brandId && !ctx.db.scalar<number>('SELECT COUNT(*) FROM brands WHERE id = ?', [brandId])) throw new AppError('Hãng không tồn tại.');
+  if (input.brandIds !== undefined && !Array.isArray(input.brandIds)) throw new AppError('Danh sách Hãng không hợp lệ.');
+  const brandIds = [...new Set((input.brandIds ?? []).map(String).filter(Boolean))];
+  if (brandIds.length > 50) throw new AppError('Tối đa 50 Hãng cho một sự kiện.');
+  for (const b of brandIds) if (!ctx.db.scalar<number>('SELECT COUNT(*) FROM brands WHERE id = ?', [b])) throw new AppError('Hãng không tồn tại.');
   let stt = input.stt ?? undefined;
   if (stt === undefined) stt = currentId ? ctx.db.scalar<number>('SELECT stt FROM temp_events WHERE id = ?', [currentId]) : nextEventStt(ctx);
   const dup = ctx.db.get<{ name: string }>('SELECT name FROM temp_events WHERE stt = ? AND id <> ?', [stt, currentId ?? '']);
   if (dup) throw new AppError(`STT ${stt} đã được dùng cho sự kiện "${dup.name}". Hãy chọn STT khác (gợi ý: ${nextEventStt(ctx)}).`);
-  return { stt: stt!, name: cleanName(input.name), eventDate: strOrNull(input.eventDate), brandId };
+  return { stt: stt!, name: cleanName(input.name), eventDate: strOrNull(input.eventDate), brandIds };
 }
 
 /** `noteHtml`: ghi chú ban đầu thành mục ghi chú của hôm nay. */
@@ -74,9 +90,10 @@ export function createEvent(ctx: Ctx, input: TempEventInput, opts: { noteHtml?: 
   const id = randomUUID();
   const stamp = now();
   ctx.db.tx(() => {
-    ctx.db.run('INSERT INTO temp_events (id, stt, name, event_date, brand_id, note, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?)', [
-      id, v.stt, v.name, v.eventDate, v.brandId, '', stamp, stamp,
+    ctx.db.run('INSERT INTO temp_events (id, stt, name, event_date, note, created_at, updated_at) VALUES (?,?,?,?,?,?,?)', [
+      id, v.stt, v.name, v.eventDate, '', stamp, stamp,
     ]);
+    writeBrands(ctx, id, v.brandIds);
     if (opts.noteHtml !== undefined) writeDayNote(ctx, EVENT_NOTES, id, todayOf(ctx), opts.noteHtml);
   });
   return getEvent(ctx, id);
@@ -85,9 +102,10 @@ export function createEvent(ctx: Ctx, input: TempEventInput, opts: { noteHtml?: 
 export function updateEvent(ctx: Ctx, id: string, input: TempEventInput): TempEvent {
   getEvent(ctx, id);
   const v = normalize(ctx, input, id);
-  ctx.db.tx(() =>
-    ctx.db.run('UPDATE temp_events SET stt = ?, name = ?, event_date = ?, brand_id = ?, updated_at = ? WHERE id = ?', [v.stt, v.name, v.eventDate, v.brandId, now(), id]),
-  );
+  ctx.db.tx(() => {
+    ctx.db.run('UPDATE temp_events SET stt = ?, name = ?, event_date = ?, updated_at = ? WHERE id = ?', [v.stt, v.name, v.eventDate, now(), id]);
+    writeBrands(ctx, id, v.brandIds);
+  });
   return getEvent(ctx, id);
 }
 

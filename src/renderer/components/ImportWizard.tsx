@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { AlertTriangle, FileSpreadsheet, Info, RefreshCw, Wand2 } from 'lucide-react';
-import type { ImportPayload, ProjectImport, WorkbookData, WorkbookSheet } from '../../shared/types';
+import type { ImportOwner, ImportPayload, ProjectImport, WorkbookData, WorkbookSheet } from '../../shared/types';
 import { ITEM_FIELDS, autoDetect, buildImport, cellText, colName, configFromMappings, configToMappings, detectItemsInSheet, detectTableEnd, getSheet, type ImportConfig } from '../../shared/xlsxMapping';
 import { importTabBase } from '../../shared/validation';
 import { api, errorMessage } from '../api';
@@ -83,10 +83,13 @@ export function ImportWizard({
   replaceImport,
   commitTo,
   existing,
+  owner,
   onClose,
   onDone,
 }: {
   projectId: string;
+  /** Dự án / sự kiện đang import: hộp thoại chọn file mở sẵn thư mục của nó (mặc định là dự án `projectId`). */
+  owner?: ImportOwner;
   /** Các bảng đã import của cùng chủ sở hữu: import lại cùng file thì tự chọn sẵn sheet chưa import. */
   existing?: ProjectImport[];
   /** Lưu bảng import vào nơi khác dự án (vd Sự kiện tạm thời); bỏ trống = bảng import của dự án `projectId`. */
@@ -119,7 +122,7 @@ export function ImportWizard({
     setPhase('loading');
     setError(null);
     try {
-      const path = await api.pickWorkbook();
+      const path = await api.pickWorkbook(owner ?? { kind: 'project', id: projectId });
       if (!path) return onClose();
       const data = await api.readWorkbook(path);
       const saved = configFromMappings(data.sheets, data.savedMappings);

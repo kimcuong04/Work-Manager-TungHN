@@ -1,9 +1,9 @@
 import { inRange } from '../../shared/dates';
-import { buildHaystack, matchesQuery, normalizeText } from '../../shared/text';
+import { buildHaystack, matchExcerpt, matchesQuery, normalizeText } from '../../shared/text';
 import { CATEGORY_LABEL, JOB_LABEL, type JobType, type SearchHit, type SearchQuery } from '../../shared/types';
 import { AppError, type Ctx } from '../context';
 
-const MODES = new Set(['name', 'si', 'serial', 'brand', 'model']);
+const MODES = new Set(['name', 'si', 'serial', 'brand', 'model', 'note']);
 
 interface ProjectRow {
   id: string;
@@ -29,6 +29,84 @@ interface WarrantyRow {
   year_label: string;
   brand_name: string | null;
   si_name: string | null;
+}
+
+const noHit = { jobType: 'MAIN' as JobType, jobYearId: '', yearLabel: '', workCategory: null };
+
+/**
+ * Tìm theo Ghi chú: ghi chú theo ngày của dự án Pre/Post-sales, Job Freelance, Sự kiện tạm thời (mỗi chủ sở hữu một
+ * kết quả, lấy ngày ghi chú khớp gần nhất) và Ghi chú / Note của Password, Website - App - Địa điểm (không có ngày).
+ */
+function searchNotes(
+  ctx: Ctx,
+  text: string,
+  h: { hit: (hay: (string | null | undefined)[]) => boolean; inDate: (d: string | null) => boolean; projectHit: (r: ProjectRow, matched: string) => SearchHit },
+  out: SearchHit[],
+) {
+  const excerpt = (date: string | null, body: string) => `${date ? `${date.split('-').reverse().join('/')}: ` : ''}${matchExcerpt(body, text)}`;
+  const firstByOwner = (rows: { owner: string; note_date: string; content_text: string }[]) => {
+    const m = new Map<string, { date: string; body: string }>();
+    for (const r of rows) if (!m.has(r.owner) && h.inDate(r.note_date) && h.hit([r.content_text])) m.set(r.owner, { date: r.note_date, body: r.content_text });
+    return m;
+  };
+
+  const projectNotes = firstByOwner(ctx.db.all('SELECT project_id AS owner, note_date, content_text FROM project_notes ORDER BY note_date DESC'));
+  if (projectNotes.size) {
+    const rows = ctx.db.all<ProjectRow>(
+      `SELECT p.id, p.stt, p.project_name, p.received_date, p.job_year_id, p.work_category, y.job_type, y.year_label, si.name AS si_name, c.name AS client_name
+       FROM projects p JOIN job_years y ON y.id = p.job_year_id LEFT JOIN si_partners si ON si.id = p.si_id LEFT JOIN clients c ON c.id = p.client_id`,
+    );
+    for (const r of rows) {
+      const n = projectNotes.get(r.id);
+      if (n) out.push({ ...h.projectHit(r, excerpt(n.date, n.body)), date: n.date });
+    }
+  }
+
+  const jobNotes = firstByOwner(ctx.db.all('SELECT job_id AS owner, note_date, content_text FROM freelance_notes ORDER BY note_date DESC'));
+  for (const r of ctx.db.all<{ id: string; stt: number; project_name: string; hirer: string | null }>(
+    'SELECT f.id, f.stt, f.project_name, hi.name AS hirer FROM freelance_jobs f LEFT JOIN freelance_hirers hi ON hi.id = f.hirer_id',
+  )) {
+    const n = jobNotes.get(r.id);
+    if (n)
+      out.push({
+        kind: 'freelance',
+        id: r.id,
+        title: `${r.stt}. ${r.project_name}`,
+        subtitle: `Job Freelance${r.hirer ? ` · Bên thuê ${r.hirer}` : ''}`,
+        matched: excerpt(n.date, n.body),
+        date: n.date,
+        ...noHit,
+        jobType: 'FREELANCE',
+      });
+  }
+
+  const eventNotes = firstByOwner(ctx.db.all('SELECT event_id AS owner, note_date, content_text FROM temp_event_notes ORDER BY note_date DESC'));
+  for (const r of ctx.db.all<{ id: string; stt: number; name: string; event_date: string | null; brand_name: string | null }>(
+    `SELECT e.id, e.stt, e.name, e.event_date,
+       (SELECT group_concat(name, ', ') FROM (SELECT b.name FROM temp_event_brands eb JOIN brands b ON b.id = eb.brand_id WHERE eb.event_id = e.id ORDER BY eb.sort_order)) AS brand_name
+     FROM temp_events e`,
+  )) {
+    const n = eventNotes.get(r.id);
+    if (n)
+      out.push({
+        kind: 'event',
+        id: r.id,
+        title: `${r.stt}. ${r.name}`,
+        subtitle: `Sự kiện tạm thời${r.brand_name ? ` · ${r.brand_name}` : ''}`,
+        matched: excerpt(n.date, n.body),
+        date: n.date,
+        ...noHit,
+      });
+  }
+
+  // Password / Website - App - Địa điểm không có ngày: chỉ hiện khi không lọc theo khoảng ngày.
+  if (!h.inDate(null)) return;
+  for (const r of ctx.db.all<{ id: string; site_name: string; username: string; note: string }>("SELECT id, site_name, username, note FROM password_entries WHERE note <> ''"))
+    if (h.hit([r.note]))
+      out.push({ kind: 'password', id: r.id, title: r.site_name, subtitle: `Password · ${r.username}`, matched: excerpt(null, r.note), date: null, ...noHit });
+  for (const r of ctx.db.all<{ id: string; name: string; note: string }>("SELECT id, name, note FROM knowledge_places WHERE note <> ''"))
+    if (h.hit([r.note]))
+      out.push({ kind: 'place', id: r.id, title: r.name, subtitle: 'Kiến thức › Website - App - Địa điểm', matched: excerpt(null, r.note), date: null, ...noHit });
 }
 
 /**
@@ -164,6 +242,8 @@ export function globalSearch(ctx: Ctx, q: SearchQuery): SearchHit[] {
       });
     }
   }
+
+  if (q.mode === 'note') searchNotes(ctx, q.text ?? '', { hit, inDate, projectHit }, out);
 
   out.sort((a, b) => (b.date ?? '').localeCompare(a.date ?? '') || a.title.localeCompare(b.title, 'vi'));
   return out.slice(0, Math.min(Math.max(q.limit ?? 300, 1), 1000));

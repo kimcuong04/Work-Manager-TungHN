@@ -311,8 +311,8 @@ export interface TempEvent {
   stt: number;
   name: string;
   eventDate: string | null;
-  brandId: string | null;
-  brandName: string | null;
+  /** Các Hãng của sự kiện (danh mục dùng chung), theo thứ tự chọn. */
+  brands: { id: string; name: string }[];
   /** Bản chữ thuần của mọi ngày ghi chú (mới nhất trước). */
   note: string;
   /** Thư mục trên máy liên kết với sự kiện (không bắt buộc). */
@@ -328,7 +328,7 @@ export interface TempEventInput {
   stt?: number | null;
   name: string;
   eventDate: string | null;
-  brandId: string | null;
+  brandIds: string[];
 }
 
 export interface FreelanceSaveOptions {
@@ -462,6 +462,12 @@ export interface ImportedItem {
   model: string;
   brand: string;
   description: string;
+}
+
+/** Chủ sở hữu bảng import: dự án Pre/Post-sales hoặc Sự kiện tạm thời. */
+export interface ImportOwner {
+  kind: 'project' | 'event';
+  id: string;
 }
 
 export interface ImportPayload {
@@ -773,7 +779,7 @@ export interface CalendarQuery {
   projectId?: string;
 }
 
-export type SearchMode = 'name' | 'si' | 'serial' | 'brand' | 'model';
+export type SearchMode = 'name' | 'si' | 'serial' | 'brand' | 'model' | 'note';
 
 export const SEARCH_MODE_LABEL: Record<SearchMode, string> = {
   name: 'Tên dự án',
@@ -781,19 +787,20 @@ export const SEARCH_MODE_LABEL: Record<SearchMode, string> = {
   serial: 'Serial number',
   brand: 'Hãng',
   model: 'Model / Mã TB',
+  note: 'Ghi chú',
 };
 
 export interface SearchQuery {
   mode: SearchMode;
   text: string;
-  /** Lọc theo Ngày bắt đầu (dự án) / Ngày nhận (Warranty). */
+  /** Lọc theo Ngày bắt đầu (dự án) / Ngày nhận (Warranty); tìm theo Ghi chú thì lọc theo ngày của ghi chú. */
   from?: string | null;
   to?: string | null;
   limit?: number;
 }
 
 export interface SearchHit {
-  kind: 'project' | 'warranty' | 'freelance' | 'equipment';
+  kind: 'project' | 'warranty' | 'freelance' | 'equipment' | 'event' | 'password' | 'place';
   id: string;
   title: string;
   subtitle: string;

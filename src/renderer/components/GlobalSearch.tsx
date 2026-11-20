@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { useLocation, useNavigate } from 'react-router';
-import { FolderKanban, Laptop, Funnel, Package, Search, ShieldCheck, X } from 'lucide-react';
+import { CalendarRange, FolderKanban, Funnel, KeyRound, Laptop, LayoutList, Package, Search, ShieldCheck, X } from 'lucide-react';
 import { formatDate } from '../../shared/dates';
 import { SEARCH_MODE_LABEL, type SearchHit, type SearchMode } from '../../shared/types';
 import { api } from '../api';
@@ -53,7 +53,23 @@ export const SEARCH_PLACEHOLDER: Record<SearchMode, string> = {
   serial: 'Tìm Serial number trong Warranty và Kho thiết bị…',
   brand: 'Tìm theo Hãng…',
   model: 'Tìm Model / mã thiết bị trong bảng thiết bị và Tên sp trong Kho thiết bị…',
+  note: 'Tìm trong ghi chú: dự án, Job Freelance, Sự kiện tạm thời, Password, Website - App - Địa điểm…',
 };
+
+/** Tên loại kết quả (cột Loại ở trang kết quả tìm kiếm). */
+export function hitKindLabel(h: SearchHit, category: string | null): string {
+  return h.kind === 'freelance'
+    ? 'Job Freelance'
+    : h.kind === 'equipment'
+      ? 'Kho thiết bị'
+      : h.kind === 'event'
+        ? 'Sự kiện tạm thời'
+        : h.kind === 'password'
+          ? 'Password'
+          : h.kind === 'place'
+            ? 'Website - App - Địa điểm'
+            : category ?? 'Warranty';
+}
 
 /** Mở đúng nơi chứa kết quả: dự án / job Freelance → trang chi tiết; Warranty → bảng Warranty của năm đó với bản ghi được chọn. */
 /** Mở kết quả tìm kiếm và tô sáng `query` ở trang đích (bấm chuột bất kỳ đâu để bỏ). */
@@ -61,18 +77,24 @@ export function useOpenHit() {
   const navigate = useNavigate();
   return (h: SearchHit, query: string) => {
     requestHighlight(query);
-    return h.kind === 'project'
-      ? navigate(`/project/${h.id}`)
-      : h.kind === 'freelance'
-        ? navigate(`/freelance/${h.id}`)
-        : h.kind === 'equipment'
-          ? navigate('/equipment', { state: { select: h.id } })
-          : navigate(nodePath(h.jobType, h.jobYearId, 'WARRANTY'), { state: { select: h.id } });
+    if (h.kind === 'project') return navigate(`/project/${h.id}`);
+    if (h.kind === 'freelance') return navigate(`/freelance/${h.id}`);
+    if (h.kind === 'event') return navigate(`/events/${h.id}`);
+    if (h.kind === 'password') return navigate('/passwords');
+    if (h.kind === 'place') return navigate('/knowledge/places');
+    if (h.kind === 'equipment') return navigate('/equipment', { state: { select: h.id } });
+    return navigate(nodePath(h.jobType, h.jobYearId, 'WARRANTY'), { state: { select: h.id } });
   };
 }
 
 export function HitIcon({ kind }: { kind: SearchHit['kind'] }) {
-  return kind === 'project' ? <FolderKanban size={15} /> : kind === 'freelance' ? <Laptop size={15} /> : kind === 'equipment' ? <Package size={15} /> : <ShieldCheck size={15} />;
+  if (kind === 'project') return <FolderKanban size={15} />;
+  if (kind === 'freelance') return <Laptop size={15} />;
+  if (kind === 'equipment') return <Package size={15} />;
+  if (kind === 'event') return <CalendarRange size={15} />;
+  if (kind === 'password') return <KeyRound size={15} />;
+  if (kind === 'place') return <LayoutList size={15} />;
+  return <ShieldCheck size={15} />;
 }
 
 export function SearchDateFilter({ st, onChange }: { st: GlobalSearchState; onChange: (p: Partial<GlobalSearchState>) => void }) {
@@ -197,7 +219,9 @@ export function GlobalSearch() {
           <div className="small" style={{ fontWeight: 650 }}>
             Lọc theo ngày
           </div>
-          <div className="small muted">Áp dụng cho Ngày bắt đầu (dự án) và Ngày nhận (Warranty).</div>
+          <div className="small muted">
+            {st.mode === 'note' ? 'Áp dụng cho ngày của ghi chú (Password, Website - App - Địa điểm không có ngày nên bị ẩn khi lọc).' : 'Áp dụng cho Ngày bắt đầu (dự án) và Ngày nhận (Warranty).'}
+          </div>
           <SearchDateFilter st={st} onChange={setSt} />
           {filterActive && (
             <div className="row">

@@ -58,6 +58,41 @@ export function matchesQuery(normalizedQuery: string, normalizedHaystack: string
   return true;
 }
 
+const foldChar = (c: string) =>
+  c
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')
+    .replace(/[đĐ]/g, 'd')
+    .toLowerCase();
+
+/**
+ * Đoạn trích quanh chỗ khớp từ khóa (không phân biệt dấu / hoa thường) để hiện trong kết quả tìm kiếm; không thấy
+ * nguyên cụm thì lấy quanh từ đầu tiên, vẫn không thấy thì lấy đầu đoạn văn.
+ */
+export function matchExcerpt(text: string, query: string, radius = 60): string {
+  const src = String(text ?? '').replace(/\s+/g, ' ').trim();
+  const q = normalizeText(query);
+  if (!src) return '';
+  let folded = '';
+  const map: number[] = [];
+  for (let i = 0; i < src.length; i++)
+    for (const ch of foldChar(src[i])) {
+      folded += ch;
+      map.push(i);
+    }
+  let at = q ? folded.indexOf(q) : -1;
+  let len = q.length;
+  if (at < 0 && q) {
+    const first = q.split(' ')[0];
+    at = folded.indexOf(first);
+    len = first.length;
+  }
+  if (at < 0) return src.length > radius * 2 ? `${src.slice(0, radius * 2).trimEnd()}…` : src;
+  const start = Math.max(0, map[at] - radius);
+  const end = Math.min(src.length, (map[at + len - 1] ?? map[at]) + 1 + radius);
+  return `${start > 0 ? '…' : ''}${src.slice(start, end).trim()}${end < src.length ? '…' : ''}`;
+}
+
 export function buildHaystack(parts: (string | null | undefined)[]): string {
   return normalizeText(parts.filter(Boolean).join(' | '));
 }

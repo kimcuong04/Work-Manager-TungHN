@@ -29,6 +29,7 @@ import type {
   ExperienceRecord,
   FileCheck,
   ImageRef,
+  ImportOwner,
   ImportPayload,
   NoteTextRow,
   JobType,
@@ -174,7 +175,8 @@ export interface Api {
   openFile(path: string): Promise<void>;
   showFileInFolder(path: string): Promise<void>;
 
-  pickWorkbook(): Promise<string | null>;
+  /** Chọn file .xlsx; hộp thoại mở sẵn thư mục của dự án / sự kiện `owner` (nếu có), thư mục import gần nhất, hoặc Downloads. */
+  pickWorkbook(owner?: ImportOwner | null): Promise<string | null>;
   readWorkbook(path: string): Promise<WorkbookData>;
   /** Các bảng thiết bị import của dự án theo thứ tự tab (trái → phải). */
   listProjectImports(projectId: string): Promise<ProjectImport[]>;

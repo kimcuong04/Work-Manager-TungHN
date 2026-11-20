@@ -21,7 +21,7 @@ import * as passwords from './services/passwords';
 import * as projects from './services/projects';
 import * as records from './services/records';
 import { globalSearch } from './services/search';
-import { getSettings, updateSettings } from './services/settings';
+import { LAST_IMPORT_DIR, getSettings, readSettingValue, updateSettings, writeSettingValue } from './services/settings';
 import * as todos from './services/todos';
 import type { Updater } from './updater';
 
@@ -32,7 +32,10 @@ export interface FileFilter {
 
 /** Các thao tác phụ thuộc hệ điều hành (dialog, shell) — tách riêng để service test được không cần Electron. */
 export interface Desktop {
-  pickFiles(opts: { title: string; filters: FileFilter[]; multi?: boolean }): Promise<string[]>;
+  /** `defaultPath`: thư mục mở sẵn trong hộp thoại. */
+  pickFiles(opts: { title: string; filters: FileFilter[]; multi?: boolean; defaultPath?: string }): Promise<string[]>;
+  /** Thư mục Downloads của người dùng. */
+  downloadsDir(): string;
   saveFile(opts: { title: string; defaultName: string; filters: FileFilter[] }): Promise<string | null>;
   openPath(p: string): Promise<string>;
   showItemInFolder(p: string): void;
@@ -76,6 +79,32 @@ export function createHandlers(ctx: Ctx, desktop: Desktop): Handlers {
   };
 
   const DANGEROUS = new Set(['exe', 'bat', 'cmd', 'com', 'msi', 'ps1', 'vbs', 'vbe', 'js', 'jse', 'wsf', 'scr', 'lnk', 'reg', 'hta', 'cpl', 'pif']);
+
+  const isDir = (p: string | null | undefined): p is string => {
+    if (!p) return false;
+    try {
+      return fs.statSync(p).isDirectory();
+    } catch {
+      return false;
+    }
+  };
+  /**
+   * Thư mục mở sẵn khi chọn file xlsx để import: thư mục của dự án / sự kiện (nếu có), không thì thư mục import gần
+   * nhất, không thì Downloads.
+   */
+  const importStartDir = (owner: { kind?: string; id?: string } | null | undefined): string | undefined => {
+    const id = owner?.id ? String(owner.id) : '';
+    const ownerDir = id
+      ? ctx.db.scalar<string | null>(owner?.kind === 'event' ? 'SELECT folder_path FROM temp_events WHERE id = ?' : 'SELECT folder_path FROM projects WHERE id = ?', [id])
+      : null;
+    let downloads: string | null = null;
+    try {
+      downloads = desktop.downloadsDir();
+    } catch {
+      downloads = null;
+    }
+    return [ownerDir, readSettingValue(ctx, LAST_IMPORT_DIR), downloads].find(isDir);
+  };
 
   const assertLinkedFile = (p: string) => {
     const linked = ctx.db.scalar<number>('SELECT (SELECT COUNT(*) FROM project_files WHERE file_path = ?) + (SELECT COUNT(*) FROM temp_event_files WHERE file_path = ?)', [p, p]);
@@ -265,10 +294,15 @@ export function createHandlers(ctx: Ctx, desktop: Desktop): Handlers {
       desktop.showItemInFolder(p);
     },
 
-    pickWorkbook: async () => {
-      const [file] = await desktop.pickFiles({ title: 'Chọn workbook Excel', filters: [{ name: 'Excel Workbook (*.xlsx)', extensions: ['xlsx'] }] });
+    pickWorkbook: async (owner) => {
+      const [file] = await desktop.pickFiles({
+        title: 'Chọn workbook Excel',
+        filters: [{ name: 'Excel Workbook (*.xlsx)', extensions: ['xlsx'] }],
+        defaultPath: importStartDir(owner),
+      });
       if (!file) return null;
       if (fileExtension(file) !== 'xlsx') throw new AppError('Chỉ hỗ trợ file Excel .xlsx (không hỗ trợ .xls, .csv).');
+      writeSettingValue(ctx, LAST_IMPORT_DIR, path.dirname(file));
       pickedWorkbooks.add(file);
       return file;
     },

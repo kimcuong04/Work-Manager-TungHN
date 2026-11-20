@@ -59,7 +59,7 @@ App tự cập nhật trên máy user, nên mọi thay đổi phải giữ đư�
 15. **File liên kết** (schema 12): danh sách ở `project_files`; cột `projects.file_*` chỉ là bản sao file đầu tiên (giữ cho
    dữ liệu cũ) — luôn ghi qua `writeFiles`. `openFile` chỉ mở đường dẫn có trong `project_files`. Ảnh trong ghi chú chỉ
    được giữ `width` / `data-scale` / `data-align` (lọc trong `noteHtml.ts`); chỉnh ảnh ở `NoteImageTools.tsx`.
-16. **Schema 14–15**:
+16. **Schema 14–16**:
    - **Priority Point** (schema 15): **5 là cao nhất, 1 thấp nhất** — migration đã đảo dữ liệu cũ (p → 6 − p). Sắp xếp theo
      Priority "tăng dần" nghĩa là ưu tiên cao trước (`sortProjects` so `b.priorityPoint - a.priorityPoint`).
    - To-do **Vô thời hạn** là `todo_items.todo_date = ''` (`TODO_NO_DATE`), không phải NULL — để chỉ mục duy nhất
@@ -73,7 +73,10 @@ App tự cập nhật trên máy user, nên mọi thay đổi phải giữ đư�
      hành đã có thanh toán trong job, danh mục `freelanceCompanions` đang dùng chỉ Deactivate.
    - **Sự kiện tạm thời**: `temp_events` (+ `temp_event_files`, `temp_event_notes` qua `EVENT_NOTES`,
      `temp_event_imports`); `openFile` / `openLocalLink` chấp nhận cả file / thư mục liên kết với sự kiện. Cột tham chiếu
-     danh mục mới phải khai báo trong `SPECS` của `master.ts` (vd `temp_events.brand_id`).
+     danh mục mới phải khai báo trong `SPECS` của `master.ts`.
+   - Schema 16: Hãng của sự kiện ở bảng nối `temp_event_brands` (nhiều Hãng); cột `temp_events.brand_id` không còn dùng.
+   - Hộp thoại chọn xlsx (`pickWorkbook(owner)`): thư mục của dự án / sự kiện → thư mục import gần nhất (`app_settings`
+     key `last_import_dir`, ghi sau mỗi lần chọn file) → Downloads. Tìm kiếm kiểu `note` ở `searchNotes` (`search.ts`).
 
 ## Phát hành bản cập nhật
 
