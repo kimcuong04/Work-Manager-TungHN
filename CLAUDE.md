@@ -80,6 +80,23 @@ App tự cập nhật trên máy user, nên mọi thay đổi phải giữ đư�
 
 ## Phát hành bản cập nhật
 
+**Cách nhanh (một lệnh)**: `npm run release` hoặc bấm đúp `release.bat` — tự chạy typecheck + unit test → commit →
+`npm version` → `git push --follow-tags` (script: `scripts/release.mjs`, `--dry-run` để xem trước các bước).
+Khi Claude làm xong một lượt thay đổi mà không tự chạy được git trên máy user, hãy ghi file `.release-msg.txt`
+ở gốc repo (đã gitignore, tự xóa sau khi phát hành):
+
+```
+bump: minor
+Tiêu đề commit bằng tiếng Việt — thành ghi chú "Có gì mới" cho user
+(dòng sau, nếu có: mô tả chi tiết)
+```
+
+Rồi chỉ cần nhờ user chạy `release.bat`.
+
+**Quy trình user yêu cầu với Claude**: develop hết một lượt → chạy e2e và cho user xem quá trình test (ảnh chụp các bước)
+→ hiện hộp thoại hỏi user có muốn release không. Chỉ khi user đồng ý mới chuẩn bị `.release-msg.txt` / chạy release;
+user tự bấm `release.bat` nếu Claude không chạy được git trên máy. Các bước thủ công tương đương:
+
 1. Commit thay đổi (tiêu đề commit thành ghi chú "Có gì mới" hiển thị cho user — viết rõ ràng bằng tiếng Việt;
    commit bắt đầu bằng `chore:`, `ci:`, `test:`, `build:` không được đưa vào ghi chú).
 2. `npm version patch` (sửa lỗi) / `minor` (tính năng) / `major` → tạo commit + tag `vX.Y.Z`.

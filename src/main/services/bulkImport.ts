@@ -81,7 +81,7 @@ function formErrors(target: BulkTarget, v: Record<string, BulkValue>): string[] 
             filePath: null,
             fileName: null,
             fileExtension: null,
-            priorityPoint: typeof v.priority === 'number' ? v.priority : 3,
+            priorityPoint: typeof v.priority === 'number' ? v.priority : 1,
           });
   for (const m of Object.values(e)) if (m && !out.includes(m)) out.push(m);
   return out;
@@ -199,7 +199,7 @@ export function bulkImport(ctx: Ctx, spec: BulkImportSpec): BulkImportResult {
               filePath: null,
               fileName: null,
               fileExtension: null,
-              priorityPoint: typeof v.priority === 'number' ? v.priority : 3,
+              priorityPoint: typeof v.priority === 'number' ? v.priority : 1,
             },
             { noteHtml: note ? textToNoteHtml(note) : undefined },
           );

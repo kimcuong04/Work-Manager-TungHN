@@ -4055,3 +4055,111 @@ input.select-box {
   max-height: 90px;
   width: auto;
 }
+
+/* ---------- Thanh công cụ 1 dòng: search + icon lọc + nút icon + nút Thêm tròn ---------- */
+.toolbar.one-line {
+  flex-wrap: nowrap;
+}
+.toolbar.one-line .search-box {
+  flex: 0 1 auto;
+  min-width: 180px;
+}
+.toolbar.one-line > .btn,
+.toolbar.one-line > .seg,
+.toolbar.one-line > .pop-anchor {
+  flex-shrink: 0;
+}
+.seg.icons button {
+  padding: 0 9px;
+  display: inline-flex;
+  align-items: center;
+}
+.seg button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.btn.fab-add {
+  width: 38px;
+  height: 38px;
+  padding: 0;
+  border-radius: 50%;
+  margin-left: 4px;
+  box-shadow: 0 2px 8px color-mix(in srgb, var(--accent) 45%, transparent);
+}
+.btn.fab-add:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px color-mix(in srgb, var(--accent) 55%, transparent);
+}
+
+/* ---------- FilterMenu: icon lọc → thuộc tính → đối tượng ---------- */
+.filter-btn {
+  position: relative;
+}
+.filter-count {
+  position: absolute;
+  top: -5px;
+  right: -5px;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  border-radius: 8px;
+  background: var(--accent);
+  color: var(--accent-contrast);
+  font-size: 10.5px;
+  font-weight: 700;
+  line-height: 16px;
+  text-align: center;
+}
+.popover.filter-pop {
+  width: 300px;
+  max-height: none;
+  overflow: visible;
+}
+.filter-pop-head {
+  padding: 4px 6px 6px;
+  font-size: 12px;
+  font-weight: 650;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  gap: 4px;
+}
+.filter-pop-head.row {
+  text-transform: none;
+  letter-spacing: 0;
+  font-size: 13.5px;
+  color: var(--text);
+  padding: 0 0 6px;
+}
+.filter-sum {
+  max-width: 120px;
+  color: var(--accent);
+  font-size: 12.5px;
+  font-weight: 600;
+}
+.filter-values {
+  max-height: 280px;
+  overflow: auto;
+}
+.filter-custom {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 2px 2px 4px;
+}
+.filter-custom > .select,
+.filter-custom > .input,
+.filter-custom > div {
+  width: 100% !important;
+}
+.check-box.radio {
+  border-radius: 50%;
+}
+
+/* ---------- Danh sách thả xuống nổi trên modal (portal) ---------- */
+.popover.floating {
+  min-width: 0;
+  right: auto;
+  z-index: 500;
+  overflow: auto;
+}

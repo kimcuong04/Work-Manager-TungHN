@@ -83,7 +83,7 @@ function initialInput(project: Project | undefined, defaults: ProjectDefaults | 
     note: '',
     erpLink: '',
     files: [],
-    priorityPoint: 3,
+    priorityPoint: 1,
     folderParent: null,
   };
 }

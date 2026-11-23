@@ -18,7 +18,6 @@ import {
   Trash2,
   Unlock,
   UserRound,
-  X,
 } from 'lucide-react';
 import { formatDate } from '../../shared/dates';
 import { STATUS_LABEL, STATUS_ORDER, computeStatus, describeRemaining } from '../../shared/status';
@@ -30,7 +29,6 @@ import {
   SORT_LABEL,
   applyFilter,
   groupByStatus,
-  isFilterActive,
   sortProjects,
   DEFAULT_SORT,
   type ProjectFilter,
@@ -41,7 +39,7 @@ import {
 import { useAppData } from '../state/AppData';
 import { useProjectActions } from '../state/projectActions';
 import { useUi } from '../state/ui';
-import { ColumnToggle, EmptyState, MenuButton, MultiSelect, PriorityBadge, SearchInput, type MenuItem } from './common';
+import { ColumnToggle, EmptyState, FilterMenu, MenuButton, PriorityBadge, SearchInput, type MenuItem } from './common';
 import { useOpenFile } from './FileLink';
 import { DEFAULT_HIDDEN_PROJECT_COLS, PROJECT_COLUMNS, ProjectPreviewPanel, ProjectTable } from './ProjectTable';
 import { Modal } from './Modal';
@@ -395,53 +393,46 @@ export function ProjectsView({ scopeKey, baseList, showLocationFilters, initialF
     setEditMode(false);
   };
 
-  const anyFilter = isFilterActive(filter);
-
   return (
     <>
-      <div className="toolbar">
+      <div className="toolbar one-line">
         <SearchInput value={filter.q} onChange={(v) => setF('q', v)} placeholder="Tìm STT, tên dự án, SI, Hãng, EU, Sale, ghi chú…" width={320} />
-        <MultiSelect label="Tên SI" options={toOpts('siPartners')} value={filter.sis ?? []} onChange={(v) => setF('sis', v)} />
-        <MultiSelect label="Hãng" options={toOpts('brands')} value={filter.brands ?? []} onChange={(v) => setF('brands', v)} />
-        <MultiSelect label="Sale" options={toOpts('salespersons')} value={filter.salespersons ?? []} onChange={(v) => setF('salespersons', v)} />
-        <MultiSelect label="EU" options={toOpts('clients')} value={filter.clients} onChange={(v) => setF('clients', v)} />
-        {showLocationFilters && (
-          <>
-            {JOB_TYPES.length > 1 && (
-              <MultiSelect
-                label="Job"
-                options={JOB_TYPES.map((j) => ({ id: j, name: JOB_LABEL[j] }))}
-                value={filter.jobs}
-                onChange={(v) => setF('jobs', v as ProjectFilter['jobs'])}
-              />
-            )}
-            <MultiSelect label="Năm" options={yearOpts} value={filter.years} onChange={(v) => setF('years', v)} />
-            <MultiSelect
-              label="Nhóm"
-              options={PROJECT_CATEGORIES.map((c) => ({ id: c, name: CATEGORY_LABEL[c] }))}
-              value={filter.categories}
-              onChange={(v) => setF('categories', v as ProjectFilter['categories'])}
-            />
-          </>
-        )}
-        <MultiSelect
-          label="Trạng thái"
-          options={STATUS_ORDER.map((s) => ({ id: s, name: STATUS_LABEL[s] }))}
-          value={filter.statuses}
-          onChange={(v) => setF('statuses', v as DeadlineStatus[])}
+        <FilterMenu
+          attrs={[
+            { key: 'sis', label: 'Tên SI', options: toOpts('siPartners'), value: filter.sis ?? [], onChange: (v) => setF('sis', v) },
+            { key: 'brands', label: 'Hãng', options: toOpts('brands'), value: filter.brands ?? [], onChange: (v) => setF('brands', v) },
+            { key: 'salespersons', label: 'Sale', options: toOpts('salespersons'), value: filter.salespersons ?? [], onChange: (v) => setF('salespersons', v) },
+            { key: 'clients', label: 'EU', options: toOpts('clients'), value: filter.clients, onChange: (v) => setF('clients', v) },
+            ...(showLocationFilters
+              ? [
+                  ...(JOB_TYPES.length > 1
+                    ? [{ key: 'jobs', label: 'Job', options: JOB_TYPES.map((j) => ({ id: j, name: JOB_LABEL[j] })), value: filter.jobs, onChange: (v: string[]) => setF('jobs', v as ProjectFilter['jobs']) }]
+                    : []),
+                  { key: 'years', label: 'Năm', options: yearOpts, value: filter.years, onChange: (v: string[]) => setF('years', v) },
+                  {
+                    key: 'categories',
+                    label: 'Nhóm',
+                    options: PROJECT_CATEGORIES.map((c) => ({ id: c, name: CATEGORY_LABEL[c] })),
+                    value: filter.categories,
+                    onChange: (v: string[]) => setF('categories', v as ProjectFilter['categories']),
+                  },
+                ]
+              : []),
+            {
+              key: 'statuses',
+              label: 'Trạng thái',
+              options: STATUS_ORDER.map((s) => ({ id: s, name: STATUS_LABEL[s] })),
+              value: filter.statuses,
+              onChange: (v) => setF('statuses', v as DeadlineStatus[]),
+            },
+          ]}
+          onClear={() => setFilter({ ...EMPTY_FILTER, q: filter.q })}
         />
-        {anyFilter && (
-          <button className="btn ghost sm" onClick={() => setFilter(EMPTY_FILTER)}>
-            <X size={14} /> Xóa bộ lọc
-          </button>
-        )}
-      </div>
-      <div className="toolbar view-bar">
-        <span className="small muted">{filtered.length} dự án</span>
+        <span className="small muted nowrap">{filtered.length} dự án</span>
         <div className="grow" />
         <div className="row" style={{ gap: 4 }}>
           <span className="small muted nowrap">Sắp xếp</span>
-          <select className="select" style={{ width: 160 }} value={sort.key} onChange={(e) => setSort({ ...sort, key: e.target.value as SortKey })} aria-label="Sắp xếp theo">
+          <select className="select" style={{ width: 150 }} value={sort.key} onChange={(e) => setSort({ ...sort, key: e.target.value as SortKey })} aria-label="Sắp xếp theo">
             {(Object.keys(SORT_LABEL) as SortKey[]).map((k) => (
               <option key={k} value={k}>
                 {SORT_LABEL[k]}
@@ -457,37 +448,39 @@ export function ProjectsView({ scopeKey, baseList, showLocationFilters, initialF
             {sort.dir === 'asc' ? <ArrowUpNarrowWide size={16} /> : <ArrowDownWideNarrow size={16} />}
           </button>
         </div>
-        <div className="seg" role="group" aria-label="Chế độ xem">
+        <div className="seg icons" role="group" aria-label="Chế độ xem">
           <button
             className={viewMode === 'list' ? 'on' : ''}
             aria-pressed={viewMode === 'list'}
             disabled={editMode}
             title={editMode ? 'Lưu hoặc hủy chỉnh sửa Board trước' : 'Xem theo danh sách'}
+            aria-label="Xem theo danh sách"
             onClick={() => setMode('list')}
           >
-            <List size={14} /> Danh sách
+            <List size={16} />
           </button>
           <button
             className={viewMode === 'board' ? 'on' : ''}
             aria-pressed={viewMode === 'board'}
             disabled={sel.active}
             title={sel.active ? 'Bấm Xong để thoát chế độ chọn trước' : 'Xem theo tiến độ (board 4 cột)'}
+            aria-label="Xem theo tiến độ"
             onClick={() => setMode('board')}
           >
-            <SquareKanban size={14} /> Tiến độ
+            <SquareKanban size={16} />
           </button>
         </div>
-        <SelectToggleButton sel={sel} disabled={editMode || baseList.length === 0} />
+        <SelectToggleButton sel={sel} disabled={editMode || baseList.length === 0} iconOnly />
         {viewMode === 'list' ? (
-          <ColumnToggle columns={PROJECT_COLUMNS} hidden={hiddenCols} onChange={setHiddenCols} />
+          <ColumnToggle columns={PROJECT_COLUMNS} hidden={hiddenCols} onChange={setHiddenCols} compact />
         ) : (
           <button className={`btn ${editMode ? 'toggled' : ''}`} onClick={() => (editMode ? void saveBoard() : setEditMode(true))} aria-pressed={editMode}>
             {editMode ? <Unlock size={15} /> : <Lock size={15} />} Chỉnh sửa Board
           </button>
         )}
         {extraActions}
-        <button className="btn primary" onClick={onAdd}>
-          <Plus size={16} /> {addLabel}
+        <button className="btn primary fab-add" onClick={onAdd} title={addLabel} aria-label={addLabel}>
+          <Plus size={20} />
         </button>
       </div>
 

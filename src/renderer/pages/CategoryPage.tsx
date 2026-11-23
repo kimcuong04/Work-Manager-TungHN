@@ -1,9 +1,8 @@
 import { useMemo, useState } from 'react';
-import { FileSpreadsheet } from 'lucide-react';
 import { useParams } from 'react-router';
 import { CATEGORY_LABEL, JOB_LABEL, type JobType } from '../../shared/types';
 import { BulkImportWizard } from '../components/BulkImportWizard';
-import { Breadcrumbs, EmptyState } from '../components/common';
+import { Breadcrumbs, EmptyState, ExcelIcon } from '../components/common';
 import { ProjectsView } from '../components/ProjectBoard';
 import { CATEGORY_SLUG, nodePath } from '../lib/projects';
 import { useAppData } from '../state/AppData';
@@ -52,8 +51,8 @@ export function CategoryPage() {
         onAdd={() => openCreate({ jobType: year.jobType, jobYearId: year.id, workCategory: cat })}
         addLabel={`Thêm Project vào ${CATEGORY_LABEL[cat]}`}
         extraActions={
-          <button className="btn" onClick={() => setImporting(true)}>
-            <FileSpreadsheet size={15} /> Import xlsx
+          <button className="btn icon xlsx-btn" onClick={() => setImporting(true)} title="Import xlsx" aria-label="Import xlsx">
+            <ExcelIcon />
           </button>
         }
         viewKey="view-mode:category"

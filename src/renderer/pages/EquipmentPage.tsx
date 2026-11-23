@@ -1,13 +1,13 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useLocation } from 'react-router';
-import { ArrowDown, ArrowUp, ChevronLeft, ChevronRight, Copy, Image as ImageIcon, Maximize2, Package, PackageCheck, Pencil, Plus, Trash2, X } from 'lucide-react';
+import { ArrowDown, ArrowUp, ChevronLeft, ChevronRight, Copy, Image as ImageIcon, Maximize2, Package, PackageCheck, Pencil, Plus, Trash2 } from 'lucide-react';
 import { diffDays, formatDate, formatDateTime, inRange, todayISO } from '../../shared/dates';
 import { buildHaystack, compareVi, matchesQuery, normalizeText } from '../../shared/text';
 import type { EquipmentInput, EquipmentItem, EquipmentLoan, EquipmentLoanInput, ImageRef, MasterKind } from '../../shared/types';
 import { hasErrors, validateEquipmentInput, validateEquipmentLoanInput } from '../../shared/validation';
 import { api } from '../api';
-import { ColumnToggle, DateInput, EmptyState, Field, MultiSelect, SearchInput, SearchableSelect } from '../components/common';
+import { ColumnToggle, DateInput, EmptyState, Field, FilterMenu, SearchInput, SearchableSelect } from '../components/common';
 import { ImageGallery } from '../components/ImageGallery';
 import { Modal, SidePanel } from '../components/Modal';
 import { SelectAllHeader, SelectCell, SelectToggleButton, SelectionBar, useSelection } from '../components/Selection';
@@ -851,7 +851,6 @@ export function EquipmentPage() {
     }
   };
 
-  const activeFilter = !!f.q || (f.categories ?? []).length > 0 || f.brands.length > 0 || f.sis.length > 0 || f.state !== 'all' || f.mode !== 'all';
   const cols = COLUMNS.filter((c) => !hidden.includes(c.key));
   const opts = (kind: MasterKind) => masters[kind].map((m) => ({ id: m.id, name: m.name, inactive: !m.isActive }));
   const add = (
@@ -871,38 +870,55 @@ export function EquipmentPage() {
             {items ? `${items.length} thiết bị · ${counts.lent + counts.overdue} đang cho mượn${counts.overdue ? ` (${counts.overdue} quá hạn)` : ''} · ${counts.in} trong kho` : ' '}
           </div>
         </div>
-        <div className="actions">
-          <SelectToggleButton sel={sel} disabled={!items?.length} />
-          <ColumnToggle columns={COLUMNS} hidden={hidden} onChange={setHidden} />
-          {add}
-        </div>
       </div>
-      <div className="toolbar">
+      <div className="toolbar one-line">
         <SearchInput value={f.q} onChange={(q) => setF({ ...f, q })} placeholder="Tìm STT, Tên sp, Phân loại, Hãng, Serial, Mô tả, Tình trạng, SI, Sale, lý do…" width={320} />
-        <select className="select" style={{ width: 160 }} value={f.state} onChange={(e) => setF({ ...f, state: e.target.value as LoanState })} aria-label="Trạng thái mượn">
-          <option value="all">Mọi trạng thái</option>
-          <option value="lent">Đang cho mượn</option>
-          <option value="overdue">Quá hạn</option>
-          <option value="in">Trong kho</option>
-        </select>
-        <MultiSelect label="Phân loại" options={opts('equipmentCategories')} value={f.categories ?? []} onChange={(categories) => setF({ ...f, categories })} />
-        <MultiSelect label="Hãng" options={opts('brands')} value={f.brands} onChange={(brands) => setF({ ...f, brands })} />
-        <MultiSelect label="Tên SI đã mượn" options={opts('siPartners')} value={f.sis} onChange={(sis) => setF({ ...f, sis })} />
-        <select className="select" style={{ width: 190 }} value={f.dateField} onChange={(e) => setF({ ...f, dateField: e.target.value as DateField })} aria-label="Trường ngày lọc">
-          <option value="currentBorrowDate">Theo Ngày mượn hiện tại</option>
-          <option value="currentDueDate">Theo Ngày hẹn trả hiện tại</option>
-          <option value="handoverDate">Theo Ngày nhận bàn giao</option>
-        </select>
-        <DateFilterControls mode={f.mode} month={f.month} monthYear={f.monthYear} from={f.from} to={f.to} onChange={(p) => setF({ ...f, ...p })} />
-        {activeFilter && (
-          <button className="btn ghost sm" onClick={() => setF({ ...f, q: '', categories: [], brands: [], sis: [], state: 'all', mode: 'all', from: null, to: null })}>
-            <X size={14} /> Clear Filters
-          </button>
-        )}
-        <span className="small muted">
+        <FilterMenu
+          attrs={[
+            {
+              key: 'state',
+              label: 'Trạng thái mượn',
+              single: true,
+              options: [
+                { id: 'lent', name: 'Đang cho mượn' },
+                { id: 'overdue', name: 'Quá hạn' },
+                { id: 'in', name: 'Trong kho' },
+              ],
+              value: f.state === 'all' ? [] : [f.state],
+              onChange: (v) => setF({ ...f, state: (v[0] ?? 'all') as LoanState }),
+            },
+            { key: 'categories', label: 'Phân loại', options: opts('equipmentCategories'), value: f.categories ?? [], onChange: (categories) => setF({ ...f, categories }) },
+            { key: 'brands', label: 'Hãng', options: opts('brands'), value: f.brands, onChange: (brands) => setF({ ...f, brands }) },
+            { key: 'sis', label: 'Tên SI đã mượn', options: opts('siPartners'), value: f.sis, onChange: (sis) => setF({ ...f, sis }) },
+            {
+              key: 'date',
+              label: 'Thời gian',
+              summary: f.mode === 'all' ? '' : range.from || range.to ? `${formatDate(range.from) || '…'} → ${formatDate(range.to) || '…'}` : 'Đang lọc',
+              onChange: () => setF({ ...f, mode: 'all', from: null, to: null }),
+              render: () => (
+                <>
+                  <select className="select" value={f.dateField} onChange={(e) => setF({ ...f, dateField: e.target.value as DateField })} aria-label="Trường ngày lọc">
+                    <option value="currentBorrowDate">Theo Ngày mượn hiện tại</option>
+                    <option value="currentDueDate">Theo Ngày hẹn trả hiện tại</option>
+                    <option value="handoverDate">Theo Ngày nhận bàn giao</option>
+                  </select>
+                  <DateFilterControls mode={f.mode} month={f.month} monthYear={f.monthYear} from={f.from} to={f.to} onChange={(p) => setF({ ...f, ...p })} />
+                </>
+              ),
+            },
+          ]}
+          onClear={() => setF({ ...f, categories: [], brands: [], sis: [], state: 'all', mode: 'all', from: null, to: null })}
+        />
+        <span className="small muted nowrap">
           {shown.length}/{items?.length ?? 0} thiết bị
           {range.from || range.to ? ` · ${formatDate(range.from) || '…'} → ${formatDate(range.to) || '…'}` : ''}
         </span>
+        <div className="grow" />
+        <SelectToggleButton sel={sel} disabled={!items?.length} iconOnly />
+        <ColumnToggle columns={COLUMNS} hidden={hidden} onChange={setHidden} compact />
+        <button className="btn primary fab-add" onClick={() => setForm({})} title="Thêm thiết bị" aria-label="Thêm thiết bị">
+          <Plus size={20} />
+        </button>
       </div>
 
       {sel.active && <SelectionBar sel={sel} total={shown.length} noun="thiết bị" onDelete={() => void removeSelected()} />}

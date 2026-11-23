@@ -7,3 +7,5 @@ release/
 .dev-data/
 .build-test/
 release-notes.md
+.release-msg.txt
+Claude outputs/

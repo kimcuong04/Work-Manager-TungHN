@@ -86,16 +86,19 @@ export function SelectCell({ sel, id, label }: { sel: Selection; id: string; lab
   );
 }
 
-export function SelectToggleButton({ sel, disabled, title }: { sel: Selection; disabled?: boolean; title?: string }) {
+export function SelectToggleButton({ sel, disabled, title, iconOnly }: { sel: Selection; disabled?: boolean; title?: string; iconOnly?: boolean }) {
+  const tip = title ?? (sel.active ? 'Thoát chế độ chọn' : 'Chọn nhiều mục để xóa cùng lúc');
   return (
     <button
-      className={`btn ${sel.active ? 'toggled' : ''}`}
+      className={`btn ${iconOnly ? 'icon' : ''} ${sel.active ? 'toggled' : ''}`}
       aria-pressed={sel.active}
       disabled={disabled}
-      title={title ?? (sel.active ? 'Thoát chế độ chọn' : 'Chọn nhiều mục để xóa cùng lúc')}
+      title={tip}
+      aria-label={iconOnly ? tip : undefined}
       onClick={() => (sel.active ? sel.stop() : sel.start())}
     >
-      <CheckSquare size={15} /> {sel.active ? 'Đang chọn' : 'Chọn'}
+      <CheckSquare size={15} />
+      {!iconOnly && ` ${sel.active ? 'Đang chọn' : 'Chọn'}`}
     </button>
   );
 }

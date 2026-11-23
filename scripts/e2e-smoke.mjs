@@ -110,6 +110,47 @@ const pasteImageEvent = (win) =>
     (document.activeElement ?? document.body).dispatchEvent(new ClipboardEvent('paste', { clipboardData: dt, bubbles: true, cancelable: true }));
   });
 const shot = (win, name) => win.screenshot({ path: path.join(shots, `${name}.png`) });
+/** Bộ lọc gộp (icon lọc): chọn thuộc tính → chọn đối tượng; option = null để bỏ lọc thuộc tính đó. */
+const pickFilter = async (win, attr, option) => {
+  await win.locator('.toolbar .filter-btn').click();
+  await win.locator('.filter-pop .opt', { hasText: attr }).first().click();
+  if (option) await win.locator('.filter-pop .filter-values .opt', { hasText: option }).first().click();
+  else await win.locator('.filter-pop').getByRole('button', { name: `Bỏ lọc ${attr}` }).click();
+  await win.locator('h1').first().click();
+  await win.waitForTimeout(150);
+};
+const clearFilters = async (win) => {
+  await win.locator('.toolbar .filter-btn').click();
+  await win.getByRole('button', { name: 'Xóa tất cả bộ lọc' }).click();
+  await win.waitForTimeout(150);
+};
+/** Toolbar 1 dòng: mọi phần tử con cùng một hàng; nút Thêm tròn nằm ngoài cùng bên phải. */
+const toolbarLayout = (win) =>
+  win.evaluate(() => {
+    const bars = [...document.querySelectorAll('.main .toolbar, main .toolbar, .toolbar')].filter((b) => b.offsetParent !== null);
+    const bar = bars[0];
+    if (!bar) return null;
+    const kids = [...bar.children].filter((k) => k.offsetParent !== null && k.getBoundingClientRect().width > 0);
+    const rects = kids.map((k) => k.getBoundingClientRect());
+    const mids = rects.map((r) => r.top + r.height / 2);
+    const fab = bar.querySelector('.fab-add');
+    const fr = fab?.getBoundingClientRect();
+    return {
+      bars: bars.length,
+      oneRow: Math.max(...mids) - Math.min(...mids) < 4,
+      fabRight: !!fr && rects.every((r) => r.right <= fr.right + 0.5),
+      fabRound: !!fab && getComputedStyle(fab).borderRadius === '50%' && Math.abs(fr.width - fr.height) < 1,
+      fabText: fab?.textContent.trim() ?? null,
+      fabPrimary: !!fab?.classList.contains('primary'),
+      hasFilterIcon: !!bar.querySelector('.filter-btn svg'),
+      chipFilters: bar.querySelectorAll('.chip-btn').length,
+      segText: [...bar.querySelectorAll('.seg button')].map((b) => b.textContent.trim()).join(''),
+      segCount: bar.querySelectorAll('.seg button svg').length,
+      selectText: [...bar.querySelectorAll('button[aria-pressed]')].filter((b) => /Chọn nhiều|Thoát chế độ chọn/.test(b.title)).map((b) => b.textContent.trim()).join(''),
+      colText: [...bar.querySelectorAll('button[aria-label^="Ẩn/hiện cột"]')].map((b) => b.textContent.trim()).join(''),
+      xlsx: [...bar.querySelectorAll('.xlsx-btn')].map((b) => ({ text: b.textContent.trim(), svg: !!b.querySelector('svg') })),
+    };
+  });
 const go = (win, hash) => win.evaluate((h) => (window.location.hash = h), hash);
 const toastText = async (win) => (await win.locator('.toast').last().innerText().catch(() => '')).trim();
 
@@ -125,6 +166,8 @@ try {
   // --- Tạo dự án qua UI (FR-PROJ-004, FR-FORM-002) ---
   await win.getByRole('button', { name: 'Thêm Project đầu tiên' }).click();
   await win.locator('#pf-name').fill('Nhà máy Đông Á – Thiết kế kỹ thuật PCCC');
+  // Từ v1.16 Priority mặc định là P1; kịch bản dưới giữ dự án này ở P3 như trước.
+  await win.locator('.modal .prio-picker [role="radio"]', { hasText: '3' }).click();
   check('Form mới: STT tự gợi ý = 1', (await win.locator('#pf-stt').inputValue()) === '1');
   const combos = win.locator('.form-section').nth(1).locator('input[role="combobox"]');
   await combos.nth(0).click();
@@ -206,7 +249,7 @@ try {
   check('Click KPI mở Tất cả mục lọc theo Khẩn cấp', cols === 1, `cột hiển thị: ${cols}`);
 
   // --- Search không dấu (AC-007) ---
-  await win.getByRole('button', { name: /Xóa bộ lọc/ }).click();
+  await clearFilters(win);
   await win.getByPlaceholder(/Tìm STT, tên dự án/).fill('thiet ke ky thuat');
   await win.waitForTimeout(300);
   const found = await win.locator('.pcard-title').allInnerTexts();
@@ -241,10 +284,10 @@ try {
   const listRows = await win.locator('.project-table tbody tr').count();
   check('Pre-sales mặc định hiển thị Danh sách', listRows === 4 && (await win.locator('.board-col').count()) === 0, `${listRows} dòng`);
   await shot(win, '04b-presales-list');
-  await win.getByRole('button', { name: 'Tiến độ', exact: true }).click();
+  await win.getByRole('button', { name: 'Xem theo tiến độ', exact: true }).click();
   await win.waitForTimeout(200);
   check('Chuyển sang chế độ Tiến độ (board 4 cột)', (await win.locator('.board-col').count()) === 4);
-  await win.getByRole('button', { name: 'Danh sách', exact: true }).click();
+  await win.getByRole('button', { name: 'Xem theo danh sách', exact: true }).click();
   await win.waitForTimeout(200);
   await win.locator('.project-table th', { hasText: 'Ngày tới hạn' }).click();
   const firstDue = await win.locator('.project-table tbody tr').first().locator('td').nth(8).innerText();
@@ -260,7 +303,7 @@ try {
   );
   await shot(win, '04d-presales-panel');
   await panel.getByRole('button', { name: 'Đóng panel' }).click();
-  await win.getByRole('button', { name: /^Cột/ }).click();
+  await win.getByRole('button', { name: /^Ẩn\/hiện cột/ }).click();
   const colBox = await win.locator('.popover').first().boundingBox();
   const sideBox = await win.locator('.sidebar').boundingBox();
   check('Popover "Cột" không bị sidebar che', !!colBox && !!sideBox && colBox.x >= sideBox.x + sideBox.width, `popover x=${Math.round(colBox?.x ?? -1)}, sidebar đến ${Math.round((sideBox?.x ?? 0) + (sideBox?.width ?? 0))}`);
@@ -268,8 +311,46 @@ try {
   await win.keyboard.press('Escape');
   await win.locator('h1').first().click();
   check('Sidebar không còn xổ danh sách dự án', (await win.locator('.sidebar a[href*="#/project/"]').count()) === 0);
+  {
+    const tb = await toolbarLayout(win);
+    check(
+      'Pre-sales: search / lọc / các nút chức năng nằm trên 1 dòng, nút Thêm tròn ở ngoài cùng bên phải',
+      !!tb && tb.bars === 1 && tb.oneRow && tb.fabRight && tb.fabRound && tb.fabPrimary && tb.fabText === '',
+      JSON.stringify(tb),
+    );
+    check(
+      'Pre-sales: lọc gộp vào 1 icon; Danh sách/Tiến độ, Chọn, Import xlsx chỉ còn icon; nút Cột chỉ hiện xx/xx',
+      !!tb && tb.hasFilterIcon && tb.chipFilters === 0 && tb.segText === '' && tb.segCount === 2 && tb.selectText === '' && /^\d+\/\d+$/.test(tb.colText) &&
+        tb.xlsx.length === 1 && tb.xlsx[0].text === '' && tb.xlsx[0].svg,
+      JSON.stringify(tb),
+    );
+    await win.locator('.toolbar .filter-btn').click();
+    const attrsTxt = (await win.locator('.filter-pop .opt').allInnerTexts()).map((t) => t.trim());
+    await shot(win, '70-filter-menu-attrs');
+    await win.locator('.filter-pop .opt', { hasText: 'Trạng thái' }).click();
+    const statusOpts = (await win.locator('.filter-pop .filter-values .opt').allInnerTexts()).map((t) => t.trim());
+    const allRows = await win.locator('.project-table tbody tr').count();
+    await win.locator('.filter-pop .filter-values .opt', { hasText: 'Khẩn cấp' }).click();
+    await shot(win, '71-filter-menu-values');
+    await win.locator('h1').first().click();
+    await win.waitForTimeout(200);
+    const urgentRows = await win.locator('.project-table tbody tr').count();
+    const badge = await win.locator('.toolbar .filter-count').innerText().catch(() => '');
+    const urgentExpected = (await call(win, 'listProjects')).filter((x) => x.jobYearId === main.id && x.workCategory === 'PRE_SALES').length;
+    check(
+      'Icon lọc: chọn thuộc tính (Tên SI / Hãng / Sale / EU / Trạng thái) → chọn đối tượng để lọc, badge đếm số thuộc tính đang lọc',
+      ['Tên SI', 'Hãng', 'Sale', 'EU', 'Trạng thái'].every((a) => attrsTxt.some((t) => t.startsWith(a))) && statusOpts.length === 4 && urgentRows < allRows && urgentRows >= 1 && badge === '1',
+      `thuộc tính: ${attrsTxt.join(', ')} · ${allRows} → ${urgentRows} dòng (tổng ${urgentExpected}) · badge ${badge}`,
+    );
+    await clearFilters(win);
+    check('Xóa tất cả bộ lọc trong icon lọc', (await win.locator('.project-table tbody tr').count()) === allRows && (await win.locator('.toolbar .filter-count').count()) === 0);
+  }
   await win.getByRole('button', { name: /Thêm Project vào Pre-sales/ }).click();
   await win.waitForSelector('.modal');
+  {
+    const prio = await win.locator('.modal .prio-picker [role="radio"][aria-checked="true"]').innerText();
+    check('Project mới: Priority Point mặc định là P1', prio.trim() === '1', `đang chọn ${prio}`);
+  }
   const newReceived = win.locator('.form-section').nth(2).locator('input.input').nth(0);
   await newReceived.fill(day(-20).split('-').reverse().join('/'));
   await newReceived.press('Tab');
@@ -1104,7 +1185,7 @@ try {
   const doneTitle = win.locator('.project-table tr.row-done .pt-title').first();
   const deco = (await doneTitle.count()) ? await doneTitle.evaluate((el) => getComputedStyle(el).textDecorationLine) : 'không có dòng hoàn thành';
   check('Tên dự án Đã hoàn thành hiển thị bình thường (không gạch ngang)', deco === 'none', deco);
-  await win.getByRole('button', { name: 'Chọn', exact: true }).click();
+  await win.getByRole('button', { name: /^Chọn nhiều mục/ }).click();
   await win.waitForSelector('.select-banner');
   const preRows = await win.locator('.project-table tbody tr').count();
   await win.getByRole('checkbox', { name: 'Chọn tất cả' }).check();
@@ -1509,9 +1590,9 @@ try {
   await win.waitForTimeout(500);
   const overdueRow = await eqRow1.innerText();
   const overdueN = await (async () => {
-    await win.locator('select[aria-label="Trạng thái mượn"]').selectOption('overdue');
+    await pickFilter(win, 'Trạng thái mượn', 'Quá hạn');
     const n = await win.locator('.equipment-table tbody tr.clickable').count();
-    await win.locator('select[aria-label="Trạng thái mượn"]').selectOption('all');
+    await pickFilter(win, 'Trạng thái mượn', null);
     return n;
   })();
   check('Quá ngày hẹn trả mà chưa bấm Đã hoàn trả → trạng thái Quá hạn', /Quá hạn/.test(overdueRow) && /Quá hạn 1 ngày/.test(overdueRow) && overdueN === 1, overdueRow.replace(/\s+/g, ' ').slice(0, 140));
@@ -1536,12 +1617,27 @@ try {
   );
 
   const eqRows = () => win.locator('.equipment-table tbody tr.clickable').count();
-  const stateSel = win.locator('select[aria-label="Trạng thái mượn"]');
-  await stateSel.selectOption('lent');
+  await pickFilter(win, 'Trạng thái mượn', 'Đang cho mượn');
   const nLent = await eqRows();
-  await stateSel.selectOption('in');
+  await pickFilter(win, 'Trạng thái mượn', 'Trong kho');
   const nIn = await eqRows();
-  await stateSel.selectOption('all');
+  await pickFilter(win, 'Trạng thái mượn', null);
+  {
+    const tb = await toolbarLayout(win);
+    check(
+      'Kho thiết bị: search / icon lọc / Chọn / xx/xx / nút Thêm tròn trên 1 dòng',
+      !!tb && tb.bars === 1 && tb.oneRow && tb.fabRight && tb.fabRound && tb.fabText === '' && tb.hasFilterIcon && tb.chipFilters === 0 && tb.selectText === '' && /^\d+\/\d+$/.test(tb.colText) &&
+        (await win.locator('.page-head .actions').count()) === 0,
+      JSON.stringify(tb),
+    );
+    await win.locator('.toolbar .filter-btn').click();
+    await win.locator('.filter-pop .opt', { hasText: 'Thời gian' }).click();
+    const hasDate = (await win.locator('.filter-pop select[aria-label="Trường ngày lọc"]').count()) === 1 && (await win.locator('.filter-pop select[aria-label="Khoảng thời gian"]').count()) === 1;
+    await shot(win, '72-equipment-filter-date');
+    await win.locator('h1').first().click();
+    await shot(win, '73-equipment-toolbar');
+    check('Kho thiết bị: lọc Thời gian (trường ngày + khoảng thời gian) nằm trong icon lọc', hasDate);
+  }
   const eqSearch = win.locator('.toolbar input[aria-label^="Tìm STT"]');
   await eqSearch.fill('si alpha');
   const nSi = await eqRows();
@@ -2079,6 +2175,10 @@ try {
 
   // --- v1.14: Sự kiện tạm thời (dưới Kho thiết bị) ---
   {
+    // Thêm Hãng để danh sách chọn Hãng dài hơn 5 tên (kiểm tra giới hạn 5 dòng + cuộn).
+    for (const b of ['Dahua', 'Hanwha', 'Uniview', 'Milestone']) await call(win, 'createMaster', 'brands', b);
+    await win.reload();
+    await win.waitForSelector('.sidebar');
     await win.locator('.sidebar').getByRole('link', { name: 'Sự kiện tạm thời' }).click();
     await win.waitForSelector('text=Chưa có sự kiện nào');
     const sideOrder = await win.evaluate(() => [...document.querySelectorAll('.sidebar .nav-row .nav-label')].map((e) => e.textContent.trim()));
@@ -2088,6 +2188,39 @@ try {
     const sttSuggest = await win.locator('#ev-stt').inputValue();
     await win.locator('#ev-name').fill('Triển lãm Secutech 2026');
     const brandCombo = win.locator('.modal .field', { has: win.locator('label', { hasText: /^Hãng/ }) }).locator('input[role="combobox"]');
+    {
+      await brandCombo.click();
+      await win.waitForSelector('.popover.floating');
+      await win.waitForTimeout(150);
+      const pop = await win.evaluate(() => {
+        const p = document.querySelector('.popover.floating');
+        const m = document.querySelector('.modal-body');
+        const opts = p.querySelectorAll('.opt');
+        const rowH = opts[0]?.getBoundingClientRect().height ?? 0;
+        const pr = p.getBoundingClientRect();
+        const cs = getComputedStyle(p);
+        const chrome = parseFloat(cs.paddingTop) + parseFloat(cs.paddingBottom) + parseFloat(cs.borderTopWidth) + parseFloat(cs.borderBottomWidth);
+        const hit = document.elementFromPoint(pr.left + pr.width / 2, pr.top + Math.min(pr.height, rowH) / 2);
+        return {
+          inBody: p.parentElement === document.body,
+          notInModal: !p.closest('.modal'),
+          onTop: !!hit && p.contains(hit),
+          n: opts.length,
+          visibleRows: Math.round((pr.height - chrome) / rowH * 10) / 10,
+          scrollable: p.scrollHeight > p.clientHeight + 1,
+          overflowsBody: pr.bottom > m.getBoundingClientRect().bottom || pr.top < m.getBoundingClientRect().top,
+          width: Math.round(pr.width),
+        };
+      });
+      await shot(win, '74-event-brand-popover');
+      check(
+        'Sự kiện › Hãng: danh sách nổi trên khung nhập (không bị modal cắt), tối đa 5 tên mỗi lần nhìn, cuộn được',
+        pop.inBody && pop.notInModal && pop.onTop && pop.visibleRows <= 5.05 && (pop.n <= 5 ? !pop.scrollable : pop.scrollable && pop.visibleRows >= 4.95),
+        JSON.stringify(pop),
+      );
+      await win.keyboard.press('Escape');
+      check('Esc đóng danh sách Hãng nhưng không đóng hộp thoại', (await win.locator('.popover.floating').count()) === 0 && (await win.locator('.modal #ev-name').count()) === 1);
+    }
     for (const b of ['Axis', 'Hikvision']) {
       await brandCombo.click();
       await brandCombo.fill(b);

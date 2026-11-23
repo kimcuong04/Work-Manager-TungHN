@@ -15,7 +15,8 @@
     "test": "vitest run",
     "e2e": "node scripts/e2e-smoke.mjs",
     "dist": "npm run build && node scripts/dist.mjs",
-    "dist:portable": "npm run build && node scripts/dist.mjs --portable"
+    "dist:portable": "npm run build && node scripts/dist.mjs --portable",
+    "release": "node scripts/release.mjs"
   },
   "build": {
     "appId": "local.personal-project-manager",
